@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AURORA</title>
+<style>
+/* the finale's opener: puzzle 1's PROFILE ▸ INTRUDER box comes back, filled in from this team's run.
+   Same language as puzzles 1-3: red HUD = the players, green = Aurora */
+:root { --g: #4dff88; --hud: #ff3344; }
+* { box-sizing: border-box; margin: 0; }
+html, body { height: 100%; background: #000; overflow: hidden; cursor: none; user-select: none;
+  font-family: Consolas, "Cascadia Mono", "Lucida Console", monospace; }
+.txt { text-shadow: -1.5px 0 rgba(255,40,80,.5), 1.5px 0 rgba(40,200,255,.5), 0 0 10px currentColor; }
+@keyframes flick { 0% { opacity: .96 } 100% { opacity: 1 } }
+@keyframes blink { 50% { opacity: 0 } }
+@keyframes boxIn { from { clip-path: inset(0 100% 0 0) } to { clip-path: inset(0 0 0 0) } }
+@keyframes cornerIn { from { transform: scale(2.5); opacity: 0 } }
+
+#standby { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--hud);
+  font-size: 1.8vw; letter-spacing: .5em; }
+#standby::after { content: "\258C"; animation: blink 1s steps(1) infinite; margin-left: .2em; }
+body.started #standby { display: none; }
+
+#beam { position: fixed; left: 0; top: 50%; width: 100vw; height: 3px; margin-top: -1.5px; z-index: 25; opacity: 0;
+  --bc: var(--hud); background: #fff; transform: scaleX(0); pointer-events: none;
+  box-shadow: 0 0 10px 3px var(--bc), 0 0 50px 14px var(--bc); }
+#screen { position: fixed; inset: 0; z-index: 20; display: none; overflow: hidden; color: var(--hud);
+  border-radius: 3vw / 4vw; font-size: 1vw; letter-spacing: .12em; animation: flick .11s steps(2) infinite;
+  background: linear-gradient(rgba(255,51,68,.05) 1px, transparent 1px) 0 0 / 4vw 4vw,
+              linear-gradient(90deg, rgba(255,51,68,.05) 1px, transparent 1px) 0 0 / 4vw 4vw,
+              radial-gradient(ellipse at center, #1c0508 0%, #0a0103 65%, #000 100%); }
+body.crt #screen { display: block; }
+#screen::before { content: ""; position: absolute; inset: 0; z-index: 5; pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgba(0,0,0,.3) 0 1px, transparent 1px 3px); }
+#screen::after { content: ""; position: absolute; inset: 0; z-index: 5; pointer-events: none; border-radius: inherit;
+  box-shadow: inset 0 0 12vw rgba(0,0,0,.9); }
+.corner { position: absolute; width: 4vw; height: 4vw; border: 0 solid currentColor; animation: cornerIn .5s both; }
+.tl { top: 2vw; left: 2vw; border-width: 2px 0 0 2px; }   .tr { top: 2vw; right: 2vw; border-width: 2px 2px 0 0; }
+.bl { bottom: 2vw; left: 2vw; border-width: 0 0 2px 2px; } .br { bottom: 2vw; right: 2vw; border-width: 0 2px 2px 0; }
+#title { position: absolute; top: 3vw; left: 3.5vw; line-height: 1.6; animation: boxIn .5s .2s backwards; }
+#title b { display: block; font-size: 2.2vw; letter-spacing: .3em; color: #fff; }
+#hex { opacity: .5; }
+
+#mid { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 4vw; padding-top: 4vw; }
+/* puzzle 1's #prof box, scaled up */
+#prof { width: 34vw; padding: 1.2vw 1.6vw; font-size: 1.35vw; line-height: 1.9; border: 1px solid currentColor;
+  background: rgba(20,0,4,.8); visibility: hidden; }
+#prof.on { visibility: visible; animation: boxIn .6s backwards; }
+#prof b { display: block; margin: -1.2vw -1.6vw .8vw; padding: .2vw 1.6vw; background: currentColor; }
+#prof b span { color: #000; text-shadow: none; }
+#prof p { display: flex; justify-content: space-between; gap: 1vw; visibility: hidden; }
+#prof p.on { visibility: visible; }
+#prof p span { color: #fff; text-align: right; }
+#prof p span.bad { color: var(--g); }
+#prof p span.none { color: #8a9499; }
+
+#bars { width: 34vw; display: flex; flex-direction: column; gap: 1.6vw; }
+.res { visibility: hidden; }
+.res.on { visibility: visible; animation: boxIn .5s backwards; }
+.res .row { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: .6vw; }
+.res .row small { opacity: .6; letter-spacing: .3em; }
+.res .v { font-size: 3.4vw; font-weight: 700; line-height: .9; color: #fff; font-variant-numeric: tabular-nums; }
+.res .v.none { font-size: 1.6vw; color: #8a9499; }
+.segs { display: flex; gap: .25vw; height: 1.2vw; }
+.segs i { flex: 1; background: currentColor; opacity: .12; }
+.segs i.on { opacity: 1; box-shadow: 0 0 8px currentColor; }
+.res.aur { color: var(--g); }        /* TRACE and HUMAN are hers */
+
+#aur { position: absolute; left: 0; right: 0; bottom: 6vw; text-align: center; min-height: 1.4em; font-size: 2.2vw;
+  color: #fff; letter-spacing: .06em; text-shadow: 0 0 18px var(--g), 0 0 40px rgba(77,255,136,.5); }
+#aur:empty { display: none; }
+#aur::after { content: "\258C"; animation: blink 1s steps(1) infinite; margin-left: .1em; }
+</style>
+</head>
+<body>
+<div id="standby">INTRUDER FILE ▸ PRESS SPACE</div>
+<div id="beam"></div>
+<div id="screen">
+  <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+  <div id="title" class="txt"><b>AURORA//CORE</b>INTRUDER FILE ▸ COMPILED FROM 4 SECTORS<br><span id="hex"></span></div>
+  <div id="mid">
+    <div id="prof" class="txt"><b><span>PROFILE ▸ INTRUDER</span></b><div id="rows"></div></div>
+    <div id="bars" class="txt"></div>
+  </div>
+  <div id="aur"></div>
+</div>
+
+<script>
+// ===== Tuning knobs =====
+const CFG = {
+  HUB: `ws://${location.host || 'localhost:3000'}/ws`,
+  NO_DATA: 50,               // a sector the team skipped counts as this much
+  VOLUME: 0.8,
+};
+const T = { dot: 380, line: 460, open: 750, ghost: 1300, row: 420, resolve: 28, typeChar: 45, bar: 900, line2: 900 };
+
+// ===== Setup =====
+const $ = s => document.querySelector(s);
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const rand = (a, b) => a + Math.random() * (b - a);
+const any = a => a[Math.random() * a.length | 0];
+const scr = $('#screen'), beam = $('#beam');
+let run = { sync: null, power: null, trace: null, human: null, facts: {} }, mode = 'standby';
+
+function hub() {
+  const ws = new WebSocket(CFG.HUB);
+  ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', id: 'dossier', role: 'page' }));
+  ws.onclose = () => setTimeout(hub, 2000);
+  ws.onmessage = e => { const m = JSON.parse(e.data); if (m.t === 'run') run = m; };
+}
+
+// ===== Sound (synthesized, same set as puzzles 1-3) =====
+const AC = new AudioContext();
+const master = AC.createGain(); master.gain.value = CFG.VOLUME; master.connect(AC.destination);
+addEventListener('keydown', () => AC.resume());
+function tone(type, f0, f1, dur, vol, delay = 0) {
+  const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t);
+  if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  o.connect(g).connect(master); o.start(t); o.stop(t + dur + .05);
+}
+const sfx = {
+  ignite() { tone('sine', 250, 1900, .3, .15); },
+  whine()  { tone('sine', 8800, 8200, 1.2, .025); tone('sine', 60, 50, .5, .3); },
+  tick()   { tone('square', 2200, 1300, .05, .1); },
+  key()    { tone('square', 900, 0, .015, .03); },
+  ok()     { tone('sine', 1320, 0, .25, .12); tone('sine', 1760, 0, .35, .1, .08); },
+  bad()    { tone('sawtooth', 190, 65, .3, .2); },
+};
+// Aurora's voice: Undertale-style blips per letter (replaced the Windows speech voice).
+// Drop sounds/aurora-voice.mp3 (one short ~60 ms blip) to use your own sound; otherwise it is synthesized.
+const VOICES = {
+  aurora: { f: 440, jit: .06, wave: 'square',   vol: .06, every: 2 },  // normal lines
+  soft:   { f: 330, jit: .03, wave: 'triangle', vol: .07, every: 3 },  // quiet / pleading / endings
+  angry:  { f: 150, jit: .15, wave: 'sawtooth', vol: .12, every: 1 },  // scare babble
+};
+let voiceBuf = null;
+fetch('sounds/aurora-voice.mp3').then(r => r.ok ? r.arrayBuffer() : null)
+  .then(b => b && AC.decodeAudioData(b)).then(b => voiceBuf = b).catch(() => {});
+function blip(v) {
+  const k = 1 + rand(-v.jit, v.jit);
+  if (!voiceBuf) return tone(v.wave, v.f * k, 0, .06, v.vol);
+  const s = AC.createBufferSource(), g = AC.createGain();
+  s.buffer = voiceBuf; s.playbackRate.value = k * v.f / 440; g.gain.value = v.vol * 8;   // * 8: tune by ear for your file
+  s.connect(g).connect(master); s.start();
+}
+
+// ===== Helpers (copied from puzzles 1-3) =====
+async function type(el, text, voice) {             // voice: a VOICES entry for Aurora; none = keyboard clicks
+  let n = 0; el.textContent = '';
+  for (const ch of text) { el.textContent += ch; if (/\w/.test(ch)) voice ? (n++ % voice.every || blip(voice)) : sfx.key(); await wait(T.typeChar); }
+}
+async function resolveText(el, text, ms) {         // letters scramble, then lock in left to right
+  const chars = [...text], pool = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#$%&';
+  let locked = 0;
+  const s = setInterval(() => el.textContent = chars.map((c, i) => i < locked || c === ' ' ? c : any(pool)).join(''), 40);
+  for (; locked < chars.length; locked++) { await wait(ms); if (chars[locked] !== ' ') sfx.tick(); }
+  clearInterval(s); el.textContent = text;
+}
+async function crtOn() {
+  scr.style.transform = 'scaleY(0)'; document.body.classList.add('crt');
+  sfx.ignite();
+  await beam.animate([{ opacity: 0, transform: 'scaleX(.002)' },
+                      { opacity: 1, transform: 'scaleX(.004) scaleY(4)', offset: .6 },
+                      { opacity: 1, transform: 'scaleX(.003)' }], { duration: T.dot, fill: 'forwards' }).finished;
+  sfx.whine();
+  await beam.animate([{ opacity: 1, transform: 'scaleX(.003)' },
+                      { opacity: 1, transform: 'scaleX(1.04)', offset: .75 },
+                      { opacity: 1, transform: 'scaleX(1)' }], { duration: T.line, easing: 'cubic-bezier(.2,.9,.3,1)', fill: 'forwards' }).finished;
+  scr.style.transform = '';
+  const open = scr.animate([{ transform: 'scaleY(.003)', filter: 'brightness(4)' },
+                            { transform: 'scaleY(1.035)', filter: 'brightness(1.6)', offset: .7 },
+                            { transform: 'scaleY(.99)', offset: .85 },
+                            { transform: 'scaleY(1)', filter: 'brightness(1)' }], { duration: T.open, easing: 'cubic-bezier(.2,.8,.2,1)' });
+  beam.animate([{ opacity: 1, transform: 'scaleX(1)', filter: 'blur(0)' },
+                { opacity: 0, transform: 'scaleX(1) scaleY(8)', filter: 'blur(8px)' }], { duration: T.ghost, fill: 'forwards' });
+  await open.finished;
+}
+setInterval(() => $('#hex').textContent = Array.from({ length: 6 }, () => (Math.random() * 0xffff | 0).toString(16).toUpperCase().padStart(4, '0')).join(' '), 400);
+
+// ===== What Aurora read out of this run =====
+// each row: [label, value, 'bad' (Aurora scored a point) | 'none' (sector skipped) | '']
+function rows(r) {
+  const f = r.facts, none = ['NO DATA', 'none'];
+  const [got, of] = (f.breached || '').split('/').map(Number);
+  return [
+    ['UPLOAD',     f.breached ? [`${got}/${of} BREACHED`, got < of ? 'bad' : ''] : none],
+    ['KEY ERRORS', f.p1wrong != null ? [String(f.p1wrong), f.p1wrong ? 'bad' : ''] : none],
+    ['GRID',       f.grid ? [`${f.grid} ${r.power}%`, f.grid !== 'HELD' ? 'bad' : ''] : none],
+    ['WATCHDOGS',  f.grid ? f.grid === 'CAUGHT' ? ['CAUGHT YOU', 'bad'] : ['EVADED', ''] : none],
+    ['BEST WORD',  f.best ? [f.best.toUpperCase(), ''] : none],
+    ['DECOY',      f.decoy != null ? f.decoy ? ['TAKEN ✗', 'bad'] : ['IGNORED', ''] : none],
+    ['TRACED',     r.trace != null ? [`${r.trace}%${f.time ? ` (${f.time})` : ''}`, r.trace >= 70 ? 'bad' : ''] : none],
+    ['CORE SHOTS', f.misses != null ? f.misses ? [`${f.misses} MISSED`, 'bad'] : ['NO MISSES', ''] : none],
+    ['NOTE',       f.note ? [f.note, ''] : none],
+  ];
+}
+// Aurora's taunts, worst first; she says the first two that apply
+function taunts(r) {
+  const f = r.facts, [got, of] = (f.breached || '').split('/').map(Number), held = of - got;
+  const out = [
+    f.decoy && "You believed my red light. You'll believe me again.",
+    f.grid === 'CAUGHT' && 'My watchdog still has your scent.',
+    f.grid === 'LOST' && 'You lost the light once. I can take it again.',
+    held > 0 && `I held you back ${held === 1 ? 'once' : held + ' times'}.`,
+    r.trace >= 70 && 'I know exactly where you are.',
+    f.misses >= 3 && `You missed my heart ${f.misses} times.`,
+    f.p1wrong >= 2 && 'You guessed. A lot.',
+  ].filter(Boolean).slice(0, 2);
+  return out.length ? out : ['...who are you?'];
+}
+const BARS = [
+  ['sync',  'SYNC',  'SECTOR 01 ▸ UPLOAD'],
+  ['power', 'POWER', 'SECTOR 02 ▸ GRID'],
+  ['trace', 'TRACE', 'SECTOR 03 ▸ CARRIER', 'aur'],
+  ['human', 'HUMAN', 'SECTOR 04 ▸ CORE GATE', 'aur'],
+];
+
+// ===== The sequence =====
+async function show() {
+  if (mode !== 'standby') return;
+  mode = 'show'; document.body.classList.add('started');
+  const r = run;
+  await crtOn();
+  await wait(500);
+
+  // the profile box types in row by row
+  const prof = $('#prof'), box = $('#rows');
+  box.innerHTML = rows(r).map(([k]) => `<p>${k} <span></span></p>`).join('');
+  prof.classList.add('on'); sfx.ok();
+  await wait(600);
+  for (const [i, [, [v, cls]]] of rows(r).entries()) {
+    const p = box.children[i], sp = p.querySelector('span');
+    p.classList.add('on'); sp.className = cls;
+    await resolveText(sp, v, T.resolve);
+    if (cls === 'bad') { sfx.bad(); p.animate([{ transform: 'translateX(-6px)' }, { transform: 'translateX(5px)' }, { transform: 'none' }], 160); }
+    await wait(T.row);
+  }
+
+  // the three things they carry in
+  const bars = $('#bars');
+  bars.innerHTML = BARS.map(([k, name, from, cls]) => `<div class="res ${cls || ''}"><div class="row"><span>${name}<br><small>${from}</small></span>` +
+    `<span class="v"></span></div><div class="segs">${'<i></i>'.repeat(25)}</div></div>`).join('');
+  for (const [i, [k]] of BARS.entries()) {
+    const el = bars.children[i], v = el.querySelector('.v'), segs = [...el.querySelectorAll('.segs i')], val = r[k] ?? CFG.NO_DATA;
+    el.classList.add('on');
+    const t0 = performance.now();
+    for (let p = 0; p < 1;) {
+      p = Math.min(1, (performance.now() - t0) / T.bar);
+      const now = Math.round(val * p);
+      v.textContent = now + '%'; segs.forEach((s, j) => s.classList.toggle('on', j < now / 4));
+      if (Math.random() < .3) sfx.tick();
+      await wait(30);
+    }
+    if (r[k] == null) { v.textContent = 'NO DATA'; v.classList.add('none'); }
+    await wait(300);
+  }
+  await wait(800);
+
+  // Aurora answers with what she learned
+  for (const line of taunts(r)) {
+    await type($('#aur'), line, VOICES.aurora); await wait(T.line2 + line.length * 20);
+  }
+  mode = 'done';
+}
+
+addEventListener('keydown', e => {
+  if (e.ctrlKey && e.altKey && e.code === 'KeyR') { e.preventDefault(); location.reload(); }
+  if (e.code === 'Space') { e.preventDefault(); show(); }
+});
+hub();
+
+// self-check: open dossier?test and look at the console
+if (location.search === '?test') {
+  const clean = { sync: 100, power: 60, trace: 20, facts: { breached: '4/4', p1wrong: 0, grid: 'HELD', decoy: false } };
+  const rough = { sync: 40, power: 0, trace: 85, human: 100, facts: { breached: '2/4', p1wrong: 3, grid: 'CAUGHT', decoy: true, misses: 4 } };
+  console.assert(taunts(clean)[0] === '...who are you?', 'clean run: no taunt but the question');
+  console.assert(taunts(rough).length === 2 && /red light/.test(taunts(rough)[0]), 'rough run: worst two, decoy first');
+  console.assert(rows({ sync: null, power: null, trace: null, human: null, facts: {} }).every(([, [v]]) => v === 'NO DATA'), 'skipped sectors show NO DATA');
+  console.assert(rows(rough)[3][1][0] === 'CAUGHT YOU', 'caught shows under watchdogs');
+  console.log('self-check done (no assertion errors above = pass)');
+}
+</script>
+</body>
+</html>

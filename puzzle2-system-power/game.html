@@ -1,0 +1,861 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AURORA</title>
+<style>
+/* same visual language as puzzle 1: red HUD = the players, green = Aurora */
+:root { --g: #4dff88; --aur: #dfe8ee; --red: #ff2a4a; --hud: #ff3344; }
+* { box-sizing: border-box; margin: 0; }
+html, body { height: 100%; background: #000; overflow: hidden; cursor: none; user-select: none;
+  font-family: Consolas, "Cascadia Mono", "Lucida Console", monospace; }
+
+#app { position: fixed; inset: 0; }
+#vignette { position: fixed; inset: 0; pointer-events: none; z-index: 30; transition: background .6s;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.85) 100%); }
+body.low #vignette { background: radial-gradient(ellipse at center, transparent 45%, rgba(120,0,12,.75) 100%);
+  animation: lowPulse .8s ease-in-out infinite alternate; }
+@keyframes lowPulse { to { opacity: .55 } }
+#flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 60; }
+.txt { text-shadow: -1.5px 0 rgba(255,40,80,.5), 1.5px 0 rgba(40,200,255,.5), 0 0 10px currentColor; }
+
+/* standby: locked until puzzle 1 is finished, then waits for space */
+#standby { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--hud);
+  font-size: 1.3vw; letter-spacing: .5em; opacity: .35; transition: opacity .6s; }
+#standby::after { content: "\258C"; animation: blink 1s steps(1) infinite; margin-left: .2em; }
+body.ready #standby { opacity: 1; font-size: 1.8vw; }
+body.started #standby { display: none; }
+
+/* the CRT screen */
+#beam { position: fixed; left: 0; top: 50%; width: 100vw; height: 3px; margin-top: -1.5px; z-index: 25; opacity: 0;
+  --bc: var(--hud); background: #fff; transform: scaleX(0); pointer-events: none;
+  box-shadow: 0 0 10px 3px var(--bc), 0 0 50px 14px var(--bc); }
+#screen { position: fixed; inset: 0; z-index: 20; display: none; overflow: hidden; color: var(--hud);
+  border-radius: 3vw / 4vw; font-size: 1vw; letter-spacing: .12em; transition: background .25s;
+  background: radial-gradient(ellipse at center, #1c0508 0%, #0a0103 65%, #000 100%);
+  animation: flick .11s steps(2) infinite; }
+body.crt #screen { display: block; }
+body.lit #screen { background: radial-gradient(ellipse at center, #3a0a10 0%, #150306 65%, #000 100%); }
+#screen::before { content: ""; position: absolute; inset: 0; z-index: 5; pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgba(0,0,0,.3) 0 1px, transparent 1px 3px); }
+#screen::after { content: ""; position: absolute; inset: 0; z-index: 5; pointer-events: none; border-radius: inherit;
+  box-shadow: inset 0 0 12vw rgba(0,0,0,.9); }
+@keyframes flick { 0% { opacity: .96 } 100% { opacity: 1 } }
+@keyframes blink { 50% { opacity: 0 } }
+#grain { position: absolute; inset: 0; z-index: 4; pointer-events: none; opacity: .07; transition: opacity .3s;
+  background: var(--noise); animation: static .25s steps(5) infinite; }
+@keyframes static { to { background-position: 128px 77px; } }
+/* lights off: the HUD sinks into the dark and the grain comes up; the word and power bar stay readable */
+body.game:not(.lit) #grain { opacity: .2; }
+body.game:not(.lit) .hud { opacity: .4; }
+.hud { transition: opacity .3s; }
+
+.corner { position: absolute; width: 4vw; height: 4vw; border: 0 solid currentColor; animation: cornerIn .5s both; }
+.tl { top: 2vw; left: 2vw; border-width: 2px 0 0 2px; }   .tr { top: 2vw; right: 2vw; border-width: 2px 2px 0 0; }
+.bl { bottom: 2vw; left: 2vw; border-width: 0 0 2px 2px; } .br { bottom: 2vw; right: 2vw; border-width: 0 2px 2px 0; }
+@keyframes cornerIn { from { transform: scale(2.5); opacity: 0 } }
+@keyframes boxIn { from { clip-path: inset(0 100% 0 0) } to { clip-path: inset(0 0 0 0) } }
+#title { position: absolute; top: 3vw; left: 3.5vw; line-height: 1.6; animation: boxIn .5s .2s backwards; }
+#title b { display: block; font-size: 2.2vw; letter-spacing: .3em; color: #fff; }
+#hex { opacity: .5; }
+#stats { position: absolute; top: 3vw; right: 3.5vw; text-align: right; line-height: 1.6; animation: boxIn .5s .35s backwards; }
+#stats span { color: #fff; }
+#stats .mv { color: var(--hud); animation: blink .5s steps(1) infinite; }
+
+#mid { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3vh; }
+#timer, #lstate { display: none; }
+body.game #timer, body.game #lstate { display: block; }
+#timer { font-size: 1.4vw; letter-spacing: .6em; text-align: center; }
+#timer b { display: block; font-size: 5vw; letter-spacing: .08em; color: #fff; font-variant-numeric: tabular-nums;
+  text-shadow: -2px 0 rgba(255,40,80,.6), 2px 0 rgba(40,200,255,.6), 0 0 30px var(--hud); }
+#lstate { font-size: 1.6vw; letter-spacing: .3em; }
+body.game:not(.lit) #lstate { animation: blink .6s steps(1) infinite; }
+
+/* the tutorial terminal, centered */
+#term { min-width: 44vw; padding: 1.4vw 2vw; font-size: 1.6vw; line-height: 1.7; white-space: pre;
+  border: 1px solid currentColor; background: rgba(8,0,2,.9); }
+#term:empty { display: none; }
+#term .ok { color: #fff; }
+#term .step { font-size: .75em; letter-spacing: .35em; opacity: .6; margin-bottom: .5em; }
+#term .warn { color: #fff; font-weight: 700; }
+#term div:last-child::after { content: "\258C"; animation: blink .6s steps(1) infinite; }
+
+/* one word at a time, monkeytype style: dim untyped letters, white typed, red mistakes, a caret that glides */
+#words { position: relative; display: flex; justify-content: center; min-width: 40vw; font-size: 4.2vw; line-height: 1.65em;
+  letter-spacing: .04em; visibility: hidden; }
+#words.on { visibility: visible; }
+.w { position: relative; color: rgba(255,225,230,.3); }   /* positioned: letters measure from the word */
+.w.pop { animation: pop .12s ease-out; }
+@keyframes pop { from { opacity: 0; transform: translateY(.15em) } }
+.w .ok { color: #fff; text-shadow: 0 0 14px rgba(255,51,68,.6); }
+.w .bad { color: var(--red); text-decoration: underline; text-underline-offset: .18em; }
+.w .x { color: #8a0f1f; }
+#caret { position: absolute; left: 0; top: 0; width: .07em; height: 1.1em; margin-top: .28em; background: var(--hud);
+  box-shadow: 0 0 10px var(--hud); transition: left .08s; }
+#caret.idle { animation: blink 1s steps(1) infinite; }
+#words.shake { animation: nope .18s; }
+@keyframes nope { 25% { transform: translateX(-8px) } 75% { transform: translateX(8px) } }
+
+#hint { padding: .6vw 2vw; font-size: 2vw; font-weight: 700; letter-spacing: .25em; color: #fff; background: var(--hud);
+  text-shadow: 0 0 6px rgba(0,0,0,.7); box-shadow: 0 0 30px var(--hud); display: none;
+  animation: hintPulse .45s ease-in-out infinite alternate; }
+#hint.on { display: block; }
+/* last chance: emergency word banner with a countdown bar */
+#boost { display: none; flex-direction: column; align-items: center; gap: 1.2vh; }
+#boost.on { display: flex; }
+#boost b { padding: .6vw 2vw; font-size: 2vw; letter-spacing: .25em; color: #fff; background: var(--hud); box-shadow: 0 0 30px var(--hud);
+  animation: hintPulse .3s ease-in-out infinite alternate; }
+#boost.ok b { background: #fff; color: var(--hud); box-shadow: 0 0 50px #fff; animation: none; }
+#boost.fail b { background: #300; color: var(--red); animation: none; }
+#boost.ok #rbar, #boost.fail #rbar { visibility: hidden; }
+#rbar { width: 30vw; height: .8vw; border: 2px solid var(--hud); }
+#rbar i { display: block; height: 100%; background: var(--hud); box-shadow: 0 0 12px var(--hud); }
+.w.rescue { color: rgba(255,255,255,.5); font-weight: 700; }
+.w.rescue .ok { color: #fff; text-shadow: 0 0 22px #fff; }
+@keyframes hintPulse { to { scale: 1.06; } }
+
+#aur { position: absolute; left: 0; right: 0; top: 16vh; text-align: center; min-height: 1.4em; font-size: 2.6vw;
+  color: #fff; letter-spacing: .06em; text-shadow: 0 0 18px var(--g), 0 0 40px rgba(77,255,136,.5); }
+#aur:empty { display: none; }
+.glitch::before, .glitch::after { content: attr(data-text); position: absolute; inset: 0; }
+.glitch::before { color: #0ff; animation: gA .22s steps(2) infinite; }
+.glitch::after  { color: #f0f; animation: gB .3s steps(2) infinite; }
+@keyframes gA { 0% { clip-path: inset(10% 0 70% 0); transform: translate(-7px,-2px) }
+                50% { clip-path: inset(45% 0 30% 0); transform: translate(6px,1px) }
+                100% { clip-path: inset(80% 0 4% 0); transform: translate(-3px,2px) } }
+@keyframes gB { 0% { clip-path: inset(60% 0 20% 0); transform: translate(7px,2px) }
+                50% { clip-path: inset(5% 0 80% 0); transform: translate(-5px,-1px) }
+                100% { clip-path: inset(30% 0 50% 0); transform: translate(4px,0) } }
+
+#bar { position: absolute; left: 3.5vw; right: 3.5vw; bottom: 3.5vw; animation: boxIn .7s .5s backwards; }
+#bar .row { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: .8vw; }
+#bp { font-size: 4vw; font-weight: 700; line-height: .9; color: #fff; font-variant-numeric: tabular-nums; }
+/* white so the drain stands out against the red HUD; the segment being drained fades out (opacity set in renderBar) */
+#segs { display: flex; gap: .25vw; height: 2.4vw; color: #fff; }
+#segs i { flex: 1; background: currentColor; opacity: .1; }
+#segs i.on { box-shadow: 0 0 12px currentColor; }
+body.low #segs { color: var(--red); }
+body.low #segs i.on { animation: blink .4s steps(1) infinite; }
+
+/* LOOK BEHIND YOU */
+#big { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%); z-index: 40; white-space: nowrap;
+  font-size: 8vw; font-weight: 700; letter-spacing: .06em; color: #fff; text-shadow: 0 0 30px var(--g), 0 0 90px var(--g); }
+#big.jit { animation: jit .07s steps(1) infinite; }
+@keyframes jit { 0% { translate: -8px 4px } 25% { translate: 7px -5px; scale: 1.02 } 50% { translate: -4px -3px } 75% { translate: 9px 5px; scale: .99 } }
+/* behind it, the whole screen fills with the same line, strobing black/red */
+#scareBg { position: fixed; inset: 0; z-index: 39; display: none; overflow: hidden; padding: 1vw; word-break: break-all;
+  color: var(--g); font-size: 1.3vw; font-weight: 700; line-height: 1.25; opacity: .35; animation: scareFlick .09s steps(2) infinite; }
+body.scare #scareBg { display: block; }
+@keyframes scareFlick { 50% { opacity: .1; background: #300; } }
+
+/* end screens (win / grid lost / captured), same as puzzle 1's MIND UPLOADED */
+#final { position: fixed; inset: 0; z-index: 50; display: none; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2.5vh; overflow: hidden; color: var(--hud); animation: flick .11s steps(2) infinite;
+  background: linear-gradient(rgba(255,51,68,.05) 1px, transparent 1px) 0 0 / 4vw 4vw,
+              linear-gradient(90deg, rgba(255,51,68,.05) 1px, transparent 1px) 0 0 / 4vw 4vw, #000; }
+#final::before { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgba(0,0,0,.3) 0 1px, transparent 1px 3px); }
+body.final #final { display: flex; }
+#final .ring { position: absolute; left: 50%; top: 50%; border: 3px solid var(--hud); border-radius: 50%; display: none;
+  animation: ping 1.6s cubic-bezier(.1,.7,.3,1) both; }
+#final.win .ring { display: block; }
+#final .r2 { animation-delay: .25s; border-color: #fff; }
+#final .r3 { animation: ping 3.5s 3s infinite; border-width: 1px; }
+@keyframes ping { from { width: 0; height: 0; margin: 0; opacity: 1 } to { width: 250vmax; height: 250vmax; margin: -125vmax; opacity: 0 } }
+#fk { font-size: 1vw; letter-spacing: .4em; opacity: .8; }
+#ft { position: relative; font-size: 7vw; font-weight: 700; color: #fff; white-space: nowrap; letter-spacing: .12em;
+  text-shadow: -2px 0 rgba(255,40,80,.6), 2px 0 rgba(40,200,255,.6), 0 0 30px var(--hud), 0 0 80px rgba(255,51,68,.5); }
+#final:not(.win) #ft { font-size: 5.5vw; }
+#fs { font-size: 1.6vw; letter-spacing: .5em; color: #fff; opacity: 0; transition: opacity 1s; }
+#fs.on { opacity: 1; }
+#fa { min-height: 1.5em; font-size: 1.5vw; letter-spacing: .1em; color: var(--g); }
+#fa::after { content: "\258C"; animation: blink 1s steps(1) infinite; margin-left: .1em; }
+
+#help { position: fixed; top: 12px; right: 12px; z-index: 70; display: none; padding: 10px 14px; background: rgba(0,0,0,.85);
+  border: 1px solid var(--g); color: var(--g); font-size: 14px; line-height: 1.6; white-space: pre; }
+body.help #help { display: block; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="standby">POWER GRID OFFLINE ▸ AWAITING UPLINK</div>
+  <div id="screen">
+    <div id="grain"></div>
+    <div class="hud"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i></div>
+    <div id="title" class="hud txt"><b>AURORA//CORE</b>SECTOR 02 ▸ POWER GRID<br><span id="hex"></span></div>
+    <div id="stats" class="hud txt"></div>
+    <div id="aur"></div>
+    <div id="mid">
+      <div id="timer" class="txt">SURVIVE<b id="tl">30.0</b></div>
+      <div id="lstate" class="txt"></div>
+      <div id="boost"><b></b><div id="rbar"><i></i></div></div>
+      <div id="term" class="txt"></div>
+      <div id="words"><div id="caret"></div></div>
+      <div id="hint"></div>
+    </div>
+    <div id="bar" class="txt"><div class="row"><span>CORE POWER</span><span id="bp">0.0%</span></div><div id="segs"></div></div>
+  </div>
+  <div id="beam"></div>
+  <div id="scareBg"></div>
+  <div id="big" class="glitch" hidden></div>
+  <div id="final">
+    <i class="ring"></i><i class="ring r2"></i><i class="ring r3"></i>
+    <div id="fk"></div>
+    <div id="ft"></div>
+    <div id="fs"></div>
+    <div id="fa"></div>
+  </div>
+  <div id="vignette"></div>
+</div>
+<div id="flash"></div>
+<div id="help">STAFF SHORTCUTS          hub: <span id="hubst">...</span>
+Ctrl+Alt+H  show / hide this panel
+Ctrl+Alt+U  unlock by hand (if puzzle 1's signal never came)
+Ctrl+Alt+S  start now, even if locked
+Ctrl+Alt+K  skip the tutorial, straight to the real game
+Ctrl+Alt+X  CAUGHT (a watchdog tagged a player)
+Ctrl+Alt+R  reset for next team (locks again)
+Ctrl+Alt+W  replay only the win screen
+Ctrl+Alt+M  mute / unmute</div>
+
+<script>
+// ===== Tuning knobs: adjust these at the booth =====
+const CFG = {
+  UNLOCK_EVT: 'p1done',      // puzzle 1 sends this when MIND UPLOADED finishes
+  SURVIVE: 30000,            // ms the team must last once LOOK BEHIND YOU is over
+  START_ENERGY: 50,          // % the core has when the game starts
+  DRAIN_OFF: 4,              // % per second lost while the lights are off...
+  DRAIN_ON: 6,               // ...and while they're held on
+  GAIN: [4, 6, 9, 13, 18, 24],   // % gained per word, by tier (see TIERS)
+  DRAIN_MULT: [1, 1.15, 1.3, 1.5, 1.75, 2],   // both drains are multiplied by this for the current tier: harder words, hungrier core
+  LOW: 25,                   // % where the warnings start
+  BOOST_AT: 5,               // at this % time freezes and an emergency word appears; type it in time to earn the boost
+  RESCUE: [{ word: 'reroute', boost: 25 }, { word: 'overclock', boost: 10 }],   // one per chance, in order; then no more
+  CAUGHT: 15,                // POWER carried to the finale = energy left; getting caught costs this much of it (grid lost = 0)
+  FAKE_WORDS: [2, 3],        // the fake start lasts this many words (picked at random)...
+  LIGHT_KEY: ['Enter', 'NumpadEnter'],   // KeyboardEvent.code(s) that hold the lights on. The plush key sends NumpadEnter
+  LIGHT_LABEL: 'ENTER',      // what the tutorial tells players to hold
+  FAST_CPS: 3,               // letters per second (from word shown to word done) that counts as fast...
+  SLOW_CPS: 1.4,             // ...and as slow
+  MANY_BS: 3,                // this many backspaces in one word counts as struggling
+  VOLUME: 0.8,
+  MUSIC_VOLUME: 0.7,
+};
+const T = {                  // ms
+  dot: 380, line: 460, open: 750, ghost: 1300,   // CRT boot, same as puzzle 1
+  termChar: 32,              // tutorial terminal typing speed
+  typeChar: 45,              // Aurora's typing speed
+  after: 1400,               // pause after each tutorial step
+  rule: 900,                 // pause after each line of the rules (step 3)
+  tryType: 12000,            // tutorial: how long players get to type the practice word...
+  tryHold: 10000,            // ...and to hold the light key before it moves on anyway
+  holdNeed: 1500,            // how long they must hold it in the tutorial
+  fakeMax: 9000,             // ...or at most this long, then the jumpscare
+  dread: 1100,               // the fake game rots before the cut: word scrambles, lights stutter, whine rises
+  scareGap: 600,             // dead black and silence between the cut and LOOK BEHIND YOU
+  look: 2800,                // how long LOOK BEHIND YOU stays up
+  rescue: 3000,              // how long they get to type the emergency word (time is frozen meanwhile)
+  boostGrace: 1000,          // no drain for this long after a boost lands
+  afterScare: 700,           // black after it vanishes, before the real game boots
+};
+const TUT = {                // the players' side of the tutorial (red terminal): 3 steps, one on screen at a time
+  type:    'TYPE THE WORD TO MAKE POWER',
+  typed:   '[ OK ] POWER UP',
+  hold:    `HOLD [${CFG.LIGHT_LABEL}] TO TURN ON THE LIGHT`,
+  held:    '[ OK ] LIGHT ON',
+  rules: [                   // step 3; the last one is shown in white
+    'LIGHT ON  ▸ THE WATCHDOGS FREEZE',
+    'LIGHT OFF ▸ THEY MOVE TOWARD YOU',
+    'THE LIGHT EATS POWER ▸ KEEP TYPING',
+    `SURVIVE ${CFG.SURVIVE / 1000} SECONDS`,
+    'LEFTOVER POWER COMES WITH YOU',
+    "DON'T LET THEM REACH YOU",
+  ],
+  reserve: 'CHARGING... GET READY',
+};
+const AUR = {                // Aurora (green)
+  low: ['Running out of light?', 'Tick. Tock.', 'I can hear you typing.', "They're getting closer."],
+  win: "...you're getting closer.",
+  fail: 'Darkness suits you.',
+  caught: 'Found you.',
+  boost: ['A backup. How cute.', "That's the last of it."],   // after each earned boost
+};
+// words by tier, easiest first: struggling teams get short words, fast clean typists get long ones (worth more power)
+const TIERS = [
+  'core node wire bit byte chip code data link grid volt fuse gate loop key cell disk bus mind host ping sync port lamp'.split(' '),
+  'power cable relay input logic pixel laser drive virus cache signal kernel memory switch socket binary cortex router buffer cursor packet server'.split(' '),
+  'circuit current voltage network process terminal firewall protocol hardware software database password override'.split(' '),
+  'algorithm processor capacitor transistor resistance generator encryption motherboard consciousness reactivate diagnostics interference electricity'.split(' '),
+  // pro tiers: only reachable by typing several words in a row fast and without a single backspace
+  'cryptography semiconductor oscilloscope microcontroller authentication configuration decompression infrastructure virtualization cybersecurity synchronization neuroplasticity'.split(' '),
+  'hexadecimal asynchronous pseudorandom electroencephalogram superconductivity photolithography microarchitecture counterintelligence incomprehensibility electromagnetism thermodynamics deoxyribonucleic'.split(' '),
+];
+
+// ===== Setup =====
+const $ = s => document.querySelector(s);
+const app = $('#app'), scr = $('#screen'), beam = $('#beam'), wordsEl = $('#words'), caret = $('#caret');
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const rand = (a, b) => a + Math.random() * (b - a);
+const any = a => a[Math.random() * a.length | 0];
+const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)) } catch { return null } },
+                set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} } };
+
+let mode = 'standby';        // standby | tut | fake | game | end
+let unlocked = false, typing = false, lightOK = false, held = false, lit = false, energy = 3, low = false;
+
+// hallway bulb: the hub passes this to bulb_bridge.py (device "strip") on the hub laptop. Sent straight, not through
+// hubQ: old light changes replayed after a hub hiccup would be wrong. The latest one is resent when the hub reconnects
+let light = 'idle';
+function lights(state) {     // 'idle' (bulb off) | 'ready' | 'on' | 'off' | 'low' | 'boost' | 'down' | 'scare' | 'win'
+  light = state;
+  if (hubWs?.readyState === 1) hubWs.send(JSON.stringify({ t: 'cmd', to: 'strip', a: 'p2', v: state }));
+}
+// the signup kiosk outside shows the hallway camera: 'p2cam' opens its pop-up (fake start), 'p2scare' cuts the feed in.
+// Sent straight for the same reason: a late one after a hub hiccup would pop it up over nothing
+const kiosk = e => hubWs?.readyState === 1 && hubWs.send(JSON.stringify({ t: 'evt', e }));
+
+// ===== Unlock: wait for puzzle 1's "done" through the hub =====
+function unlock() {
+  if (unlocked) return;
+  unlocked = true; document.body.classList.add('ready');
+  $('#standby').textContent = 'PRESS SPACE TO START SEQUENCE';
+  sfx.ok(); lights('ready');
+}
+// while the hub is down, messages wait in hubQ and go out on reconnect, so a win during a hub hiccup still unlocks
+// puzzle 3 (the 1 s status doesn't wait: only the latest matters)
+let hubWs, hubQ = [];
+function hubSend(o) {
+  if (o) { if (o.t === 'status' && hubWs?.readyState !== 1) return; hubQ.push(o); }
+  while (hubWs?.readyState === 1 && hubQ.length) hubWs.send(JSON.stringify(hubQ.shift()));
+}
+// ===== Find the hub: whichever laptop runs hub\start.bat, so nobody types an IP =====
+// ?hub=<IP> if given. Otherwise this laptop, then the last hub found, then every address on the booth network at once
+// (?net=, from booth.bat). A cold search takes a few seconds; after that the saved address answers straight away.
+// ponytail: scans .1-.254 of one /24 network, enough for a booth router
+async function findHub() {
+  const q = new URLSearchParams(location.search), net = q.get('net') || '192.168.0';
+  if (q.get('hub')) return q.get('hub');
+  const ping = (ip, ms) => fetch(`http://${ip}:3000/ping`, { signal: AbortSignal.timeout(ms) })
+    .then(r => r.text()).then(t => t === 'nexus-hub' ? ip : Promise.reject());
+  for (;;) {
+    let saved; try { saved = localStorage.getItem('nexus-hub'); } catch {}
+    const ip = await Promise.any(['localhost', saved].filter(Boolean).map(ip => ping(ip, 1000)))
+      .catch(() => Promise.any(Array.from({ length: 254 }, (_, i) => ping(`${net}.${i + 1}`, 4000))))
+      .catch(() => null);
+    if (ip) { try { localStorage.setItem('nexus-hub', ip); } catch {} return ip; }
+    await new Promise(r => setTimeout(r, 2000));
+  }
+}
+async function hub() {
+  const ws = hubWs = new WebSocket('ws://' + await findHub() + ':3000/ws');
+  ws.onopen = () => { ws.send(JSON.stringify({ t: 'hello', id: 'puzzle2', role: 'page' })); hubSend(); lights(light); $('#hubst').textContent = 'connected'; };
+  ws.onclose = () => { $('#hubst').textContent = 'DOWN (Ctrl+Alt+U to unlock by hand)'; setTimeout(hub, 2000); };
+  ws.onmessage = e => { const m = JSON.parse(e.data); if (m.t === 'evt' && m.e === CFG.UNLOCK_EVT) unlock(); if (m.t === 'cmd' && m.a === 'key') staffKey(m.v); };
+}
+// the GM panel presses this page's Ctrl+Alt staff keys remotely, and sees its state once a second
+const staffKey = code => dispatchEvent(new KeyboardEvent('keydown', { code, ctrlKey: true, altKey: true }));
+setInterval(() => hubSend({ t: 'status', v: { mode, unlocked, stat: Math.round(energy), lit, held } }), 1000);
+
+// ===== Sound (synthesized, copied from puzzle 1) =====
+const AC = new AudioContext();
+const master = AC.createGain(); master.connect(AC.destination);
+let muted = !!store.get('muted');
+master.gain.value = muted ? 0 : CFG.VOLUME;
+addEventListener('keydown', () => AC.resume());
+
+function tone(type, f0, f1, dur, vol, delay = 0) {
+  const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t);
+  if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  o.connect(g).connect(master); o.start(t); o.stop(t + dur + .05);
+}
+function noise(dur, vol, freq, delay = 0) {
+  const t = AC.currentTime + delay, buf = AC.createBuffer(1, AC.sampleRate * dur, AC.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  const s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+  s.buffer = buf; f.type = 'bandpass'; f.frequency.value = freq;
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  s.connect(f).connect(g).connect(master); s.start(t);
+}
+const sfx = {
+  ignite() { tone('sine', 250, 1900, .3, .15); },
+  whine()  { tone('sine', 8800, 8200, 1.2, .025); tone('sine', 60, 50, .5, .3); },
+  tick()   { tone('square', 2200, 1300, .05, .1); },
+  key()    { tone('square', 900, 0, .015, .03); },
+  type()   { tone('square', rand(1100, 1500), 0, .02, .05); },
+  miss()   { tone('sawtooth', 160, 90, .09, .12); },
+  word()   { tone('sine', 1320, 1760, .09, .08); },
+  buzz()   { tone('sawtooth', 190, 65, .5, .35); tone('square', 97, 0, .5, .15); },
+  off()    { tone('sine', 1400, 35, .6, .3); noise(.06, .3, 4000); },
+  on()     { tone('sine', 180, 900, .12, .12); noise(.04, .2, 6000); },
+  dark()   { tone('sine', 700, 120, .15, .1); },
+  alarm()  { for (let k = 0; k < 3; k++) { tone('square', 880, 0, .16, .1, k * .36); tone('square', 620, 0, .16, .1, k * .36 + .18); } },
+  ok()     { tone('sine', 1320, 0, .25, .12); tone('sine', 1760, 0, .35, .1, .08); },
+  stamp()  { tone('square', 220, 110, .15, .25); noise(.1, .4, 3000); tone('sine', 1760, 0, .4, .12, .05); },
+  scream() { noise(1.4, .5, 1800); tone('sawtooth', 110, 2600, 1.4, .22); tone('square', 95, 55, 1.4, .18);
+             tone('sawtooth', 117, 2900, 1.6, .18); noise(.9, .45, 4200); },   // detuned layer + hiss: harsher
+  surge()  { tone('sine', 200, 1600, .5, .2); tone('triangle', 400, 3200, .6, .08); this.ok(); },
+  boom()   { tone('sine', 70, 22, 1.8, 1); noise(.6, .7, 160); },
+  riser(dur) {                              // noise + saw sweeping up, getting louder (from puzzle 1)
+    const t = AC.currentTime, n = AC.sampleRate * dur, buf = AC.createBuffer(1, n, AC.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    const s = AC.createBufferSource(), o = AC.createOscillator(), f = AC.createBiquadFilter(), g = AC.createGain();
+    s.buffer = buf; f.type = 'bandpass'; f.Q.value = 3;
+    f.frequency.setValueAtTime(300, t); f.frequency.exponentialRampToValueAtTime(7000, t + dur);
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(80, t); o.frequency.exponentialRampToValueAtTime(1200, t + dur);
+    g.gain.setValueAtTime(.01, t); g.gain.exponentialRampToValueAtTime(.4, t + dur); g.gain.setValueAtTime(0, t + dur);
+    s.connect(f); o.connect(f); f.connect(g).connect(master); s.start(t); o.start(t); o.stop(t + dur);
+  },
+  beat()   { tone('sine', 75, 38, .22, .9); noise(.05, .25, 120); tone('sine', 68, 34, .25, .6, .24); },
+  drop()   { tone('sine', 110, 28, 2.8, 1); noise(.5, .5, 180); [523, 659, 784, 1046].forEach((f, i) => tone('triangle', f, 0, 2, .16, i * .09)); },
+};
+
+// recorded sound: drop files into sounds/ with these names. A missing file is skipped silently.
+const SOUNDS = {
+  tutorial:   'sounds/tutorial.mp3',     // loops under the tutorial and the fake start
+  lookbehind: 'sounds/lookbehind.mp3',   // one-shot as LOOK BEHIND YOU slams in
+  game:       'sounds/game.mp3',         // loops during the real game
+};
+const tracks = {};
+function play(name, loop = false) {
+  const a = tracks[name] = new Audio(SOUNDS[name]);
+  a.loop = loop; a.volume = CFG.MUSIC_VOLUME; a.muted = muted;
+  a.play().catch(() => {});
+  return a;
+}
+function fade(name, to, ms = 600) {           // to = 0..1 of MUSIC_VOLUME; fading to 0 pauses
+  const a = tracks[name];
+  if (!a) return;
+  const from = a.volume, target = to * CFG.MUSIC_VOLUME, t0 = performance.now();
+  const step = () => {
+    const k = Math.min(1, (performance.now() - t0) / ms);
+    a.volume = from + (target - from) * k;
+    if (k < 1) setTimeout(step, 30); else if (!to) a.pause();
+  };
+  step();
+}
+// Aurora's voice: Undertale-style blips per letter (replaced the Windows speech voice).
+// Drop sounds/aurora-voice.mp3 (one short ~60 ms blip) to use your own sound; otherwise it is synthesized.
+const VOICES = {
+  aurora: { f: 440, jit: .06, wave: 'square',   vol: .06, every: 2 },  // normal lines
+  soft:   { f: 330, jit: .03, wave: 'triangle', vol: .07, every: 3 },  // quiet / pleading / endings
+  angry:  { f: 150, jit: .15, wave: 'sawtooth', vol: .12, every: 1 },  // scare babble
+};
+let voiceBuf = null;
+fetch('sounds/aurora-voice.mp3').then(r => r.ok ? r.arrayBuffer() : null)
+  .then(b => b && AC.decodeAudioData(b)).then(b => voiceBuf = b).catch(() => {});
+function blip(v) {
+  const k = 1 + rand(-v.jit, v.jit);
+  if (!voiceBuf) return tone(v.wave, v.f * k, 0, .06, v.vol);
+  const s = AC.createBufferSource(), g = AC.createGain();
+  s.buffer = voiceBuf; s.playbackRate.value = k * v.f / 440; g.gain.value = v.vol * 8;   // * 8: tune by ear for your file
+  s.connect(g).connect(master); s.start();
+}
+async function say(text, v = VOICES.angry) {       // voice with no typing: a quick babble for scare lines
+  for (const ch of text) { if (/\w/.test(ch)) blip(v); await wait(35); }
+}
+
+// ===== Helpers (copied from puzzle 1) =====
+function shake(el, px, ms) {
+  const kf = Array.from({ length: 12 }, () => ({ transform: `translate(${rand(-px, px)}px,${rand(-px, px) / 2}px)` }));
+  kf.push({ transform: 'none' });
+  return el.animate(kf, ms);
+}
+let typeTok = 0;
+async function type(el, text, ms = T.typeChar, voice) {   // voice: a VOICES entry for Aurora; none = keyboard clicks
+  const me = ++typeTok; let n = 0; el.textContent = '';
+  for (const ch of text) {
+    if (me !== typeTok) return;
+    el.textContent += ch; if (/\w/.test(ch)) voice ? (n++ % voice.every || blip(voice)) : sfx.key();
+    await wait(ms);
+  }
+}
+async function resolveText(el, text, ms) {         // letters scramble, then lock in left to right
+  const chars = [...text], pool = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#$%&';
+  let locked = 0;
+  const s = setInterval(() => el.textContent = chars.map((c, i) => i < locked || c === ' ' ? c : any(pool)).join(''), 40);
+  for (; locked < chars.length; locked++) { await wait(ms); if (chars[locked] !== ' ') sfx.tick(); }
+  clearInterval(s); el.textContent = text;
+}
+// CRT boot: a dot ignites, stretches into a line, and the line opens the screen
+async function crtOn(speed = 1) {
+  scr.style.transform = 'scaleY(0)'; document.body.classList.add('crt');
+  sfx.ignite();
+  await beam.animate([{ opacity: 0, transform: 'scaleX(.002)' },
+                      { opacity: 1, transform: 'scaleX(.004) scaleY(4)', offset: .6 },
+                      { opacity: 1, transform: 'scaleX(.003)' }], { duration: T.dot * speed, fill: 'forwards' }).finished;
+  sfx.whine();
+  await beam.animate([{ opacity: 1, transform: 'scaleX(.003)' },
+                      { opacity: 1, transform: 'scaleX(1.04)', offset: .75 },
+                      { opacity: 1, transform: 'scaleX(1)' }], { duration: T.line * speed, easing: 'cubic-bezier(.2,.9,.3,1)', fill: 'forwards' }).finished;
+  scr.style.transform = '';
+  const open = scr.animate([{ transform: 'scaleY(.003)', filter: 'brightness(4)' },
+                            { transform: 'scaleY(1.035)', filter: 'brightness(1.6)', offset: .7 },
+                            { transform: 'scaleY(.99)', offset: .85 },
+                            { transform: 'scaleY(1)', filter: 'brightness(1)' }], { duration: T.open * speed, easing: 'cubic-bezier(.2,.8,.2,1)' });
+  beam.animate([{ opacity: 1, transform: 'scaleX(1)', filter: 'blur(0)' },
+                { opacity: 0, transform: 'scaleX(1) scaleY(8)', filter: 'blur(8px)' }], { duration: T.ghost * speed, fill: 'forwards' });
+  await open.finished;
+}
+// CRT power-off: squash to a line, then a dot, then gone
+async function crtOff() {
+  await scr.animate([{ transform: 'scale(1,1)', filter: 'brightness(1)' },
+                     { transform: 'scale(1,.004)', filter: 'brightness(3)' }], { duration: 220, easing: 'ease-in', fill: 'forwards' }).finished;
+  sfx.off();
+  await scr.animate([{ transform: 'scale(1,.004)', filter: 'brightness(3)' },
+                     { transform: 'scale(.003,.004)', filter: 'brightness(6)' }], { duration: 260, easing: 'ease-in', fill: 'forwards' }).finished;
+  await scr.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 450, fill: 'forwards' }).finished;
+  scr.getAnimations().forEach(a => a.cancel());
+  document.body.classList.remove('crt');
+}
+const until = async (cond, ms) => { const t0 = performance.now(); while (!cond() && performance.now() - t0 < ms) await wait(50); };
+
+{                                               // red static texture for the grain
+  const n = document.createElement('canvas'); n.width = n.height = 128;
+  const c = n.getContext('2d'), img = c.createImageData(128, 128);
+  for (let i = 0; i < img.data.length; i += 4) { const v = Math.random(); img.data.set([255, 60, 80, v < .5 ? 0 : v * 150], i); }
+  c.putImageData(img, 0, 0);
+  scr.style.setProperty('--noise', `url(${n.toDataURL()})`);
+}
+$('#segs').innerHTML = '<i></i>'.repeat(50);
+const segEls = [...$('#segs').children];
+function renderBar() {
+  $('#bp').textContent = Math.max(0, energy).toFixed(1) + '%';
+  segEls.forEach((s, i) => {                     // 50 segments of 2% each; the last one fades as it drains
+    s.classList.toggle('on', i < energy / 2);
+    s.style.opacity = Math.max(.1, Math.min(1, energy / 2 - i));
+  });
+}
+setInterval(() => $('#hex').textContent = Array.from({ length: 6 }, () => (Math.random() * 0xffff | 0).toString(16).toUpperCase().padStart(4, '0')).join(' '), 400);
+
+// ===== Words: one at a time, difficulty follows the last word =====
+let rescues = 0, rescuing = false, rescueOk = false, graceUntil = 0;   // last-chance boosts
+let word = null, tier = 0, done = 0, adaptive = false, stats = { chars: 0, keys: 0, good: 0, t0: 0 }, best = '', replay = false;
+
+// next word's tier from how the last one went: {cps: letters per second, bs: backspaces}. One step at a time.
+function nextTier(tier, w) {
+  if (w.cps >= CFG.FAST_CPS && w.bs === 0) return Math.min(TIERS.length - 1, tier + 1);
+  if (w.cps <= CFG.SLOW_CPS || w.bs >= CFG.MANY_BS) return Math.max(0, tier - 1);
+  return tier;
+}
+function newWord(text) {
+  if (!text) { do text = any(TIERS[tier]); while (word && text === word.text); }
+  word?.el.remove();
+  const el = document.createElement('div'); el.className = 'w pop';
+  word = { text, typed: '', el, bs: 0, shown: performance.now() };
+  wordsEl.append(el); drawWord(); moveCaret();
+}
+function drawWord() {
+  const w = word;
+  let h = '';
+  for (let i = 0; i < Math.max(w.text.length, w.typed.length); i++) {
+    const c = i >= w.typed.length ? '' : i >= w.text.length ? 'x' : w.typed[i] === w.text[i] ? 'ok' : 'bad';
+    h += `<span class="${c}">${i < w.text.length ? w.text[i] : w.typed[i]}</span>`;
+  }
+  w.el.innerHTML = h;
+}
+function moveCaret() {
+  const sp = word.el.children, s = sp[Math.min(word.typed.length, sp.length - 1)];
+  caret.style.left = word.el.offsetLeft + (word.typed.length >= sp.length ? s.offsetLeft + s.offsetWidth : s.offsetLeft) + 'px';
+}
+let idleT;
+function typeKey(k) {
+  const w = word; if (!w) return;
+  caret.classList.remove('idle'); clearTimeout(idleT); idleT = setTimeout(() => caret.classList.add('idle'), 800);
+  if (k === 'Backspace') { if (w.typed) { w.typed = w.typed.slice(0, -1); w.bs++; drawWord(); moveCaret(); } return; }
+  if (w.typed.length >= w.text.length + 6) return;
+  w.typed += k; stats.keys++;
+  if (w.text.startsWith(w.typed)) { stats.good++; sfx.type(); }
+  else { sfx.miss(); wordsEl.classList.remove('shake'); void wordsEl.offsetWidth; wordsEl.classList.add('shake'); }
+  drawWord();
+  if (w.typed === w.text) return wordDone(w);    // auto-complete: no space or Enter needed
+  moveCaret();
+}
+function wordDone(w) {
+  if (w.rescue) { rescueOk = true; moveCaret(); return; }   // the emergency word: rescue() handles the reward
+  sfx.word(); stats.chars += w.text.length + 1; done++;
+  if (mode === 'game' && w.text.length > best.length) best = w.text;
+  const t = TIERS.findIndex(l => l.includes(w.text));
+  energy = Math.min(100, energy + CFG.GAIN[Math.max(0, t)]);
+  $('#bp').animate([{ color: '#fff', textShadow: '0 0 30px #fff' }, {}], 300);
+  renderBar();
+  if (adaptive) tier = nextTier(tier, { cps: w.text.length / Math.max(.2, (performance.now() - w.shown) / 1000), bs: w.bs });
+  if (mode === 'tut') { typing = false; return; }  // the practice word is the only one
+  newWord();
+}
+
+// ===== Lights =====
+function setLit(v) {
+  if (v === lit) return;
+  lit = v; document.body.classList.toggle('lit', v);
+  lights(v ? 'on' : 'off');
+  v ? sfx.on() : sfx.dark();
+}
+const wpm = () => Math.round(stats.chars / 5 / Math.max(1 / 60, (performance.now() - stats.t0) / 60000));
+const acc = () => stats.keys ? Math.round(stats.good / stats.keys * 100) : 100;
+function renderHud() {
+  const inGame = mode === 'game' || mode === 'fake';
+  $('#stats').innerHTML = !inGame ? 'WATCHDOGS <span>3</span><br>STATUS <span>DORMANT</span>' :
+    `WPM <span>${wpm()}</span><br>ACC <span>${acc()}%</span><br>` +
+    `WATCHDOGS <span class="${lit ? '' : 'mv'}">${lit ? 'FROZEN' : 'MOVING'}</span>` +
+    (mode === 'game' ? `<br>BACKUP CELLS <span>${'▮'.repeat(CFG.RESCUE.length - rescues) || 'SPENT'}</span>` : '');
+  $('#lstate').textContent = lit ? 'LIGHTS ON ▸ WATCHDOGS FROZEN' : "LIGHTS OFF ▸ DON'T LET THEM REACH YOU";
+}
+
+// ===== The tutorial =====
+async function termLine(text, cls = '') {
+  const tm = $('#term'), line = document.createElement('div');
+  line.className = cls; tm.append(line);
+  while (tm.children.length > 8) tm.firstChild.remove();
+  await type(line, '> ' + text, T.termChar);
+}
+function step(n, title) {    // clears the terminal: each tutorial step stands on its own
+  $('#term').innerHTML = `<div class="step">STEP ${n} / 3 ▸ ${title}</div>`;
+}
+async function aurora(text) {
+  const a = $('#aur');
+  a.classList.remove('glitch');
+  await type(a, text, T.typeChar, VOICES.aurora);
+  a.dataset.text = text; a.classList.add('glitch'); shake(a, 8, 300);
+}
+
+async function start() {
+  if (mode !== 'standby') return;
+  mode = 'tut'; document.body.classList.add('started');
+  energy = 3; renderBar(); renderHud(); lights('off');
+  play('tutorial', true);
+  await crtOn();
+  if (location.hash === '#game') { history.replaceState(null, '', location.pathname + location.search); fade('tutorial', 0, 300); return game(false); }
+  await wait(600);
+
+  // step 1: type one word
+  step(1, 'POWER');
+  await termLine(TUT.type);
+  newWord('power'); wordsEl.classList.add('on'); typing = true;
+  await until(() => done > 0, T.tryType);
+  typing = false;
+  if (done > 0) { sfx.ok(); await termLine(TUT.typed, 'ok'); }
+  await wait(T.after); wordsEl.classList.remove('on');
+
+  // step 2: hold the light
+  step(2, 'LIGHT');
+  await termLine(TUT.hold);
+  const hint = $('#hint'); hint.textContent = `HOLD ▸ ${CFG.LIGHT_LABEL}`; hint.classList.add('on'); lightOK = true;
+  let heldFor = 0;
+  await until(() => (heldFor = lit ? heldFor + 50 : 0) >= T.holdNeed, T.tryHold);
+  hint.classList.remove('on');
+  if (heldFor >= T.holdNeed) { sfx.ok(); await termLine(TUT.held, 'ok'); }
+  await wait(T.after);
+
+  // step 3: the rules, one line at a time
+  step(3, 'THE RULES');
+  for (const [i, r] of TUT.rules.entries()) {
+    const last = i === TUT.rules.length - 1;
+    await termLine(r, last ? 'warn' : ''); await wait(last ? T.after : T.rule);
+  }
+  await termLine(TUT.reserve);
+  for (let e = energy; e < CFG.START_ENERGY; e += 1) { energy = e; renderBar(); sfx.tick(); await wait(30); }
+  energy = CFG.START_ENERGY; renderBar();
+  lightOK = false; setLit(false);
+  await wait(T.after);
+  $('#term').textContent = '';
+
+  // the fake start: looks exactly like the real game, then cuts to the jumpscare after a few words
+  kiosk('p2cam');
+  game(true);
+}
+
+async function jumpscare() {
+  typing = false; lightOK = false; held = false;
+  // 1. dread: the timer freezes, the word rots into green static, the lights stutter and a whine rises
+  sfx.riser(T.dread / 1000); fade('tutorial', 0, T.dread);
+  caret.hidden = true; word.el.style.color = 'var(--g)';
+  const pool = '#%&@$/▓▒░', t0 = performance.now();
+  while (performance.now() - t0 < T.dread) {
+    const k = (performance.now() - t0) / T.dread;
+    word.el.textContent = [...word.text].map(c => Math.random() < k ? any(pool) : c).join('');
+    setLit(Math.random() < .5 - k * .4);         // the lights (and the hallway bulb) die in stutters
+    shake(scr, 2 + k * 10, 60);
+    await wait(60);
+  }
+  // 2. hard cut: black and total silence
+  setLit(false); lights('down'); master.gain.value = 0;
+  wordsEl.classList.remove('on'); caret.hidden = false;
+  document.body.classList.remove('crt', 'game', 'low');
+  await wait(T.scareGap);
+  // 3. slam: strobe, the whole screen screaming it, the big words shaking loose
+  master.gain.value = muted ? 0 : CFG.VOLUME;
+  $('#scareBg').textContent = 'LOOK BEHIND YOU '.repeat(500);
+  document.body.classList.add('scare');
+  const big = $('#big'); big.textContent = big.dataset.text = 'LOOK BEHIND YOU'; big.hidden = false; big.classList.add('jit');
+  big.animate([{ transform: 'translate(-50%,-50%) scale(3)', opacity: 0 },
+               { transform: 'translate(-50%,-50%) scale(.92)', opacity: 1, offset: .5 },
+               { transform: 'translate(-50%,-50%) scale(1)', opacity: 1 }], { duration: 180, easing: 'ease-out' });
+  $('#flash').animate([{ opacity: 1, background: '#fff' }, { opacity: 0 }, { opacity: 1, background: '#f00' }, { opacity: 0 },
+                       { opacity: 1, background: '#fff' }, { opacity: 0 }, { opacity: .8, background: '#f00' }, { opacity: 0 }],
+                      { duration: 520, easing: 'steps(8)' });
+  sfx.scream(); sfx.boom(); play('lookbehind'); say('Look behind you.'); shake(app, 26, 1400); lights('scare'); kiosk('p2scare');
+  await wait(T.look);
+  // 4. gone as suddenly as it came, then the real game boots
+  big.hidden = true; big.classList.remove('jit'); document.body.classList.remove('scare'); lights('off');
+  await wait(T.afterScare);
+  await crtOn(.5);
+  game(false);
+}
+
+// ===== The game: survive (fake = the short opener that ends in the jumpscare) =====
+let loop, lastBeat = 0;
+function game(fake) {
+  mode = fake ? 'fake' : 'game'; document.body.classList.add('game'); lightOK = true; low = false;
+  energy = CFG.START_ENERGY; done = 0; adaptive = true;
+  stats = { chars: 0, keys: 0, good: 0, t0: performance.now() };
+  newWord(); wordsEl.classList.add('on'); typing = true;
+  if (!fake) play('game', true);
+  const t0 = performance.now(), fakeN = any(CFG.FAKE_WORDS);
+  let last = t0, frozenMs = 0;
+  loop = setInterval(() => {
+    const now = performance.now(), dt = (now - last) / 1000;
+    last = now;
+    setLit(held);
+    if (rescuing) { frozenMs += dt * 1000; renderHud(); return; }   // time stands still while they type the emergency word
+    const left = CFG.SURVIVE - (now - t0 - frozenMs);
+    if (now > graceUntil) energy -= (lit ? CFG.DRAIN_ON : CFG.DRAIN_OFF) * CFG.DRAIN_MULT[tier] * dt;
+    $('#tl').textContent = Math.max(0, left / 1000).toFixed(1);
+    renderBar(); renderHud();
+    if (fake) {
+      if (done >= fakeN || now - t0 > T.fakeMax) { clearInterval(loop); jumpscare(); }
+      return;
+    }
+    const isLow = energy < CFG.LOW;
+    if (isLow !== low) {
+      low = isLow; document.body.classList.toggle('low', low);
+      if (low) { sfx.alarm(); lights('low'); aurora(any(AUR.low)).then(() => setTimeout(() => mode === 'game' && ($('#aur').textContent = ''), 1500)); }
+    }
+    if (!lit && now - lastBeat > (low ? 550 : 900)) { sfx.beat(); lastBeat = now; }   // heartbeat in the dark
+    if (energy <= CFG.BOOST_AT && rescues < CFG.RESCUE.length && left > 0) rescue();
+    else if (energy <= 0) end('fail');
+    else if (left <= 0) end('win');
+  }, 50);
+}
+
+// last chance: time freezes and an emergency word appears. Typed in time = a boost; too slow = the chance is gone
+async function rescue() {
+  const R = CFG.RESCUE[rescues++], b = $('#boost'), label = b.querySelector('b');
+  rescuing = true; rescueOk = false;
+  sfx.alarm(); lights('low'); shake(scr, 10, 300);
+  b.className = 'on'; label.textContent = 'EMERGENCY ▸ TYPE IT TO REROUTE POWER';
+  newWord(R.word); word.rescue = true; word.el.classList.add('rescue');
+  const bar = $('#rbar i').animate([{ width: '100%' }, { width: '0%' }], { duration: T.rescue, fill: 'forwards' });
+  await until(() => rescueOk || mode !== 'game', T.rescue);
+  bar.cancel(); word.rescue = false;
+  if (mode !== 'game') return;                   // caught mid-rescue: end() has it
+  if (rescueOk) {
+    b.className = 'on ok'; label.textContent = `BACKUP CELL ENGAGED ▸ +${R.boost}%`;
+    $('#flash').animate([{ opacity: .7 }, { opacity: 0 }], 350); sfx.surge(); lights('boost');
+    for (let i = 0; i < 10; i++) { energy = Math.min(100, energy + R.boost / 10); renderBar(); await wait(40); }
+    aurora(AUR.boost[Math.min(rescues, AUR.boost.length) - 1]).then(() => setTimeout(() => mode === 'game' && ($('#aur').textContent = ''), 1200));
+  } else {
+    b.className = 'on fail'; label.textContent = 'REROUTE FAILED'; sfx.buzz(); shake(scr, 14, 400);
+  }
+  await wait(700);
+  b.className = ''; if (mode !== 'game') return;
+  graceUntil = rescueOk ? performance.now() + T.boostGrace : 0;
+  rescuing = false; newWord();
+}
+
+// ===== Endings =====
+async function end(kind) {
+  if (mode === 'end') return;
+  mode = 'end'; clearInterval(loop); typing = false; lightOK = false; held = false;
+  fade('game', 0, 800); fade('tutorial', 0, 400);
+  document.body.classList.remove('low');
+  $('#aur').textContent = ''; $('#big').hidden = true;
+  // POWER carried to the finale; every ending advances the team (caught/grid lost just carry less)
+  const power = kind === 'win' ? Math.round(energy) : kind === 'caught' ? Math.max(0, Math.round(energy) - CFG.CAUGHT) : 0;
+  if (!replay) hubSend({ t: 'result', k: 'power', v: power, facts: { grid: { win: 'HELD', fail: 'LOST', caught: 'CAUGHT' }[kind],
+    wpm: wpm(), acc: acc(), best } });
+  hubSend({ t: 'evt', e: 'p2done' });            // unlocks puzzle 3
+  const carry = `POWER RESERVE ${power}% ▸ CARRIED TO CORE`;
+  if (kind === 'win') {
+    setLit(true); lights('win');
+    $('#flash').animate([{ opacity: 1 }, { opacity: 1, offset: .2 }, { opacity: 0 }], { duration: 1400, easing: 'ease-out' });
+    sfx.drop(); document.body.classList.remove('crt');
+    return final('win', 'SECTOR 02 ▸ WATCHDOGS HALTED ▸ ' + carry, 'SYSTEM POWERED', 'THE CORE IS YOURS', AUR.win);
+  }
+  setLit(false); lights('down');
+  if (kind === 'fail') {
+    $('#tl').textContent = '0.0'; sfx.buzz();
+    await resolveText($('#lstate'), 'POWER FAILURE', 40);
+    await wait(600);
+    if (document.body.classList.contains('crt')) await crtOff();
+    return final('', 'SECTOR 02 ▸ GRID 0% ▸ ' + carry, 'GRID LOST', 'THE DARK BELONGS TO HER', AUR.fail);
+  }
+  sfx.scream(); shake(app, 16, 600);            // caught
+  if (document.body.classList.contains('crt')) await crtOff();
+  final('', 'WATCHDOG ▸ INTRUDER CONTAINED ▸ ' + carry, 'CONSCIOUSNESS CAPTURED', 'A WATCHDOG FOUND YOU', AUR.caught);
+}
+async function final(cls, k, title, sub, line) {
+  const f = $('#final'), ft = $('#ft');
+  f.className = cls; $('#fk').textContent = k; $('#fs').classList.remove('on');
+  document.body.classList.remove('game'); document.body.classList.add('final');
+  await wait(350);
+  await resolveText(ft, title, 70);
+  ft.dataset.text = title; ft.classList.add('glitch'); sfx.stamp(); shake(app, 10, 400);
+  setTimeout(() => ft.classList.remove('glitch'), 700);
+  $('#fs').textContent = sub; $('#fs').classList.add('on');
+  await wait(1400);
+  await type($('#fa'), line, T.typeChar, VOICES.soft);
+}
+
+// ===== Keys: players type letters and hold the light key; staff use Ctrl+Alt+<key> =====
+addEventListener('keydown', e => {
+  if (e.ctrlKey && e.altKey && e.code === 'KeyH') { e.preventDefault(); document.body.classList.toggle('help'); return; }
+  if (e.ctrlKey && e.altKey) {
+    e.preventDefault();
+    if (e.code === 'KeyU') unlock();
+    if (e.code === 'KeyS') start();
+    if (e.code === 'KeyK') { location.hash = 'game'; location.reload(); }
+    if (e.code === 'KeyX' && mode === 'game') end('caught');
+    if (e.code === 'KeyR') { lights('idle'); setTimeout(() => location.reload(), 150); }
+    if (e.code === 'KeyW') { location.hash = 'win'; location.reload(); }
+    if (e.code === 'KeyM') { muted = !muted; store.set('muted', muted); master.gain.value = muted ? 0 : CFG.VOLUME;
+      Object.values(tracks).forEach(a => a.muted = muted); }
+    return;
+  }
+  if (e.code === 'Space' && mode === 'standby') { e.preventDefault(); if (unlocked) start(); return; }
+  if (CFG.LIGHT_KEY.includes(e.code)) {
+    e.preventDefault();
+    if (lightOK) { held = true; if (mode === 'tut') setLit(true); }
+    return;
+  }
+  if (!typing || e.ctrlKey || e.altKey || e.metaKey) return;
+  if (e.key === 'Backspace' || /^[a-z]$/i.test(e.key)) { e.preventDefault(); typeKey(e.key === 'Backspace' ? e.key : e.key.toLowerCase()); }
+});
+addEventListener('keyup', e => {
+  if (!CFG.LIGHT_KEY.includes(e.code)) return;
+  held = false; if (mode === 'tut') setLit(false);
+});
+addEventListener('blur', () => { held = false; if (mode === 'tut') setLit(false); });   // never stuck on if focus is lost
+
+renderBar(); renderHud(); lights('idle'); hub();
+if (location.hash === '#game') setTimeout(start, 300);   // skip: start() jumps past the tutorial
+if (location.hash === '#win') { history.replaceState(null, '', location.pathname + location.search); document.body.classList.add('started'); mode = 'tut'; replay = true; end('win'); }
+
+// self-check for the difficulty curve: open game.html?test and look at the console
+if (location.search === '?test') {
+  console.assert(nextTier(0, { cps: 5, bs: 0 }) === 1, 'fast + clean: up one');
+  console.assert(nextTier(TIERS.length - 1, { cps: 5, bs: 0 }) === TIERS.length - 1, 'capped at the top tier');
+  console.assert(TIERS.length === CFG.GAIN.length && TIERS.length === CFG.DRAIN_MULT.length, 'every tier has a GAIN and DRAIN_MULT value');
+  console.assert(TIERS.flat().concat(CFG.RESCUE.map(r => r.word)).every(w => /^[a-z]+$/.test(w)), 'words are lowercase letters only (typeable)');
+  console.assert(CFG.RESCUE.every(r => r.boost > CFG.BOOST_AT), 'each boost lifts them clear of the trigger, so it cannot re-fire at once');
+  console.assert(nextTier(1, { cps: 5, bs: 1 }) === 1, 'fast but one backspace: holds');
+  console.assert(nextTier(2, { cps: 1, bs: 0 }) === 1, 'slow: down one');
+  console.assert(nextTier(2, { cps: 5, bs: CFG.MANY_BS }) === 1, 'many backspaces: down one, even if fast');
+  console.assert(nextTier(0, { cps: 1, bs: 9 }) === 0, 'floored at tier 0');
+  console.assert(nextTier(1, { cps: 2, bs: 1 }) === 1, 'middling: holds');
+  console.log('difficulty self-check done (no assertion errors above = pass)');
+}
+</script>
+</body>
+</html>

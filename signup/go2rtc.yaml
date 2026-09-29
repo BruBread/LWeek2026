@@ -1,0 +1,11 @@
+# go2rtc: plays game 2's hallway camera in the kiosk pop-up (start.bat runs it; camerasetup.bat uses it for the live view).
+# Each time the pop-up opens the stream, go2rtc runs camera.js, which finds the camera and prints its address
+# (the Camera Account is in camera.json). Only this PC can reach go2rtc: its API can run programs, so it stays off the Wi-Fi.
+api:
+  listen: "127.0.0.1:1984"
+rtsp:
+  listen: ""
+webrtc:
+  listen: ""
+streams:
+  hallway: echo:node camera.js url

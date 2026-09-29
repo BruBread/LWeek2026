@@ -1,0 +1,1038 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Nexus: Aurora V</title>
+<style>
+/* same visual language as the games inside: red HUD = the players, green = Aurora */
+:root { --g: #5dff95; --red: #ff2a4a; --hud: #ff5a6a; }
+* { box-sizing: border-box; margin: 0; }
+html, body { height: 100%; background: #000; overflow: hidden; cursor: none; user-select: none;
+  font-family: Consolas, "Cascadia Mono", "Lucida Console", monospace; }
+#vignette { position: fixed; inset: 0; pointer-events: none; z-index: 30;
+  background: radial-gradient(ellipse at center, transparent 65%, rgba(0,0,0,.5) 100%); }
+#flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 60; }
+.txt { text-shadow: -1.5px 0 rgba(255,40,80,.5), 1.5px 0 rgba(40,200,255,.5), 0 0 10px currentColor; }
+
+#screen { position: fixed; inset: 0; z-index: 20; overflow: hidden; color: var(--hud);
+  border-radius: 3vw / 4vw; font-size: 1vw; letter-spacing: .12em;
+  background: radial-gradient(ellipse at center, #3a0c14 0%, #1c0509 65%, #0c0204 100%);
+  animation: flick .11s steps(2) infinite; }
+#screen::before { content: ""; position: absolute; inset: 0; z-index: 5; pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgba(0,0,0,.15) 0 1px, transparent 1px 3px); }
+#screen::after { content: ""; position: absolute; inset: 0; z-index: 5; pointer-events: none; border-radius: inherit;
+  box-shadow: inset 0 0 8vw rgba(0,0,0,.6); }
+@keyframes flick { 0% { opacity: .96 } 100% { opacity: 1 } }
+@keyframes blink { 50% { opacity: 0 } }
+#grain { position: absolute; inset: 0; z-index: 4; pointer-events: none; opacity: .12;
+  background: var(--noise); animation: static .25s steps(5) infinite; }
+@keyframes static { to { background-position: 128px 77px; } }
+.rollbar { position: absolute; left: 0; right: 0; height: 18%; top: -20%; z-index: 4; pointer-events: none;
+  background: linear-gradient(transparent, rgba(255,120,140,.07), transparent); }
+.corner { position: absolute; width: 4vw; height: 4vw; border: 0 solid currentColor; }
+.tl { top: 2vw; left: 2vw; border-width: 2px 0 0 2px; }   .tr { top: 2vw; right: 2vw; border-width: 2px 2px 0 0; }
+.bl { bottom: 2vw; left: 2vw; border-width: 0 0 2px 2px; } .br { bottom: 2vw; right: 2vw; border-width: 0 2px 2px 0; }
+@keyframes boxIn { from { clip-path: inset(0 100% 0 0) } to { clip-path: inset(0 0 0 0) } }
+/* the booth name. .gl = RGB-split slices that tear through the text every few seconds */
+.gl { position: relative; display: inline-block; }
+.gl::before, .gl::after { content: attr(data-text); position: absolute; inset: 0; pointer-events: none; clip-path: inset(0 0 100% 0); }
+.gl::before { color: #0ff; text-shadow: -2px 0 #0ff; animation: glA 4s steps(1) infinite; }
+.gl::after  { color: #f0f; text-shadow: 2px 0 #f0f; animation: glB 3.3s steps(1) infinite; }
+@keyframes glA { 0%, 88%, 100% { clip-path: inset(0 0 100% 0); transform: none }
+  89% { clip-path: inset(10% 0 62% 0); transform: translate(-.08em, 0) }
+  92% { clip-path: inset(48% 0 30% 0); transform: translate(.06em, 0) }
+  95% { clip-path: inset(78% 0 6% 0); transform: translate(-.04em, 0) } }
+@keyframes glB { 0%, 84%, 100% { clip-path: inset(0 0 100% 0); transform: none }
+  85% { clip-path: inset(62% 0 14% 0); transform: translate(.08em, 0) }
+  88% { clip-path: inset(20% 0 58% 0); transform: translate(-.06em, 0) }
+  91% { clip-path: inset(4% 0 84% 0); transform: translate(.05em, 0) } }
+#brand { position: absolute; top: 3vw; left: 3.5vw; font-size: 1.4vw; font-weight: 700; letter-spacing: .4em; color: #fff; transition: opacity .4s; }
+#brand .v { color: var(--g); text-shadow: 0 0 12px var(--g); }
+body.home #brand { opacity: 0; }
+.hero { display: inline-block; }
+.hero .n { font-size: 1.7vw; letter-spacing: 1.2em; margin-right: -1.2em; color: var(--hud); }
+.hero .a { display: block; margin-top: 1.4vh; font-size: 7.5vw; font-weight: 700; line-height: 1; letter-spacing: .1em; color: #fff; white-space: nowrap;
+  text-shadow: -3px 0 rgba(255,40,80,.75), 3px 0 rgba(40,200,255,.5), 0 0 30px var(--hud), 0 0 90px rgba(255,51,68,.45); }
+.hero .v { margin-left: .3em; color: var(--g); text-shadow: 0 0 20px var(--g), 0 0 70px var(--g); animation: vflick 5s steps(1) infinite; }
+@keyframes vflick { 0%, 100% { opacity: 1 } 71% { opacity: .2 } 72% { opacity: 1 } 74% { opacity: .5 } 75% { opacity: 1 } }
+.hero .rule { position: relative; overflow: hidden; width: 70%; height: 2px; margin: 2.4vh auto 0; background: linear-gradient(90deg, transparent, var(--hud), transparent); }
+.hero .rule::after { content: ""; position: absolute; top: 0; bottom: 0; width: 18%; background: linear-gradient(90deg, transparent, #fff, transparent); animation: sweep 2.8s linear infinite; }
+@keyframes sweep { from { left: -18% } to { left: 100% } }
+/* Aurora grabs the screen now and then: everything red flips to her green */
+body.aur #screen, body.aur #modal { filter: hue-rotate(150deg) saturate(1.3) brightness(1.1); }
+#stats { position: absolute; top: 3vw; right: 3.5vw; text-align: right; line-height: 1.6; }
+#stats span { color: #fff; }
+#stats .assist { display: inline-block; margin-top: .4vw; padding: .1vw .6vw; color: #000; background: var(--g); text-shadow: none; }
+
+/* one question at a time, in the middle */
+#mid { position: absolute; inset: 8.5vw 3.5vw 7.5vw; display: flex; align-items: center; justify-content: center; }
+#box { min-width: 52vw; max-width: 84vw; padding: 1.6vw 2.6vw; border: 1px solid currentColor; background: rgba(34,5,11,.85); }
+#box.in { animation: boxIn .35s backwards; }
+#q { font-size: 2vw; color: #fff; letter-spacing: .12em; margin-bottom: 1.8vh; line-height: 1.35; }
+#a { font-size: 1.5vw; line-height: 1.6; }
+#keys { margin-top: 2.6vh; font-size: 1vw; letter-spacing: .3em; opacity: .95; white-space: pre-wrap; line-height: 1.8; }
+#keys b { color: #fff; font-weight: 400; }
+.sub { margin-top: 1.2vh; font-size: 1.1vw; letter-spacing: .15em; }
+.warn { color: #fff; }
+.field { font-size: 3vw; color: #fff; border-bottom: 2px solid var(--hud); min-height: 1.4em; letter-spacing: .15em; white-space: pre; }
+.cur::after { content: "\258C"; animation: blink .6s steps(1) infinite; color: var(--hud); }
+.opt { display: flex; align-items: baseline; gap: 1.4vw; padding: .7vw 1.2vw; margin: .9vh 0; border: 1px solid rgba(255,51,68,.4); }
+.opt b { font-weight: 400; color: #fff; min-width: 2.5em; }
+.opt span { color: #fff; font-size: 1.8vw; }
+.opt small { margin-left: auto; font-size: 1vw; text-align: right; }
+.opt.off { opacity: .4; }
+.opt.sel { background: rgba(255,51,68,.2); border-color: #fff; }
+.big { font-size: 4vw; line-height: 1.1; color: #fff; letter-spacing: .2em; text-align: center; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: .3vh 2.5vw; font-size: 1.4vw; }
+.kv span:nth-child(odd) { opacity: .9; }
+.kv span:nth-child(even) { color: #fff; }
+
+/* camera: everything centered, one player at a time */
+#box.center { text-align: center; }
+.strip { display: flex; justify-content: center; gap: .5vw; margin-bottom: 1.4vh; }
+.strip i { width: 3.4vw; aspect-ratio: 4 / 3; border: 1px solid rgba(255,51,68,.4); background: #000 center / cover no-repeat; }
+.strip i.now { border-color: #fff; box-shadow: 0 0 10px var(--hud); }
+.cam { position: relative; width: 36vw; aspect-ratio: 4 / 3; margin: 0 auto; border: 1px solid currentColor; overflow: hidden; background: #000; }
+.cam video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: block; }
+.cam .frame { position: absolute; left: 31%; right: 31%; top: 10%; bottom: 16%; border: 2px dashed rgba(255,255,255,.5); border-radius: 50%; }
+.cam .count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12vw; color: #fff; }
+.shot { display: block; width: 36vw; margin: 0 auto; border: 1px solid currentColor; }
+.grid { display: flex; flex-wrap: wrap; justify-content: center; gap: .8vw; max-width: 72vw; margin: 0 auto; }
+.grid figure { width: 12vw; border: 2px solid transparent; padding: 2px; }
+.grid figure.sel { border-color: #fff; }
+.grid img { width: 100%; display: block; }
+.grid figcaption { text-align: center; font-size: 1vw; margin-top: .3vw; }
+.slots { display: grid; grid-template-columns: repeat(6, 1fr); gap: .6vw; width: 66vw; }
+.slots i { font-style: normal; text-align: center; padding: .6vw 0; font-size: 1.4vw; border: 1px solid rgba(255,51,68,.4); }
+.slots i.x { opacity: .35; text-decoration: line-through; }
+.slots i.sel { background: var(--hud); color: #000; text-shadow: none; }
+
+/* the line, always at the bottom */
+#line { position: absolute; left: 3.5vw; right: 3.5vw; bottom: 3.2vw; display: flex; gap: 2.5vw; align-items: flex-end; font-size: 1.05vw; letter-spacing: .25em; }
+#line > div { flex: 1; }
+#line span { display: block; color: #fff; font-size: 1.5vw; letter-spacing: .1em; margin-top: .3vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#line .bar { height: .45vw; margin-top: .5vw; background: rgba(255,51,68,.15); }
+#line .bar i { display: block; height: 100%; background: var(--hud); box-shadow: 0 0 8px var(--hud); transition: width 1s; }
+#line .hot span { color: var(--g); animation: blink 1s steps(1) infinite; }
+body:not(.home) #line { display: none; }    /* only on the idle screen: a signup gets the whole screen */
+body:not(.home) #mid { bottom: 3.5vw; }
+
+/* the queue board (/queue): for a TV or a second screen */
+body.board #mid { inset: 2.5vw 3.5vw 3vw; }
+body.board #brand, body.board #line { display: none; }
+#box.boardbox { width: 92vw; max-width: none; padding: 0; border: 0; background: none; text-align: center; }
+.boardbox .hero .a { font-size: 4.2vw; }
+.boardbox .hero .n { font-size: 1.2vw; }
+#bd { text-align: left; }
+.bd-top { display: grid; grid-template-columns: 1.4fr 1fr; gap: 1.6vw; margin: 3vh 0 1.6vw; }
+.panel { padding: 1.3vw 1.8vw; border: 1px solid currentColor; background: rgba(34,5,11,.85); }
+.panel h3 { font-weight: 400; font-size: 1.05vw; letter-spacing: .4em; }
+.panel .big2 { margin-top: .6vh; font-size: 3.2vw; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.panel .meta { margin-top: .6vh; font-size: 1.3vw; color: #fff; letter-spacing: .15em; }
+.panel .bar { height: .7vw; margin-top: 1.2vh; background: rgba(255,51,68,.15); }
+.panel .bar i { display: block; height: 100%; background: var(--hud); box-shadow: 0 0 10px var(--hud); transition: width 1s; }
+.panel.hot { border-color: var(--g); }
+.panel.hot .big2 { color: var(--g); text-shadow: 0 0 20px var(--g); animation: blink 1s steps(1) infinite; }
+.queue { width: 100%; margin-top: 1vh; border-collapse: collapse; font-size: 1.5vw; }
+.queue td { padding: .8vh .8vw; color: #fff; border-top: 1px solid rgba(255,51,68,.2); white-space: nowrap; }
+.queue td.n { width: 2.5em; color: var(--hud); }
+.queue td.st { text-align: right; color: var(--hud); letter-spacing: .2em; }
+.queue tr.here td.st { color: var(--g); }
+.queue .none td { opacity: .55; }
+.bd-foot { display: flex; justify-content: space-between; margin-top: 1.6vw; font-size: 1.2vw; letter-spacing: .3em; }
+.bd-foot span { color: #fff; }
+
+/* the idle screen */
+#box.idle { border: 0; background: none; text-align: center; }
+.idle .go { display: inline-block; margin-top: 6vh; padding: .7vw 2.4vw; font-size: 1.8vw; font-weight: 700; letter-spacing: .3em; color: #fff;
+  background: var(--hud); text-shadow: 0 0 6px rgba(0,0,0,.7); box-shadow: 0 0 30px var(--hud); animation: pulse .8s ease-in-out infinite alternate; }
+@keyframes pulse { to { scale: 1.04; } }
+.menu { display: flex; justify-content: center; gap: 2vw; margin-top: 6vh; }
+.menu .go { margin-top: 0; min-width: 22vw; opacity: .7; color: var(--hud); background: none; border: 2px solid var(--hud); box-shadow: none; animation: none; }
+.menu .go.sel { opacity: 1; color: #fff; background: var(--hud); box-shadow: 0 0 30px var(--hud); animation: pulse .8s ease-in-out infinite alternate; }
+.idle .aur { margin-top: 4vh; min-height: 1.5em; font-size: 1.4vw; color: var(--g); text-shadow: 0 0 12px var(--g); letter-spacing: .08em; }
+
+/* staff line screen */
+.tbl { width: 80vw; border-collapse: collapse; font-size: 1.1vw; }
+.tbl th { text-align: left; font-weight: 400; opacity: .85; padding: .3vw .6vw; letter-spacing: .25em; }
+.tbl td { padding: .35vw .6vw; color: #fff; border-top: 1px solid rgba(255,51,68,.2); white-space: nowrap; }
+.tbl tr.sel td { background: rgba(255,51,68,.3); }
+.tbl tr.gone td { opacity: .5; }
+.tbl .st { color: var(--hud); }
+.tbl .late { color: var(--g); animation: blink .8s steps(1) infinite; }
+.tbl .empty td { opacity: .5; }
+
+/* are-you-sure box, over whatever is on screen */
+#modal { position: fixed; inset: 0; z-index: 45; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,.55); color: var(--hud); }
+#modal.on { display: flex; }
+#modal > div { max-width: 62vw; padding: 2.2vw 3vw; border: 2px solid var(--hud); background: #240610; text-align: center; box-shadow: 0 0 40px rgba(255,51,68,.35); animation: boxIn .25s backwards; }
+#mq { font-size: 2.3vw; color: #fff; letter-spacing: .1em; line-height: 1.35; }
+#ms { margin-top: 1.6vh; font-size: 1.2vw; letter-spacing: .12em; line-height: 1.6; }
+#mk { margin-top: 3vh; font-size: 1.3vw; letter-spacing: .3em; }
+#mk b { color: #000; background: var(--hud); padding: 0 .5em; font-weight: 400; text-shadow: none; }
+
+/* game 2's hallway camera: Aurora's pop-up over everything (the signup underneath is kept) */
+#feed { position: fixed; inset: 0; z-index: 50; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,.6); color: var(--g); }
+#feed.on { display: flex; }
+#feed > div { width: 66vw; border: 2px solid var(--g); background: #021208; box-shadow: 0 0 60px rgba(93,255,149,.35); animation: boxIn .25s backwards; }
+#feed .bar { display: flex; justify-content: space-between; padding: .5vw 1vw; background: var(--g); color: #000; font-size: 1.3vw; font-weight: 700; letter-spacing: .3em; }
+#feed .bar b { animation: blink .5s steps(1) infinite; }
+#feed .view { position: relative; aspect-ratio: 16 / 9; margin: 1vw; overflow: hidden; background: #000; }
+#feed .view::before { content: ""; position: absolute; inset: 0; background: var(--noise); filter: grayscale(1) brightness(2.5); animation: static .25s steps(5) infinite; }
+#feed iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; opacity: 0; }
+#feed.live iframe { opacity: 1; }
+#feed .msg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 2.4vw; color: #fff; letter-spacing: .3em; text-shadow: 0 0 14px var(--g); }
+#feed.live:not(.lost) .msg { display: none; }
+#feed .cap { display: flex; justify-content: space-between; padding: 0 1vw 1vw; font-size: 1.4vw; letter-spacing: .12em; text-shadow: 0 0 12px var(--g); }
+#feed .rec { color: var(--red); visibility: hidden; animation: blink 1s steps(1) infinite; }
+#feed.live .rec { visibility: visible; }
+#feedBeam { position: fixed; left: 50%; top: 50%; width: 66vw; height: 3px; opacity: 0; pointer-events: none; transform: translate(-50%, -50%);
+  background: #eafff2; box-shadow: 0 0 14px 4px var(--g), 0 0 60px 14px rgba(93,255,149,.5); }
+</style>
+</head>
+<body>
+<div id="screen">
+  <div id="grain"></div><div class="rollbar"></div>
+  <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+  <div id="brand" class="txt"><span class="gl" data-text="NEXUS: AURORA">NEXUS: AURORA</span> <span class="gl v" data-text="V">V</span></div>
+  <div id="stats" class="txt"></div>
+  <div id="mid"><div id="box" class="txt"><div id="q"></div><div id="a"></div><div id="keys"></div></div></div>
+  <div id="line" class="txt"></div>
+</div>
+<div id="modal" class="txt"><div><div id="mq"></div><div id="ms"></div><div id="mk"></div></div></div>
+<div id="feed"><div>
+  <div class="bar"><b>INCOMING TRANSMISSION</b><span>_ □ ✕</span></div>
+  <div class="view"><iframe allow="autoplay"></iframe><div class="msg"></div></div>
+  <div class="cap"><span class="rec">● LIVE · SECTOR 02</span><span class="say"></span></div>
+</div><i id="feedBeam"></i></div>
+<div id="vignette"></div>
+<div id="flash"></div>
+<video id="vid" autoplay muted playsinline hidden></video>
+
+<script src="config.js"></script>
+<script>
+// ===== Tuning knobs (tickets, price and booth hours: config.js) =====
+const CFG = {
+  IDLE_S: 90,                // no key for this long mid-signup -> "STILL THERE?" -> back to the start
+  STAFF_IDLE_S: 120,         // the staff screen locks itself after this long
+  NOW_LATE_MIN: 5,           // PLAY NOW can still take a slot that started this many minutes ago
+  // expected minutes from the start of a run to the end of room 1, 2, 3, 4 and the finale (used until real runs exist in the hub's history)
+  ROOM_MIN: [4, 8, 12, 18, 23],
+  BOARD_ROWS: 7,             // groups listed under UP NEXT on the queue board (/queue)
+  CAMERA: '',               // part of the USB camera's name, only if the wrong camera gets picked first (e.g. 'Logitech')
+  TAKEOVER_S: [20, 45],     // Aurora flips the whole screen to green once every this many seconds (random in between)
+  FEED_AFTER_S: 4,          // game 2's camera pop-up stays this long after game 2 ends...
+  FEED_MAX_S: 90,           // ...and closes by itself after this long anyway (a game 2 reset mid-run never sends its end)
+  VOLUME: 0.6,
+};
+const AUR = [                // Aurora on the idle screen, now and then
+  'Another one wants in?',
+  'Bring your friends. I have room.',
+  'I can see you through the camera, you know.',
+  'Line up. I am patient. You are not.',
+];
+
+// ===== Pure logic (tested by ?test) =====
+const pad = n => String(n).padStart(2, '0');
+const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const toMin = t => +t.slice(0, 2) * 60 + +t.slice(3, 5);
+const hhmm = m => pad(m / 60 | 0) + ':' + pad(m % 60);
+const slotKey = sl => sl.date + ' ' + sl.time;
+const slotAt = sl => new Date(sl.date + 'T' + sl.time);            // local time
+const holds = s => !['void', 'noshow', 'done'].includes(s.status);   // same rule as the server
+const toPlay = s => s.status === 'booked' || s.status === 'called';
+const bySlot = (a, b) => slotKey(a.slot) < slotKey(b.slot) ? -1 : 1;
+function daySlots(cfg, date) {
+  const d = cfg.DAYS.find(x => x.date === date), out = [];
+  if (d) for (let m = toMin(d.open); m + cfg.SLOT_MIN <= toMin(d.close); m += cfg.SLOT_MIN) out.push({ date, time: hhmm(m) });
+  return out;
+}
+function freeSlots(st, date, at) {           // slots nobody holds that haven't started yet
+  const busy = new Set(st.sales.filter(holds).map(s => slotKey(s.slot)));
+  return daySlots(st.cfg, date).filter(sl => !busy.has(slotKey(sl)) && slotAt(sl) > at);
+}
+function nowSlot(st, at) {                   // PLAY NOW = the earliest free slot today (one that just started still counts)
+  const busy = new Set(st.sales.filter(holds).map(s => slotKey(s.slot)));
+  return daySlots(st.cfg, ymd(at)).find(sl => !busy.has(slotKey(sl)) && slotAt(sl) >= at - CFG.NOW_LATE_MIN * 60000);
+}
+function line(st, at) {                      // today's groups still to play: "here" = walk-ins, called, or their time has come
+  const g = st.sales.filter(s => s.slot.date === ymd(at) && toPlay(s)).sort(bySlot);
+  const here = g.filter(s => s.walkin || s.status === 'called' || slotAt(s.slot) <= at);
+  return { here, later: g.filter(s => !here.includes(s)), people: here.reduce((n, s) => n + s.size, 0) };
+}
+const ahead = (st, sl) => st.sales.filter(s => toPlay(s) && s.slot.date === sl.date && slotKey(s.slot) < slotKey(sl)).length;
+const calledAt = s => [...(s.history || [])].reverse().find(h => h.to === 'called')?.at;
+// how far the team in the booth is, from the hub's run (start time + a split per finished room) and its past runs
+const STAGES = ['p1done', 'p2done', 'p3done', 'p4done', 'end'];
+function progress(run, hist, at) {
+  if (!run || !run.t0) return null;
+  if (run.end != null) return { room: 5, pct: 100, left: 0, done: true };
+  const fin = (hist || []).filter(r => r.end > 0), cum = [];
+  STAGES.forEach((k, i) => {
+    const v = fin.map(r => k === 'end' ? r.end : r.splits && r.splits[k]).filter(x => x > 0);
+    const avg = v.length ? v.reduce((a, b) => a + b) / v.length : CFG.ROOM_MIN[i] * 60000;
+    cum[i] = Math.max(avg, (cum[i - 1] || 0) + 60000);
+  });
+  const stage = STAGES.slice(0, 4).filter(k => run.splits && run.splits[k] != null).length;
+  const el = at - run.t0, lo = stage ? cum[stage - 1] : 0, hi = cum[stage], E = cum[4];
+  const pos = Math.min(Math.max(el, lo), lo + (hi - lo) * .95);   // never claims the next room before it happens
+  return { room: stage + 1, pct: Math.round(pos / E * 100), left: E - hi + Math.max(hi - el, 60000) };
+}
+
+// ===== Setup =====
+const $ = s => document.querySelector(s);
+const B = document.body, box = $('#box'), vid = $('#vid');
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const rand = (a, b) => a + Math.random() * (b - a);
+const any = a => a[Math.random() * a.length | 0];
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const peso = n => '₱' + n.toLocaleString('en-US');
+const fmtTime = sl => { const m = toMin(sl.time), h = m / 60 | 0; return `${(h + 11) % 12 + 1}:${pad(m % 60)} ${h < 12 ? 'AM' : 'PM'}`; };
+const fmtDay = date => new Date(date + 'T00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
+const clock = new URLSearchParams(location.search).get('now');     // ?now=2026-10-05T10:00 fakes the clock for a dry run
+const clockOff = clock ? Date.parse(clock) - Date.now() : 0;
+const now = () => new Date(Date.now() + clockOff);
+
+let S = { cfg: BOOTH, sold: 0, sales: [] };   // config.js until the server answers (test mode never needs it)
+let serverUp = false, mode = 'idle', flow = false, assist = false, testing = false, cheat = '';
+const left = () => S.cfg.TICKETS - S.sold;
+async function refresh() {
+  try { S = await (await fetch('/api/state')).json(); serverUp = true; } catch { serverUp = false; }
+  renderStats(); renderLine();
+}
+async function post(url, o) {                // -> [ok, body]
+  try { const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(o) });
+        const b = await r.json(); refresh(); return [r.ok, b]; }
+  catch (e) { return [false, { error: 'SIGNUP SERVER NOT RESPONDING. CALL A STAFF MEMBER.' }]; }
+}
+
+// ===== Hub (only read: the current team's room and time left). Find the hub: whichever laptop runs hub\start.bat, so nobody types an IP =====
+// ?hub=<IP> if given. Otherwise this laptop, then the last hub found, then every address on the booth network at once
+// (?net=, from booth.bat). A cold search takes a few seconds; after that the saved address answers straight away.
+// ponytail: scans .1-.254 of one /24 network, enough for a booth router
+async function findHub() {
+  const q = new URLSearchParams(location.search), net = q.get('net') || '192.168.0';
+  if (q.get('hub')) return q.get('hub');
+  const ping = (ip, ms) => fetch(`http://${ip}:3000/ping`, { signal: AbortSignal.timeout(ms) })
+    .then(r => r.text()).then(t => t === 'nexus-hub' ? ip : Promise.reject());
+  for (;;) {
+    let saved; try { saved = localStorage.getItem('nexus-hub'); } catch {}
+    const ip = await Promise.any(['localhost', saved].filter(Boolean).map(ip => ping(ip, 1000)))
+      .catch(() => Promise.any(Array.from({ length: 254 }, (_, i) => ping(`${net}.${i + 1}`, 4000))))
+      .catch(() => null);
+    if (ip) { try { localStorage.setItem('nexus-hub', ip); } catch {} return ip; }
+    await new Promise(r => setTimeout(r, 2000));
+  }
+}
+let run = null, hist = [], hubOff = 0, hubUp = false;
+async function hub() {
+  let ws; try { ws = new WebSocket('ws://' + await findHub() + ':3000/ws'); } catch { setTimeout(hub, 3000); return; }
+  // id 'signup' = the kiosk itself: the hub reads this PC's IP from it, for the GM panel's LINE box
+  ws.onopen = () => { hubUp = true; ws.send(JSON.stringify({ t: 'hello', id: mode === 'board' ? 'queue-board' : 'signup', role: 'page' })); };
+  ws.onclose = () => { hubUp = false; setTimeout(hub, 3000); };
+  ws.onmessage = e => { const m = JSON.parse(e.data);
+    if (m.t === 'run') { run = m; hubOff = m.now - Date.now(); }
+    if (m.t === 'history') hist = m.runs;
+    if (m.t === 'evt' && m.e === 'p2cam') feedOpen();
+    if (m.t === 'evt' && m.e === 'p2scare') feedLive();
+    if (m.t === 'evt' && m.e === 'p2done' && feedOn) { clearTimeout(feedT); feedT = setTimeout(feedClose, CFG.FEED_AFTER_S * 1000); } };
+}
+
+// ===== Game 2's hallway camera: its fake start shoves a pop-up over whatever is on screen, LOOK BEHIND YOU cuts the feed in =====
+// The signup underneath is untouched: keys are swallowed and the idle timer waits (nextKey) until the pop-up closes.
+// The stream comes from go2rtc on the signup PC (start.bat runs it; the camera is set in go2rtc.yaml)
+let feedOn = false, feedT;
+const feedEl = $('#feed'), feedUrl = 'http://127.0.0.1:1984';   // go2rtc only answers this PC (IPv4), so not on the /queue TV
+function feedOpen() {
+  if (feedOn || mode === 'staff' || mode === 'board') return;
+  feedOn = true; feedEl.className = 'on'; $('#feed .msg').textContent = 'ESTABLISHING LINK…'; $('#feed .bar b').textContent = 'INCOMING TRANSMISSION';
+  shake(feedEl.firstElementChild, 14, 400); sfx.ask();
+  // the stream connects now, during the fake words, so it's ready at the scare. No go2rtc = static and SIGNAL LOST, not an error page.
+  // 8 s: while the hub is down, the hub search (findHub) ties up the browser's connections for up to 4 s at a time
+  fetch(feedUrl, { mode: 'no-cors', signal: AbortSignal.timeout(8000) })
+    .then(() => { if (feedOn) $('#feed iframe').src = feedUrl + '/stream.html?src=hallway&mode=mse'; })
+    .catch(() => { feedEl.classList.add('lost'); $('#feed .msg').textContent = 'SIGNAL LOST'; });
+  feedT = setTimeout(feedClose, CFG.FEED_MAX_S * 1000);
+}
+function feedLive() {
+  feedOpen(); if (!feedOn) return;
+  feedEl.classList.add('live'); $('#flash').animate([{ opacity: .9 }, { opacity: 0 }], 300); shake(feedEl.firstElementChild, 20, 500);
+  type($('#feed .say'), 'Look. Your turn is coming.', 45, VOICES.aurora);
+}
+let feedShut = false;
+async function feedClose() {                 // ~3 s: the signal breaks up, Aurora signs off, then a CRT power-off like the games
+  clearTimeout(feedT);
+  if (!feedOn || feedShut) return;
+  feedShut = true;
+  const win = feedEl.firstElementChild, msg = $('#feed .msg');
+  msg.textContent = '';
+  for (let i = 0; i < 7; i++) { feedEl.classList.toggle('live'); jolt(win); sfx.glitch(); await wait(rand(40, 140)); }
+  feedEl.classList.remove('live');           // static only from here on
+  msg.textContent = 'SIGNAL TERMINATED'; $('#feed .bar b').textContent = 'TRANSMISSION ENDED'; sfx.shut();
+  await type($('#feed .say'), 'See you inside.', 45, VOICES.aurora);
+  await wait(700);
+  // the window squashes into a line, a glowing beam takes over and shrinks to a dot, the dot fades
+  const beam = $('#feedBeam');
+  await win.animate([{ transform: 'none', filter: 'brightness(1)' }, { transform: 'scale(1,.006)', filter: 'brightness(3)' }],
+    { duration: 220, easing: 'ease-in', fill: 'forwards' }).finished;
+  sfx.off();
+  await Promise.all([
+    win.animate([{ transform: 'scale(1,.006)', opacity: 1 }, { transform: 'scale(.01,.006)', opacity: 0 }], { duration: 260, easing: 'ease-in', fill: 'forwards' }).finished,
+    beam.animate([{ opacity: 1, width: '66vw', height: '3px', borderRadius: '0' }, { opacity: 1, width: '10px', height: '10px', borderRadius: '50%' }],
+      { duration: 260, easing: 'ease-in', fill: 'forwards' }).finished,   // width, not scale: the glow stays round
+  ]);
+  await feedEl.animate([{ opacity: 1 }, { opacity: 1, offset: .3 }, { opacity: 0 }], { duration: 600, easing: 'ease-in', fill: 'forwards' }).finished;
+  feedOn = feedShut = false; feedEl.className = '';
+  [win, beam, feedEl].forEach(el => el.getAnimations().forEach(a => a.cancel()));
+  $('#feed iframe').src = 'about:blank'; $('#feed .say').textContent = '';
+}
+
+// ===== Sound (same synth set as the games) =====
+const AC = new AudioContext();
+const master = AC.createGain(); master.connect(AC.destination);
+let muted = false; master.gain.value = CFG.VOLUME;
+function tone(type, f0, f1, dur, vol, delay = 0) {
+  const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t);
+  if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  o.connect(g).connect(master); o.start(t); o.stop(t + dur + .05);
+}
+function noise(dur, vol, freq, delay = 0) {
+  const t = AC.currentTime + delay, buf = AC.createBuffer(1, AC.sampleRate * dur, AC.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  const s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+  s.buffer = buf; f.type = 'bandpass'; f.frequency.value = freq;
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  s.connect(f).connect(g).connect(master); s.start(t);
+}
+const sfx = {
+  key()   { tone('square', 900, 0, .015, .03); },
+  move()  { tone('square', 1500, 0, .03, .05); },
+  tick()  { tone('square', 2200, 1300, .05, .1); },
+  ok()    { tone('sine', 1320, 0, .25, .12); tone('sine', 1760, 0, .35, .1, .08); },
+  nope()  { tone('sawtooth', 190, 65, .25, .2); },
+  ask()   { tone('square', 880, 0, .12, .08); tone('square', 620, 0, .12, .08, .14); },
+  shut()  { tone('square', 220, 110, .15, .25); noise(.1, .4, 3000); },
+  stamp() { tone('square', 220, 110, .15, .25); noise(.1, .4, 3000); tone('sine', 1760, 0, .4, .12, .05); },
+  magic() { [523, 659, 784, 1046].forEach((f, i) => tone('triangle', f, 0, .5, .12, i * .07)); },
+  glitch() { noise(.05, .12, rand(800, 4000)); tone('square', rand(80, 400), 0, .04, .04); },
+  off()   { tone('sine', 1400, 35, .6, .3); noise(.06, .3, 4000); },   // CRT power-off (from game 2)
+};
+// Aurora's voice: Undertale-style blips (same block as the games). Drop sounds/aurora-voice.mp3 to use your own blip.
+const VOICES = { aurora: { f: 440, jit: .06, wave: 'square', vol: .06, every: 2 } };
+let voiceBuf = null;
+fetch('sounds/aurora-voice.mp3').then(r => r.ok ? r.arrayBuffer() : null)
+  .then(b => b && AC.decodeAudioData(b)).then(b => voiceBuf = b).catch(() => {});
+function blip(v) {
+  const k = 1 + rand(-v.jit, v.jit);
+  if (!voiceBuf) return tone(v.wave, v.f * k, 0, .06, v.vol);
+  const s = AC.createBufferSource(), g = AC.createGain();
+  s.buffer = voiceBuf; s.playbackRate.value = k * v.f / 440; g.gain.value = v.vol * 8;
+  s.connect(g).connect(master); s.start();
+}
+async function type(el, text, ms, voice) {
+  let n = 0; el.textContent = '';
+  for (const ch of text) { if (!el.isConnected) return; el.textContent += ch; if (/\w/.test(ch)) voice ? (n++ % voice.every || blip(voice)) : sfx.key(); await wait(ms); }
+}
+function shake(el, px, ms) {
+  const kf = Array.from({ length: 10 }, () => ({ transform: `translate(${rand(-px, px)}px,${rand(-px, px) / 2}px)` }));
+  kf.push({ transform: 'none' }); return el.animate(kf, ms);
+}
+
+{                                            // red static texture for the grain (same as the games)
+  const n = document.createElement('canvas'); n.width = n.height = 128;
+  const c = n.getContext('2d'), img = c.createImageData(128, 128);
+  for (let i = 0; i < img.data.length; i += 4) { const v = Math.random(); img.data.set([255, 60, 80, v < .5 ? 0 : v * 150], i); }
+  c.putImageData(img, 0, 0);
+  B.style.setProperty('--noise', `url(${n.toDataURL()})`);   // on body: the camera pop-up uses it too
+}
+(async function glitch() { for (;;) { await wait(rand(3000, 7000));
+  if (Math.random() < .5) $('.rollbar').animate([{ top: '-20%' }, { top: '110%' }], 320);
+  else $('#screen').animate([{ transform: 'none' }, { transform: 'translateX(-8px) skewX(3deg)', offset: .3 }, { transform: 'none' }], 130); } })();
+const jolt = el => el.animate([{ transform: `translate(${rand(-14, 14)}px,${rand(-4, 4)}px) skewX(${rand(-5, 5)}deg)` }, { transform: 'none' }], 120);
+(async function takeover() {                 // Aurora grabs the screen: red stutters to her green, holds, stutters back
+  for (;;) {
+    await wait(rand(CFG.TAKEOVER_S[0], CFG.TAKEOVER_S[1]) * 1000);
+    if (mode === 'staff') continue;
+    const stutter = async n => { for (let i = 0; i < n; i++) { B.classList.toggle('aur'); sfx.glitch(); jolt($('#screen')); await wait(rand(30, 120)); } };
+    await stutter(4 + (Math.random() * 4 | 0));
+    B.classList.add('aur'); await wait(rand(700, 2200));
+    await stutter(3 + (Math.random() * 3 | 0));
+    B.classList.remove('aur');
+  }
+})();
+(async function titleGlitch() {              // the booth name tears and scrambles now and then
+  const pool = [...'#$%&@01▓▒░/\\'];
+  for (;;) {
+    await wait(rand(2500, 6000));
+    const els = [...document.querySelectorAll('.hero .a, #brand')].filter(el => el.offsetParent);
+    for (const el of els) {
+      jolt(el);
+      const w = el.querySelector('.gl'), text = w.dataset.text;
+      for (let i = 0; i < 5; i++) { w.firstChild.textContent = [...text].map(c => c !== ' ' && Math.random() < .3 ? any(pool) : c).join(''); await wait(45); }
+      w.firstChild.textContent = text;
+    }
+  }
+})();
+
+// ===== Keys, the same on every screen: SPACE = yes / next, ESC = no / back, arrows move =====
+// (Enter also works as SPACE, except in "are you sure?" boxes, and in the team name, where SPACE types a space)
+const TIMEOUT = { key: '' }, CANCEL = new Error('cancel'), BACK = null;
+const go = e => e.code === 'Space' || e.key === 'Enter';
+let waiter = null;
+const deliver = e => { const w = waiter; waiter = null; w && w(e); };
+function nextKey(ms = 0) {                   // while the camera pop-up is up, the timeout starts over: nobody gets thrown out for watching
+  return new Promise(r => {
+    let t;
+    const arm = () => t = ms && setTimeout(() => { if (feedOn) return arm(); waiter = null; r(TIMEOUT); }, ms);
+    arm();
+    waiter = e => { clearTimeout(t); r(e); };
+  });
+}
+async function k() {                         // the next key in a signup; nobody there for a while = back to the start
+  for (;;) {
+    const e = await nextKey(flow ? CFG.IDLE_S * 1000 : 0);
+    if (e === TIMEOUT) { if (await stillThere()) continue; throw CANCEL; }
+    return e;
+  }
+}
+addEventListener('keydown', e => {
+  AC.resume();
+  if (feedOn) return e.preventDefault();      // the camera pop-up is forced: no key closes it
+  if (e.ctrlKey && e.altKey) {
+    e.preventDefault();
+    if (/^Key[A-Z]$/.test(e.code)) cheat = (cheat + e.code[3]).slice(-6);
+    // ASSIST: lifts the party limit for one signup (players who need helpers with them); free, not counted in the 400
+    // TEST: runs the whole flow for one signup, but the sale is never saved
+    // ICPEP: the staff line screen (from the main screen)
+    // CAMERA: game 2's camera pop-up on its own, to check the camera: static, the live feed 4 s later, closes after 20 s
+    if (cheat.endsWith('ICPEP')) { cheat = ''; if (!flow) deliver({ staff: true, key: '' }); return; }
+    if (cheat.endsWith('CAMERA')) { cheat = ''; feedOpen(); setTimeout(feedLive, 4000); clearTimeout(feedT); feedT = setTimeout(feedClose, 24000); return; }
+    const code = cheat.endsWith('NEXUS') ? 'assist' : cheat.endsWith('TEST') ? 'testing' : null;
+    if (code) {
+      cheat = '';
+      if (code === 'assist') assist = !assist; else testing = !testing;
+      (code === 'assist' ? assist : testing) ? sfx.magic() : sfx.shut(); renderStats();
+      if (mode === 'idle') renderIdle(true);
+      return;
+    }
+    const spelling = /CAM$|CAMER$/.test(cheat);   // the M and R in CAMERA aren't mute and reload
+    if (e.code === 'KeyM' && !spelling) { muted = !muted; master.gain.value = muted ? 0 : CFG.VOLUME; }
+    if (e.code === 'KeyR' && !flow && !spelling) location.reload();
+    if (e.key === 'Enter') deliver(e);       // still holding Ctrl+Alt after typing NEXUS / TEST: Enter still works
+    return;
+  }
+  cheat = '';
+  if (e.ctrlKey || e.altKey || e.metaKey || e.key === 'F11') return;   // F11 = fullscreen when opened outside the kiosk
+  e.preventDefault();                       // no F5, no Backspace-navigation, no scrolling: the kiosk only answers questions
+  if (!e.repeat || /Arrow|Backspace/.test(e.key)) deliver(e);
+});
+
+// ===== Screen helpers =====
+function show(q, a = '', keys = '', cls = '') {
+  $('#q').innerHTML = q; $('#a').innerHTML = a;
+  $('#keys').innerHTML = keys.replace(/\[([^\]]+)\]/g, '<b>[$1]</b>');
+  box.className = 'txt in ' + cls; void box.offsetWidth;
+}
+function modal(q, sub, keys) {
+  $('#mq').innerHTML = q; $('#ms').innerHTML = sub || ''; $('#mk').innerHTML = keys;
+  $('#modal').classList.add('on');
+}
+const unmodal = () => $('#modal').classList.remove('on');
+async function yn(q, sub = '') {             // ARE YOU SURE: only SPACE says yes (mashing Enter never confirms)
+  modal(q, sub, '<b>SPACE</b> YES &nbsp;&nbsp;&nbsp; <b>ESC</b> NO'); sfx.ask();
+  for (;;) {
+    const e = await nextKey(flow ? CFG.IDLE_S * 1000 : 0);
+    if (e === TIMEOUT) { unmodal(); throw CANCEL; }
+    if (e.code === 'Space') { unmodal(); sfx.ok(); return true; }
+    if (e.key === 'Escape') { unmodal(); sfx.key(); return false; }
+    sfx.nope(); shake($('#modal > div'), 8, 250);
+  }
+}
+async function notice(q, sub = '') {
+  modal(q, sub, '<b>SPACE</b> OK'); sfx.nope();
+  for (;;) { const e = await nextKey(flow ? CFG.IDLE_S * 1000 : 0); if (e === TIMEOUT || go(e) || e.key === 'Escape') return unmodal(); }
+}
+async function stillThere() {
+  modal('STILL THERE?', 'PRESS ANY KEY TO KEEP GOING.', '<b>ANY KEY</b>'); sfx.ask();
+  const e = await nextKey(20000); unmodal();
+  return e !== TIMEOUT;
+}
+// typed answer. ESC = BACK (null). SPACE finishes it, unless the field takes spaces (team name): then ENTER does
+async function askText(q, { max = 24, allow = /^[\p{L}\p{N} .'!?&-]$/u, mask = false, sub = '', upper = true, init = '' } = {}) {
+  const spaces = allow.test(' ');
+  let v = init;
+  for (;;) {
+    show(q, `<div class="field"><span>${esc(mask ? '•'.repeat(v.length) : v)}</span><span class="cur"></span></div>${sub ? `<div class="sub">${sub}</div>` : ''}`,
+      spaces ? '[ENTER] DONE   [ESC] BACK' : '[SPACE] NEXT   [ESC] BACK');
+    const e = await k();
+    if (e.key === 'Escape') return BACK;
+    if (e.key === 'Enter' || (!spaces && e.code === 'Space')) { if (v.trim()) return v.trim(); sfx.nope(); shake(box, 8, 250); continue; }
+    if (e.key === 'Backspace') { v = v.slice(0, -1); sfx.key(); continue; }
+    if (e.key.length === 1 && allow.test(e.key) && v.length < max) { v += upper ? e.key.toUpperCase() : e.key; sfx.key(); }
+    else { sfx.nope(); }
+  }
+}
+// options: arrows move, SPACE picks (a number key picks directly). Returns the index, or -1 on ESC (= back)
+async function askChoice(q, opts, { sub = '' } = {}) {
+  let sel = Math.max(0, opts.findIndex(o => !o.off));
+  for (;;) {
+    show(q, (sub ? `<div class="sub" style="margin:0 0 1.5vh">${sub}</div>` : '') + opts.map((o, i) =>
+      `<div class="opt${o.off ? ' off' : ''}${i === sel ? ' sel' : ''}"><b>${i + 1}</b><span>${o.label}</span><small>${o.sub || ''}</small></div>`).join(''),
+      '[↑↓] MOVE   [SPACE] CHOOSE   [ESC] BACK');
+    const e = await k();
+    if (e.key === 'Escape') return -1;
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      const d = e.key === 'ArrowUp' ? -1 : 1;
+      for (let j = sel + d; j >= 0 && j < opts.length; j += d) if (!opts[j].off) { sel = j; sfx.move(); break; }
+      continue;
+    }
+    const i = go(e) ? sel : +e.key - 1;
+    if (i >= 0 && i < opts.length && !opts[i].off) { sfx.ok(); return i; }
+    sfx.nope();
+  }
+}
+
+// ===== Top right + the line at the bottom (every second) =====
+function renderStats() {
+  $('#stats').innerHTML = `TICKETS SOLD <span>${S.sold}/${S.cfg.TICKETS}</span><br>` +
+    `${fmtDay(ymd(now()))} <span>${now().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>` +
+    (!serverUp ? '<br><span class="warn" style="color:var(--g)">SIGNUP SERVER DOWN</span>' : '') +
+    (assist ? `<br><span class="assist">ASSIST · UP TO ${S.cfg.ASSIST_MAX} · FREE</span>` : '') +
+    (testing ? '<br><span class="assist" style="background:#fff">TEST · NOT RECORDED</span>' : '');
+}
+function renderLine() {
+  const at = now(), L = line(S, at), inside = S.sales.find(s => s.status === 'in');
+  const p = progress(run, hist, Date.now() + hubOff);
+  const calling = S.sales.filter(s => s.status === 'called');
+  let booth = !hubUp ? 'BOOTH LINK DOWN' : !p ? 'READY FOR THE NEXT GROUP' : p.done ? 'FINISHING UP' : `ROOM ${p.room}/5 · ~${Math.ceil(p.left / 60000)} MIN LEFT`;
+  if (inside && p && !p.done) booth = esc(inside.team) + ' · ' + booth;
+  const call = calling.map(s => { const r = S.cfg.GRACE_MIN * 60000 - (Date.now() - Date.parse(calledAt(s)));
+    return `${esc(s.team)} ${r > 0 ? `${r / 60000 | 0}:${pad((r % 60000) / 1000 | 0)}` : 'LAST CALL'}`; }).join(' · ');
+  const nx = nowSlot(S, at);
+  $('#line').innerHTML =
+    `<div>IN THE BOOTH<span>${booth}</span><div class="bar"><i style="width:${p && hubUp ? p.pct : 0}%"></i></div></div>` +
+    `<div>WAITING IN LINE<span>${L.people} ${L.people === 1 ? 'PERSON' : 'PEOPLE'} · ${L.here.length} ${L.here.length === 1 ? 'GROUP' : 'GROUPS'}</span></div>` +
+    (call ? `<div class="hot">NOW CALLING<span>${call}</span></div>` :
+            `<div>NEXT FREE SLOT TODAY<span>${nx ? fmtTime(nx) : 'NONE LEFT'}${L.later.length ? ` · ${L.later.length} BOOKED LATER` : ''}</span></div>`);
+}
+setInterval(() => { renderStats(); renderLine(); if (mode === 'idle') renderIdle(); }, 1000);
+setInterval(refresh, 5000);
+
+// ===== Idle =====
+let idleAur = '', idleBuilt = false, idleSel = 0;   // idleSel: 0 = SIGN UP, 1 = VIEW THE LINE
+const soldOut = () => left() < S.cfg.MIN_PARTY && !assist && !testing;
+function renderIdle(force) {
+  const out = soldOut(), off = !serverUp && !testing;   // test mode never needs the server
+  const html = `<div class="hero"><div class="n">NEXUS</div>` +
+    `<div class="a"><span class="gl" data-text="AURORA">AURORA</span><span class="gl v" data-text="V">V</span></div><div class="rule"></div></div><br>` +
+    `<div class="menu"><div class="go">${off ? 'SIGNUP SERVER IS OFF' : out ? 'SOLD OUT' : 'SIGN UP'}</div><div class="go">VIEW THE LINE</div></div>` +
+    `<div class="sub" style="margin-top:2vh;opacity:.85">[← →] CHOOSE   [SPACE] OPEN</div>` +
+    (off ? '<div class="sub warn">RUN signup/start.bat, THEN OPEN http://localhost:4000</div>' : '') +
+    (assist ? '<div class="sub" style="color:var(--g)">ASSIST MODE: NO PARTY LIMIT, FREE, NOT COUNTED IN THE TICKETS</div>' : '') +
+    (testing ? '<div class="sub" style="color:#fff">TEST MODE: THE NEXT SIGNUP IS NOT RECORDED</div>' : '') +
+    `<div class="aur"></div>`;
+  if (!idleBuilt || force || box.dataset.out !== `${out}${off}`) {
+    $('#q').innerHTML = ''; $('#keys').innerHTML = ''; $('#a').innerHTML = html;
+    box.className = 'txt idle'; box.dataset.out = `${out}${off}`; idleBuilt = true;
+    if (idleAur) $('.idle .aur') && ($('.aur').textContent = idleAur);
+  }
+  document.querySelectorAll('.menu .go').forEach((b, i) => b.classList.toggle('sel', i === idleSel));
+}
+(async function aurTease() {                 // Aurora says something on the idle screen now and then
+  for (;;) {
+    await wait(rand(12000, 22000));
+    const el = mode === 'idle' && $('.aur'); if (!el) continue;
+    idleAur = any(AUR); await type(el, idleAur, 45, VOICES.aurora);
+    await wait(6000); if (el.isConnected) { el.textContent = ''; } idleAur = '';
+  }
+})();
+async function idle() {
+  for (;;) {
+    mode = 'idle'; idleBuilt = false; renderIdle(); B.classList.add('home');
+    const e = await nextKey();
+    if (e.staff) { idleBuilt = false; B.classList.remove('home'); await staff(); continue; }
+    if (/^Arrow/.test(e.key)) { idleSel = 1 - idleSel; sfx.move(); renderIdle(); continue; }
+    if (!go(e)) continue;
+    if (idleSel === 1) { sfx.ok(); B.classList.remove('home'); await lineView(); continue; }
+    if (!serverUp && !testing) { await notice('SIGNUP SERVER IS OFF', 'RUN signup/start.bat (OR: node server.js IN THE signup FOLDER).<br>THIS PAGE MUST BE OPENED AT http://localhost:4000.<br>TO PRACTICE WITHOUT IT: HOLD CTRL+ALT, TYPE TEST.'); idleBuilt = false; continue; }
+    if (!soldOut()) { sfx.ok(); B.classList.remove('home'); return; }
+    sfx.nope();
+  }
+}
+async function lineView() {                  // VIEW THE LINE: everyone waiting today and every booking after, ↑↓ to scroll
+  mode = 'line';
+  const rows = 8;
+  let from = 0, last = Date.now();
+  try {
+    for (;;) {
+      const list = upcoming(now());
+      from = Math.max(0, Math.min(from, list.length - rows));
+      $('#q').innerHTML = ''; $('#a').innerHTML = `<div id="bd">${boardHTML(list, from, rows)}</div>`;
+      $('#keys').innerHTML = (list.length > rows ? '<b>[↑↓]</b> SCROLL   ' : '') + '<b>[ESC]</b> BACK';
+      box.className = 'txt boardbox';
+      const e = await nextKey(1000);           // redraws every second: the line moves while you look
+      if (e === TIMEOUT) { if (Date.now() - last > 60000) return; continue; }
+      last = Date.now();
+      if (e.key === 'Escape' || go(e)) return;
+      if (e.key === 'ArrowUp') from = Math.max(0, from - 1);
+      if (e.key === 'ArrowDown') from++;
+    }
+  } finally { idleBuilt = false; }
+}
+
+// ===== Camera =====
+// The USB camera first, then the laptop's own camera. Only when neither gives a picture does the screen ask for staff.
+// Laptop cameras are recognised by name; if the USB one gets picked wrong, put part of its name in CFG.CAMERA
+// (the staff screen shows the name of the camera in use, and [K] there switches to the next one).
+const BUILTIN = /integrated|built-?in|internal|front|facetime|user.?facing|truevision/i;
+function camOrder(devs) {                    // the preferred camera first, laptop cameras last
+  const pick = d => CFG.CAMERA && d.label.toLowerCase().includes(CFG.CAMERA.toLowerCase());
+  return [...devs.filter(pick), ...devs.filter(d => !pick(d) && !BUILTIN.test(d.label)), ...devs.filter(d => !pick(d) && BUILTIN.test(d.label))];
+}
+let cam = false, camName = 'NONE', camSkip = '';
+async function openCam(deviceId) {           // a stream that actually shows a picture within 4 s, or null
+  let s;
+  try { s = await navigator.mediaDevices.getUserMedia({ video: { deviceId: deviceId ? { exact: deviceId } : undefined, width: 1280, height: 720 }, audio: false }); }
+  catch (e) { console.warn('camera', deviceId || 'default', e.name); return null; }
+  vid.srcObject = s; vid.play().catch(() => {});
+  const live = await Promise.race([new Promise(r => { vid.onloadedmetadata = () => r(vid.videoWidth > 0); }), wait(4000).then(() => false)]);
+  if (live) return s;
+  s.getTracks().forEach(t => t.stop()); vid.srcObject = null;
+  return null;
+}
+async function startCam(next = false) {     // next = skip the camera in use (staff [K])
+  if (next) camSkip = camName;
+  vid.srcObject?.getTracks().forEach(t => t.stop()); cam = false; camName = 'NONE';
+  const probe = await openCam();             // the first permission request also unlocks the camera names
+  probe?.getTracks().forEach(t => t.stop());
+  let devs = [];
+  try { devs = camOrder((await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput')); } catch {}
+  if (next) devs = [...devs.filter(d => d.label !== camSkip), ...devs.filter(d => d.label === camSkip)];
+  for (const d of devs) {
+    const s = await openCam(d.deviceId);
+    if (!s) continue;
+    cam = true; camName = d.label || 'CAMERA';
+    s.getVideoTracks()[0].onended = () => { if (vid.srcObject === s) startCam(); };   // unplugged mid-event: fall back on its own
+    return;
+  }
+  if (!devs.length && await openCam()) { cam = true; camName = 'CAMERA'; }           // names hidden: take whatever works
+}
+function snap() {                            // 480x360, mirrored like the preview, cropped like object-fit: cover
+  const c = document.createElement('canvas'); c.width = 480; c.height = 360;
+  const x = c.getContext('2d'), vw = vid.videoWidth, vh = vid.videoHeight, s = Math.max(480 / vw, 360 / vh);
+  x.translate(480, 0); x.scale(-1, 1);
+  x.drawImage(vid, (480 - vw * s) / 2, (360 - vh * s) / 2, vw * s, vh * s);
+  return c.toDataURL('image/jpeg', .85);
+}
+async function shoot(i, n, shots) {
+  // one small box per player on top: photos already taken, the current one lit
+  const strip = () => `<div class="strip">${Array.from({ length: n }, (_, j) =>
+    `<i class="${j === i ? 'now' : ''}" style="${shots[j] && j !== i ? `background-image:url(${shots[j]})` : ''}"></i>`).join('')}</div>`;
+  for (;;) {
+    if (!cam || !vid.videoWidth) {
+      show('CHECKING THE CAMERA…', '', '', 'center');
+      await startCam();                      // tries the USB camera, then the laptop camera
+      if (cam) continue;
+      show('NO CAMERA IS WORKING', '<div class="sub">CALL A STAFF MEMBER. CHECK THE USB CAMERA CABLE.</div>', '[SPACE] TRY AGAIN   [ESC] BACK', 'center');
+      const e = await k(); if (e.key === 'Escape') return BACK; if (!go(e)) sfx.nope(); continue;
+    }
+    show(`PLAYER ${i + 1} OF ${n}`, strip() + `<div class="cam"><div class="frame"></div><div class="count"></div></div>` +
+      `<div class="sub">ONE PERSON. FACE IN THE OVAL. LOOK AT THE CAMERA.</div>`, '[SPACE] TAKE PHOTO   [ESC] BACK', 'center');
+    vid.hidden = false; $('.cam').prepend(vid); vid.play();
+    const e = await k();
+    if (e.key === 'Escape') { vid.hidden = true; document.body.append(vid); return BACK; }
+    if (!go(e)) { sfx.nope(); continue; }
+    for (const c of ['3', '2', '1']) { $('.count').textContent = c; sfx.tick(); await wait(750); }
+    $('.count').textContent = '';
+    const img = snap();
+    $('#flash').animate([{ opacity: .9 }, { opacity: 0 }], 300); sfx.shut();
+    vid.hidden = true; document.body.append(vid);
+    for (;;) {
+      show(`PLAYER ${i + 1} OF ${n}: KEEP THIS PHOTO?`, strip() + `<img class="shot" src="${img}">`, '[SPACE] KEEP   [ESC] RETAKE', 'center');
+      const e2 = await k();
+      if (go(e2)) { sfx.ok(); return img; }
+      if (e2.key === 'Escape') break;
+      sfx.nope();
+    }
+  }
+}
+async function photos(t) {                   // fills t.shots; photos already taken are kept when coming back. true, or BACK
+  const n = t.size, shots = t.shots = (t.shots || []).slice(0, n);
+  for (let i = 0; i < n; i++) if (!shots[i]) { const img = await shoot(i, n, shots); if (img === BACK) return BACK; shots[i] = img; }
+  let sel = 0;
+  for (;;) {
+    show(`CHECK THE PHOTOS: ${n} PLAYER${n > 1 ? 'S' : ''}`,
+      `<div class="grid">${shots.map((s, i) => `<figure class="${i === sel ? 'sel' : ''}"><img src="${s}"><figcaption>PLAYER ${i + 1}</figcaption></figure>`).join('')}</div>`,
+      '[SPACE] ALL GOOD   [← →] PICK ONE   [R] RETAKE IT   [ESC] BACK', 'center');
+    const e = await k();
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { sel = (sel + (e.key === 'ArrowLeft' ? n - 1 : 1)) % n; sfx.move(); }
+    else if (e.code === 'KeyR') { const img = await shoot(sel, n, shots); if (img !== BACK) shots[sel] = img; }
+    else if (e.key === 'Escape') return BACK;
+    else if (go(e)) { if (await yn(`IS EVERY PLAYER IN THESE ${n} PHOTOS?`, 'ONE FACE PER PHOTO. YOUR FACES WILL SHOW UP INSIDE THE GAME.')) return true; }
+    else sfx.nope();
+  }
+}
+
+// ===== The signup. Players have already paid at the desk, so it starts straight at the number of players,
+// one question at a time. Nothing about money is shown to players.
+// Every step returns its answer, or BACK (ESC): signup() then goes one step back.
+const cost = (t, n = t.size) => t.assist ? 0 : n * S.cfg.PRICE;
+const minSize = t => t.assist || t.test ? 1 : S.cfg.MIN_PARTY;   // assist and test mode: any size, even 1
+const maxSize = t => t.assist ? S.cfg.ASSIST_MAX : t.test ? S.cfg.MAX_PARTY : Math.min(S.cfg.MAX_PARTY, left());
+async function askSize(t) {                  // how many players are in this group
+  const lo = minSize(t), hi = maxSize(t);
+  for (;;) {
+    const v = await askText(t.assist ? 'ASSIST GROUP: HOW MANY PLAYERS?' : 'HOW MANY PLAYERS?', { max: 2, allow: /^\d$/,
+      sub: `${lo} TO ${hi} PLAYERS` + (t.assist ? ' · ASSIST' : '') + (t.test ? ' · TEST MODE' : '') + (!t.test && !t.assist && left() < S.cfg.MAX_PARTY ? ` · ONLY ${left()} TICKETS LEFT` : '') });
+    if (v === BACK) return BACK;
+    const n = +v;
+    if (n < lo) { await notice(`AT LEAST ${lo} PLAYERS`, `A GROUP NEEDS ${lo} TO ${hi} PLAYERS.`); continue; }
+    if (n > hi) { await notice(!t.assist && !t.test && n <= S.cfg.MAX_PARTY ? `ONLY ${left()} TICKETS LEFT` : `AT MOST ${hi} PLAYERS`, 'BIGGER GROUP? SPLIT INTO TWO SIGNUPS.'); continue; }
+    if (await yn(`${n} PLAYERS. CORRECT?`, `EVERY PLAYER NEEDS A PHOTO NEXT.${t.test ? '<br>TEST MODE: NOTHING IS RECORDED.' : ''}`)) return n;
+  }
+}
+async function askTeam(init) {
+  for (;;) {
+    const v = await askText('WHAT IS YOUR TEAM NAME?', { init: init || '', sub: 'STAFF WILL CALL THIS NAME WHEN IT IS YOUR TURN. KEEP IT CLEAN.' });
+    if (v === BACK) return BACK;
+    if (await yn(`TEAM "${esc(v)}". CORRECT?`, 'LISTEN FOR THIS NAME.')) return v;
+  }
+}
+// test mode: every slot counts as free (a test never takes one), and today counts as a booth day so PLAY NOW works before Oct 5
+function slotView() {
+  if (!testing) return S;
+  const today = ymd(now());                  // open all day, so a practice run works at any hour
+  const DAYS = S.cfg.DAYS.some(d => d.date === today) ? S.cfg.DAYS : [{ date: today, open: '00:00', close: '23:59' }, ...S.cfg.DAYS];
+  return { ...S, cfg: { ...S.cfg, DAYS }, sales: [] };
+}
+async function pickLater() {                // day, then time. null = back
+  for (;;) {
+    const at = now(), V = slotView(), days = V.cfg.DAYS.map(d => ({ date: d.date, free: freeSlots(V, d.date, at).length }));
+    const d = await askChoice('WHICH DAY?', days.map(x => ({ label: fmtDay(x.date), sub: x.free ? `${x.free} SLOT${x.free > 1 ? 'S' : ''} FREE` : 'FULL', off: !x.free })));
+    if (d < 0) return null;
+    const date = days[d].date, all = daySlots(V.cfg, date), free = new Set(freeSlots(V, date, now()).map(slotKey));
+    let sel = all.findIndex(sl => free.has(slotKey(sl)));
+    for (;;) {
+      show(`${fmtDay(date)}: PICK A TIME`, `<div class="slots">${all.map((sl, i) =>
+        `<i class="${free.has(slotKey(sl)) ? '' : 'x'}${i === sel ? ' sel' : ''}">${fmtTime(sl)}</i>`).join('')}</div>`,
+        '[ARROWS] MOVE   [SPACE] PICK   [ESC] BACK');
+      const e = await k();
+      if (e.key === 'Escape') break;
+      if (go(e)) return all[sel];
+      const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -6, ArrowDown: 6 }[e.key];
+      if (!step) { sfx.nope(); continue; }
+      for (let j = sel + step; j >= 0 && j < all.length; j += Math.sign(step)) if (free.has(slotKey(all[j])) && (Math.abs(step) === 1 || (j - sel) % 6 === 0)) { sel = j; break; }
+      sfx.move();
+    }
+  }
+}
+async function when(team) {
+  for (;;) {
+    const at = now(), V = slotView(), ns = nowSlot(V, at), anyLater = V.cfg.DAYS.some(d => freeSlots(V, d.date, at).length);
+    const c = await askChoice('WHEN DO YOU WANT TO PLAY?', [
+      { label: 'PLAY NOW', sub: ns ? `GET IN LINE TODAY · ${ahead(S, ns)} GROUP${ahead(S, ns) === 1 ? '' : 'S'} AHEAD` : 'NO SLOTS LEFT TODAY', off: !ns },
+      { label: 'PLAY LATER', sub: anyLater ? 'BOOK A DAY AND TIME' : 'ALL DAYS FULL', off: !anyLater },
+    ]);
+    if (c < 0) return BACK;
+    if (c === 0) {
+      if (await yn(`PLAY NOW: TODAY, ${fmtTime(ns)} SLOT?`, `${ahead(S, ns)} GROUP${ahead(S, ns) === 1 ? '' : 'S'} AHEAD OF YOU. STAY NEAR THE BOOTH.<br>WHEN WE CALL "${esc(team)}" YOU HAVE ${S.cfg.GRACE_MIN} MINUTES TO SHOW UP, OR THE NEXT GROUP GOES.`)) return { slot: ns, walkin: true };
+      continue;
+    }
+    const sl = await pickLater();
+    if (sl && await yn(`${fmtDay(sl.date)} AT ${fmtTime(sl)}. CONFIRM?`, `BE AT THE BOOTH BEFORE ${fmtTime(sl)}.<br>IF YOU'RE NOT HERE ${S.cfg.GRACE_MIN} MINUTES AFTER WE CALL YOU, THE NEXT GROUP GOES.`)) return { slot: sl, walkin: false };
+  }
+}
+function summary(t) {
+  return `<div class="kv"><span>TEAM</span><span>${esc(t.team)}</span><span>PLAYERS</span><span>${t.size}${t.assist ? ' (ASSIST)' : ''}</span>` +
+    `<span>WHEN</span><span>${fmtDay(t.slot.date)} · ${fmtTime(t.slot)}${t.walkin ? ' (PLAY NOW)' : ''}</span></div>`;
+}
+async function review(t) {                   // everything on one screen. ESC goes back step by step to change something
+  for (;;) {
+    show('IS EVERYTHING CORRECT?', summary(t), '[SPACE] YES   [ESC] BACK');
+    const e = await k();
+    if (e.key === 'Escape') return BACK;
+    if (go(e)) { if (await yn('ALL CORRECT?', 'YOU CAN\'T CHANGE IT AFTER THIS.')) return true; continue; }
+    sfx.nope();
+  }
+}
+async function save(t) {                     // the sale is written only here, with the photos and the slot
+  // test mode never sends the sale: no photos, no log line, no slot. Nothing can be recorded
+  if (t.test) return { code: 'TEST', team: t.team, size: t.size, slot: t.slot, walkin: t.walkin, assist: t.assist, amount: cost(t), test: true };
+  for (;;) {
+    show('SAVING…', '', '');
+    const [saved, b] = await post('/api/sale', { team: t.team, size: t.size, photos: t.shots, slot: t.slot, walkin: t.walkin, assist: t.assist });
+    if (saved) return b;
+    await notice(b.error || 'COULD NOT SAVE', 'NOTHING WAS SAVED YET. CALL A STAFF MEMBER IF THIS KEEPS HAPPENING.');
+    if (/SLOT/.test(b.error)) { const w = await when(t.team); if (w) Object.assign(t, w); }
+  }
+}
+async function receipt(s) {
+  mode = 'receipt';
+  show(s.test ? 'TEST RUN DONE · NOTHING WAS RECORDED' : 'YOU\'RE IN. TAKE A PHOTO OF THIS SCREEN.',
+    `<div class="big">${s.code}</div><div class="sub" style="text-align:center;margin:0 0 1vh">${s.test ? 'NO TICKET, NO SLOT TAKEN, NO SALE' : 'TICKET CODE'}</div>` + summary({ ...s, shots: [] }) +
+    `<div class="sub warn" style="margin-top:1.2vh">${s.walkin ? 'STAY NEAR THE BOOTH AND LISTEN FOR YOUR TEAM NAME.' : `BE AT THE BOOTH BEFORE ${fmtTime(s.slot)} ON ${fmtDay(s.slot.date)}.`}` +
+    ` ${S.cfg.GRACE_MIN} MINUTES AFTER WE CALL YOU, THE NEXT GROUP GOES.</div><div class="aur m" style="margin-top:1.2vh;color:var(--g);text-shadow:0 0 12px var(--g);font-size:1.4vw"></div>`,
+    '[SPACE] DONE');
+  sfx.stamp(); shake(box, 8, 300);
+  await wait(900);
+  type($('.aur.m'), `AURORA > I'll be waiting, ${s.team}.`, 45, VOICES.aurora);
+  for (;;) { const e = await nextKey(90000); if (e === TIMEOUT || go(e)) return; }
+}
+async function signup() {
+  const t = { assist, test: testing };
+  let step = 0;
+  const steps = [
+    async () => (t.size = await askSize(t)),
+    async () => { const v = await askTeam(t.team); if (v) t.team = v; return v; },
+    async () => photos(t),
+    async () => { const w = await when(t.team); if (w) Object.assign(t, w); return w; },
+    async () => review(t),
+  ];
+  while (step < steps.length) {
+    if (await steps[step]() !== BACK) { step++; continue; }
+    // ESC: one step back. On the first question that means cancelling
+    if (step === 0) { if (await yn('CANCEL THIS SIGNUP?', 'BACK TO THE MAIN SCREEN.')) throw CANCEL; continue; }
+    step--;
+  }
+  const sale = await save(t);
+  flow = false; assist = testing = false; renderStats();
+  await receipt(sale);
+}
+
+// ===== Staff line screen: hold Ctrl+Alt and type ICPEP on the main screen =====
+async function staff() {
+  mode = 'staff'; B.classList.add('staff');
+  try {
+    const today = ymd(now());
+    let day = Math.max(0, S.cfg.DAYS.findIndex(d => d.date === today)), sel = 0, last = Date.now();
+    for (;;) {
+      const date = S.cfg.DAYS[day]?.date || today;
+      const rows = S.sales.filter(s => s.slot.date === date).sort((a, b) => bySlot(a, b) || (a.at < b.at ? -1 : 1));
+      sel = Math.min(sel, Math.max(0, rows.length - 1));
+      const live = S.sales.filter(s => s.status !== 'void'), taken = live.reduce((n, s) => n + s.amount, 0);
+      show(`LINE · ${fmtDay(date)}`,
+        `<div class="sub" style="margin:0 0 1.5vh">SOLD ${S.sold}/${S.cfg.TICKETS} · COLLECTED ${peso(taken)} · VOIDED ${S.sales.length - live.length} · ASSIST ${live.filter(s => s.assist).reduce((n, s) => n + s.size, 0)} PPL (FREE) · EXPORT: localhost:${location.port}/sales.csv<br>CAMERA: <span style="color:${cam ? '#fff' : 'var(--g)'}">${esc(camName)}${cam && BUILTIN.test(camName) ? ' (LAPTOP CAMERA, USB NOT WORKING?)' : ''}</span></div>` +
+        `<table class="tbl"><tr><th>TIME</th><th>CODE</th><th>TEAM</th><th>PPL</th><th>PAID</th><th>STATUS</th></tr>` +
+        (rows.length ? rows.map((s, i) => {
+          const c = s.status === 'called' && S.cfg.GRACE_MIN * 60000 - (Date.now() - Date.parse(calledAt(s)));
+          const st = s.status === 'called' ? (c > 0 ? `CALLED ${c / 60000 | 0}:${pad((c % 60000) / 1000 | 0)}` : '<span class="late">CALLED · NO-SHOW?</span>') : s.status.toUpperCase();
+          return `<tr class="${i === sel ? 'sel' : ''} ${['done', 'noshow', 'void'].includes(s.status) ? 'gone' : ''}"><td>${fmtTime(s.slot)}${s.walkin ? ' (NOW)' : ''}</td><td>${s.code}</td>` +
+            `<td>${esc(s.team)}${s.assist ? ' (ASSIST)' : ''}</td><td>${s.size}</td><td>${s.assist ? 'FREE' : peso(s.amount)}</td><td class="st">${st}</td></tr>`;
+        }).join('') : '<tr class="empty"><td colspan="6">NO GROUPS THIS DAY</td></tr>') + '</table>',
+        '[↑↓] GROUP  [← →] DAY  [C] CALL  [I] IN BOOTH  [D] DONE  [N] NO-SHOW  [B] BACK IN LINE  [V] VOID  [K] NEXT CAMERA  [ESC] LOCK');
+      box.className = 'txt';
+      const e = await nextKey(1000);
+      if (e === TIMEOUT) { if (Date.now() - last > CFG.STAFF_IDLE_S * 1000) return; continue; }
+      last = Date.now();
+      if (e.key === 'Escape') return;
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { sel += e.key === 'ArrowUp' ? -1 : 1; sel = Math.max(0, Math.min(rows.length - 1, sel)); sfx.move(); continue; }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { day = Math.max(0, Math.min(S.cfg.DAYS.length - 1, day + (e.key === 'ArrowLeft' ? -1 : 1))); sel = 0; sfx.move(); continue; }
+      if (e.code === 'KeyK') { const was = camName; await startCam(true); cam && camName !== was ? sfx.ok() : await notice(cam ? 'NO OTHER CAMERA WORKS' : 'NO CAMERA IS WORKING', `IN USE: ${esc(camName)}`); continue; }
+      const s = rows[sel]; if (!s) { sfx.nope(); continue; }
+      const set = async (status, extra = {}) => { const [ok, b] = await post('/api/status', { code: s.code, status, ...extra }); ok ? sfx.ok() : await notice(b.error); };
+      const name = `"${esc(s.team)}" (${s.code}, ${s.size} PPL)`;
+      if (s.status === 'void') { sfx.nope(); continue; }
+      if (e.code === 'KeyC') await set('called');
+      else if (e.code === 'KeyI') { const inside = S.sales.find(x => x.status === 'in' && x.code !== s.code);
+        if (await yn(`SEND ${name} INTO THE BOOTH?`, inside ? `"${esc(inside.team)}" WILL BE MARKED DONE.` : '')) await set('in'); }
+      else if (e.code === 'KeyD') await set('done');
+      else if (e.code === 'KeyN') { if (await yn(`MARK ${name} AS NO-SHOW?`, 'THEIR SLOT IS GIVEN UP. [B] PUTS THEM BACK IN LINE LATER.')) await set('noshow'); }
+      else if (e.code === 'KeyB') { const ns = nowSlot(S, now());
+        if (!ns) await notice('NO FREE SLOT LEFT TODAY');
+        else if (await yn(`PUT ${name} BACK IN LINE?`, `NEW SLOT: TODAY ${fmtTime(ns)}.`)) await set('booked', { slot: ns }); }
+      else if (e.code === 'KeyV') {
+        const reason = await askText(`VOID ${name}: WHY?`, { max: 60 });
+        if (reason && await yn(`VOID ${name}?`, `${peso(s.amount)} · "${esc(reason)}"<br>THE SALE STAYS IN THE LOG AS VOID. THIS CANNOT BE UNDONE.`)) await set('void', { reason });
+      }
+      else sfx.nope();
+    }
+  } finally { B.classList.remove('staff'); }
+}
+
+async function main() {
+  await refresh(); hub(); startCam();
+  for (;;) {
+    await idle();
+    flow = true; mode = 'signup';
+    try { await signup(); }
+    catch (e) { unmodal(); if (e !== CANCEL) { console.error(e); flow = false; await notice('SOMETHING BROKE. CALL A STAFF MEMBER.', esc(e.message)); } }
+    flow = false; assist = testing = false; vid.hidden = true; document.body.append(vid); renderStats();
+  }
+}
+
+// ===== The queue board: open /queue on a TV or a second screen (read-only, no keys) =====
+function board() {
+  mode = 'board'; B.classList.add('board', 'home');
+  $('#q').innerHTML = $('#keys').innerHTML = '';
+  $('#a').innerHTML = `<div class="hero"><div class="n">NEXUS</div><div class="a"><span class="gl" data-text="AURORA">AURORA</span><span class="gl v" data-text="V">V</span></div><div class="rule"></div></div><div id="bd"></div>`;
+  box.className = 'txt boardbox';
+  const draw = () => $('#bd').innerHTML = boardHTML(upcoming(now()), 0, CFG.BOARD_ROWS);
+  refresh(); hub(); draw(); setInterval(draw, 1000);
+}
+// the whole line: groups still to play today, then every booking on the days after
+const upcoming = at => S.sales.filter(s => toPlay(s) && s.slot.date >= ymd(at)).sort(bySlot);
+function boardHTML(list, from, count) {      // shared by the /queue board and VIEW THE LINE on the kiosk
+  const at = now(), today = ymd(at), L = line(S, at), inside = S.sales.find(s => s.status === 'in');
+  const p = hubUp ? progress(run, hist, Date.now() + hubOff) : null;
+  const calling = S.sales.filter(s => s.status === 'called');
+  const rows = list.slice(from, from + count);
+  const left1 = s => { const r = S.cfg.GRACE_MIN * 60000 - (Date.now() - Date.parse(calledAt(s))); return r > 0 ? `${r / 60000 | 0}:${pad((r % 60000) / 1000 | 0)}` : 'LAST CALL'; };
+  const status = s => s.status === 'called' ? 'CALLED' : L.here.includes(s) ? 'IN LINE' : 'BOOKED';
+  return `<div class="bd-top"><div class="panel"><h3>NOW IN THE BOOTH</h3>` +
+      `<div class="big2">${inside ? esc(inside.team) : '—'}</div>` +
+      `<div class="meta">${!p ? (inside ? 'PLAYING' : 'READY FOR THE NEXT GROUP') : p.done ? 'FINISHING UP' : `ROOM ${p.room} OF 5 · ABOUT ${Math.ceil(p.left / 60000)} MIN LEFT`}</div>` +
+      `<div class="bar"><i style="width:${p ? p.pct : 0}%"></i></div></div>` +
+    `<div class="panel ${calling.length ? 'hot' : ''}"><h3>NOW CALLING</h3>` +
+      `<div class="big2">${calling.length ? calling.map(s => esc(s.team)).join(', ') : '—'}</div>` +
+      `<div class="meta">${calling.length ? `COME TO THE BOOTH · ${left1(calling[0])}` : 'LISTEN FOR YOUR TEAM NAME'}</div></div></div>` +
+    `<div class="panel"><h3>THE LINE · ${list.length} ${list.length === 1 ? 'GROUP' : 'GROUPS'}${list.length > count ? ` · SHOWING ${from + 1}-${from + rows.length}` : ''}</h3><table class="queue">` +
+      (rows.length ? rows.map((s, i) => `<tr class="${L.here.includes(s) ? 'here' : ''}"><td class="n">${from + i + 1}</td>` +
+        `<td>${s.slot.date === today ? 'TODAY' : fmtDay(s.slot.date)}</td><td>${fmtTime(s.slot)}</td>` +
+        `<td>${esc(s.team)}</td><td>${s.size} PLAYER${s.size > 1 ? 'S' : ''}</td><td class="st">${status(s)}</td></tr>`).join('')
+        : '<tr class="none"><td>NOBODY IN LINE YET</td></tr>') + '</table></div>' +
+    `<div class="bd-foot"><div>WAITING <span>${L.people} ${L.people === 1 ? 'PERSON' : 'PEOPLE'} · ${L.here.length} ${L.here.length === 1 ? 'GROUP' : 'GROUPS'}</span></div>` +
+      `<div>TICKETS SOLD <span>${S.sold}/${S.cfg.TICKETS}</span></div></div>`;
+}
+
+// self-check: open /?test and look at the console
+if (location.search === '?test') {
+  const cfg = { DAYS: [{ date: '2026-10-05', open: '09:00', close: '10:40' }], SLOT_MIN: 25 };
+  const at = new Date('2026-10-05T09:03');
+  const sale = (time, status = 'booked', o = {}) => ({ slot: { date: '2026-10-05', time }, status, size: 3, ...o });
+  console.assert(daySlots(cfg, '2026-10-05').map(s => s.time).join() === '09:00,09:25,09:50,10:15', 'slots fit inside the hours');
+  let st = { cfg, sales: [sale('09:25'), sale('09:50', 'void')] };
+  console.assert(freeSlots(st, '2026-10-05', at).map(s => s.time).join() === '09:50,10:15', 'taken and started slots are not free; void frees one');
+  console.assert(nowSlot(st, at).time === '09:00', 'PLAY NOW can take a slot that started 3 min ago');
+  console.assert(nowSlot(st, new Date('2026-10-05T09:10')).time === '09:50', '...but not 10 min ago, and skips the taken one');
+  console.assert(!nowSlot(st, new Date('2026-10-06T09:00')), 'no PLAY NOW on a day the booth is closed');
+  st = { cfg, sales: [sale('09:00', 'called'), sale('09:25', 'booked', { walkin: true }), sale('10:15'), sale('09:50', 'noshow')] };
+  const L = line(st, at);
+  console.assert(L.here.length === 2 && L.people === 6 && L.later.length === 1, 'called + walk-ins wait; later bookings do not; no-shows drop out');
+  console.assert(ahead(st, { date: '2026-10-05', time: '10:15' }) === 2, 'groups ahead counts only groups still to play');
+  const t0 = 1e6, m = 60000;
+  console.assert(progress(null, [], 0) === null && progress({ t0: null }, [], 0) === null, 'no team = no progress');
+  const p1 = progress({ t0, splits: {} }, [], t0 + 2 * m);
+  console.assert(p1.room === 1 && p1.pct === Math.round(2 / 23 * 100) && p1.left === 21 * m, 'room 1 by default times');
+  const p2 = progress({ t0, splits: {} }, [], t0 + 10 * m);
+  console.assert(p2.room === 1 && p2.pct <= Math.round(4 / 23 * 100) && p2.left === 20 * m, 'a slow room 1 never claims room 2 and keeps 1 min left');
+  const p3 = progress({ t0, splits: { p1done: 1, p2done: 2, p3done: 3, p4done: 4 } }, [], t0 + 19 * m);
+  console.assert(p3.room === 5 && p3.left === 4 * m, 'finale');
+  const h = [{ end: 30 * m, splits: { p1done: 5 * m, p2done: 10 * m, p3done: 15 * m, p4done: 25 * m } }];
+  console.assert(progress({ t0, splits: {} }, h, t0).left === 30 * m, 'past runs replace the default times');
+  console.assert(progress({ t0, end: 5, splits: {} }, [], t0).done, 'finished run');
+  console.assert(fmtTime({ time: '12:05' }) === '12:05 PM' && fmtTime({ time: '09:00' }) === '9:00 AM', 'time format');
+  const cams = l => camOrder(l.map(label => ({ label }))).map(d => d.label).join();
+  console.assert(cams(['Integrated Camera', 'USB2.0 Camera']) === 'USB2.0 Camera,Integrated Camera', 'USB camera before the laptop camera');
+  console.assert(cams(['HP TrueVision HD Camera', 'Logitech C270']) === 'Logitech C270,HP TrueVision HD Camera', 'HP laptop camera goes last');
+  console.assert(cams(['Integrated Webcam']) === 'Integrated Webcam', 'laptop camera alone still used');
+  CFG.CAMERA = 'hd uvc';
+  console.assert(cams(['USB2.0 HD UVC WebCam', 'Logitech C270']) === 'USB2.0 HD UVC WebCam,Logitech C270', 'CFG.CAMERA forces one first');
+  CFG.CAMERA = '';
+  console.log('self-check done (no assertion errors above = pass)');
+} else if (location.pathname.endsWith('/queue') || new URLSearchParams(location.search).has('queue')) board();
+else main();
+</script>
+</body>
+</html>

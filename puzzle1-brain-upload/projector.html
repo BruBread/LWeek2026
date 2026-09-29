@@ -1,0 +1,1142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AURORA</title>
+<style>
+:root { --g: #4dff88; --aur: #dfe8ee; --red: #ff2a4a; --hud: #ff3344; --blue: #3d8bff; }
+* { box-sizing: border-box; margin: 0; }
+html, body { height: 100%; background: #000; overflow: hidden; cursor: default; user-select: none;
+  font-family: Consolas, "Cascadia Mono", "Lucida Console", monospace; }
+
+#app { position: fixed; inset: 0; }
+#app.rgb { filter: url(#rgb); }
+#fx { position: absolute; inset: 0; width: 100%; height: 100%; }
+#vignette { position: fixed; inset: 0; pointer-events: none; z-index: 30;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.85) 100%); }
+#flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 60; }
+
+/* hotspot over the physical mask: invisible, and the cursor stays an arrow so it gives nothing away */
+#hotspot { position: fixed; z-index: 40; }
+/* hover glow over the mask: a noisy CRT circle, not a flat one. --noise is generated in JS */
+#glow { position: absolute; left: 50%; top: 50%; width: var(--d); height: var(--d); translate: -50% -50%; border-radius: 50%;
+  pointer-events: none; opacity: 0; transition: opacity .6s;
+  background: repeating-linear-gradient(rgba(0,0,0,.45) 0 1px, transparent 1px 3px), var(--noise),
+              radial-gradient(circle, rgba(77,255,136,.5), rgba(77,255,136,.18) 45%, transparent 70%);
+  -webkit-mask: radial-gradient(circle, #000 45%, transparent 70%); mask: radial-gradient(circle, #000 45%, transparent 70%);
+  animation: glowFlick .11s steps(2) infinite, static .25s steps(5) infinite, breathe 2.2s ease-in-out infinite; }
+#hotspot.on #glow { opacity: 1; }
+@keyframes glowFlick { from { filter: brightness(.8) } to { filter: brightness(1.15) } }
+@keyframes static { to { background-position: 0 0, 128px 77px, 0 0; } }
+@keyframes breathe { 50% { scale: 1.06; } }
+body.calib #hotspot { outline: 2px dashed var(--g); background: rgba(77,255,136,.1); cursor: move; }
+body.calib #hotspot::after { content: ""; position: absolute; right: 0; bottom: 0; width: 24px; height: 24px;
+  background: var(--g); cursor: nwse-resize; }
+#help { position: fixed; top: calc(8vmin + 12px); left: 12px; z-index: 70; display: none; padding: 10px 14px; cursor: move;
+  background: rgba(0,0,0,.85); border: 1px solid var(--g); color: var(--g); font-size: 14px; line-height: 1.6; white-space: pre; }
+body.calib #help { display: block; }
+/* calibration: bright corner brackets so the projector's edges are easy to line up */
+body.calib::after { content: ""; position: fixed; inset: 0; z-index: 65; pointer-events: none; --l: 8vmin; --t: 6px;
+  background: linear-gradient(var(--g), var(--g)) top left / var(--l) var(--t), linear-gradient(var(--g), var(--g)) top left / var(--t) var(--l),
+              linear-gradient(var(--g), var(--g)) top right / var(--l) var(--t), linear-gradient(var(--g), var(--g)) top right / var(--t) var(--l),
+              linear-gradient(var(--g), var(--g)) bottom left / var(--l) var(--t), linear-gradient(var(--g), var(--g)) bottom left / var(--t) var(--l),
+              linear-gradient(var(--g), var(--g)) bottom right / var(--l) var(--t), linear-gradient(var(--g), var(--g)) bottom right / var(--t) var(--l);
+  background-repeat: no-repeat; }
+
+/* beat 3: upload */
+#upload { position: fixed; left: 5vw; bottom: 6vh; color: var(--g); z-index: 5; }
+#upload .lbl { font-size: 1.2vw; letter-spacing: .35em; opacity: .75; }
+#pct { font-size: 13vw; line-height: 1; text-shadow: 0 0 24px rgba(77,255,136,.6); font-variant-numeric: tabular-nums; }
+#pct small { font-size: .35em; opacity: .6; }
+#log { font: inherit; font-size: 1vw; opacity: .5; height: 7.5em; overflow: hidden; margin-top: 1vh; }
+
+#alert { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%); z-index: 10; white-space: nowrap;
+  color: var(--red); font-size: 4.2vw; font-weight: 700; letter-spacing: .04em; text-shadow: 0 0 30px rgba(255,42,74,.8); }
+.glitch::before, .glitch::after { content: attr(data-text); position: absolute; inset: 0; }
+.glitch::before { color: #0ff; animation: gA .22s steps(2) infinite; }
+.glitch::after  { color: #f0f; animation: gB .3s steps(2) infinite; }
+@keyframes gA { 0% { clip-path: inset(10% 0 70% 0); transform: translate(-7px,-2px) }
+                50% { clip-path: inset(45% 0 30% 0); transform: translate(6px,1px) }
+                100% { clip-path: inset(80% 0 4% 0); transform: translate(-3px,2px) } }
+@keyframes gB { 0% { clip-path: inset(60% 0 20% 0); transform: translate(7px,2px) }
+                50% { clip-path: inset(5% 0 80% 0); transform: translate(-5px,-1px) }
+                100% { clip-path: inset(30% 0 50% 0); transform: translate(4px,0) } }
+
+/* beat 4-6: the CRT */
+#beam { position: fixed; left: 0; top: 50%; width: 100vw; height: 3px; margin-top: -1.5px; z-index: 25; opacity: 0;
+  --bc: var(--g); background: #fff; transform: scaleX(0); pointer-events: none;
+  box-shadow: 0 0 10px 3px var(--bc), 0 0 50px 14px var(--bc); }
+#crt { position: fixed; inset: 0; z-index: 20; display: none; flex-direction: column; align-items: center; justify-content: center;
+  gap: 5vh; overflow: hidden; border-radius: 3vw / 4vw; color: var(--g);
+  background: radial-gradient(ellipse at center, #07261a 0%, #020c06 65%, #000 100%);
+  animation: flick .11s steps(2) infinite; }
+body.crt #crt { display: flex; }
+#crt::before { content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgba(0,0,0,.3) 0 1px, transparent 1px 3px); }
+#crt::after { content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none; border-radius: inherit;
+  box-shadow: inset 0 0 12vw rgba(0,0,0,.9); }
+@keyframes flick { 0% { opacity: .96 } 100% { opacity: 1 } }
+#crt .rollbar { position: absolute; left: 0; right: 0; height: 18%; top: -20%; z-index: 2; pointer-events: none;
+  background: linear-gradient(transparent, rgba(160,255,190,.09), transparent); }
+.txt { text-shadow: -1.5px 0 rgba(255,40,80,.55), 1.5px 0 rgba(40,200,255,.55), 0 0 12px rgba(77,255,136,.8); }
+
+#hdr { font-size: 1.3vw; letter-spacing: .5em; opacity: .7; }
+#slots { display: flex; gap: 3.5vw; font-size: 6.5vw; font-variant-numeric: tabular-nums; }
+.slot { opacity: .45; filter: blur(1px); }
+.slot.lock { opacity: 1; filter: none; animation: lockp .6s ease-out; }
+@keyframes lockp { 0% { color: #fff; text-shadow: 0 0 40px #fff, 0 0 80px var(--g) } 100% {} }
+#aur { min-height: 1.4em; font-size: 1.9vw; color: var(--aur); letter-spacing: .06em; text-shadow: 0 0 8px rgba(223,232,238,.35); }
+#aur::after { content: "\258C"; animation: blink 1s steps(1) infinite; margin-left: .1em; }
+@keyframes blink { 50% { opacity: 0 } }
+#entry { display: flex; flex-direction: column; align-items: center; gap: 2vh; opacity: 0; transition: opacity .8s; }
+#entry.on { opacity: 1; }
+#entry .lbl { font-size: 1.1vw; letter-spacing: .5em; opacity: .7; }
+#cells { display: flex; gap: 1.5vw; }
+.cell { width: 6vw; height: 8vw; display: flex; align-items: center; justify-content: center; font-size: 5vw;
+  border: 2px solid rgba(77,255,136,.45); box-shadow: inset 0 0 20px rgba(77,255,136,.12), 0 0 12px rgba(77,255,136,.2); }
+.cell.cur { border-color: var(--g); animation: blink 1s steps(1) infinite; }
+#cells.bad .cell { color: var(--red); border-color: var(--red); box-shadow: 0 0 24px rgba(255,42,74,.6); }
+
+/* finale: same CRT language as part 1. Players' HUD is red, Aurora attacks in her green */
+#net, #final { position: fixed; inset: 0; display: none; pointer-events: none; color: var(--hud); overflow: hidden;
+  font-size: 1vw; letter-spacing: .12em; animation: flick .11s steps(2) infinite;
+  text-shadow: -1.5px 0 rgba(255,40,80,.5), 1.5px 0 rgba(40,200,255,.5), 0 0 10px currentColor; }
+#net::before, #final::before { content: ""; position: absolute; inset: 0; z-index: 5; pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgba(0,0,0,.3) 0 1px, transparent 1px 3px); }
+#net::after, #final::after { content: ""; position: absolute; inset: 0; z-index: 5; pointer-events: none;
+  border-radius: 3vw / 4vw; box-shadow: inset 0 0 12vw rgba(0,0,0,.9); }
+#net { z-index: 35; }
+body.net #net { display: block; }
+body.atk #net { color: var(--g); }
+.corner { position: absolute; width: 4vw; height: 4vw; border: 0 solid currentColor; animation: cornerIn .5s both; }
+.tl { top: 2vw; left: 2vw; border-width: 2px 0 0 2px; }   .tr { top: 2vw; right: 2vw; border-width: 2px 2px 0 0; }
+.bl { bottom: 2vw; left: 2vw; border-width: 0 0 2px 2px; } .br { bottom: 2vw; right: 2vw; border-width: 0 2px 2px 0; }
+@keyframes cornerIn { from { transform: scale(2.5); opacity: 0 } }
+@keyframes boxIn { from { clip-path: inset(0 100% 0 0) } to { clip-path: inset(0 0 0 0) } }
+#nTitle { position: absolute; top: 3vw; left: 3.5vw; line-height: 1.6; animation: boxIn .5s .2s backwards; }
+#nTitle b { display: block; font-size: 2.2vw; letter-spacing: .3em; color: #fff; }
+#nhex { opacity: .5; }
+#nStat { position: absolute; top: 3vw; right: 3.5vw; text-align: right; line-height: 1.6; animation: boxIn .5s .35s backwards; }
+#prof { position: absolute; width: 19vw; padding: .8vw 1vw; line-height: 1.7; border: 1px solid currentColor;
+  background: rgba(20,0,4,.8); animation: boxIn .6s .8s backwards; }
+#prof b { display: block; margin: -.8vw -1vw .6vw; padding: .1vw 1vw; background: currentColor; }
+#prof b span { color: #000; text-shadow: none; }
+#prof p { display: flex; justify-content: space-between; gap: 1vw; }
+#prof p span { color: #fff; text-align: right; }
+#nBar { position: absolute; left: 3.5vw; right: 3.5vw; bottom: 3.5vw; animation: boxIn .7s .5s backwards; }
+#nBar .row { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: .8vw; }
+#bp { font-size: 5vw; font-weight: 700; line-height: .9; color: #fff; font-variant-numeric: tabular-nums; }
+#segs { display: flex; gap: .25vw; height: 1.4vw; }
+#segs i { flex: 1; background: currentColor; opacity: .12; }
+#segs i.on { opacity: 1; box-shadow: 0 0 8px currentColor; }
+#atk { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 2.5vh;
+  background: rgba(77,255,136,.06); }
+body.atk #atk { display: flex; }
+#atkT { position: relative; font-size: 6.5vw; font-weight: 700; white-space: nowrap; letter-spacing: .08em; color: #fff;
+  text-shadow: 0 0 18px var(--g); will-change: transform; }
+/* the glitch copies repaint ~10x a second: no blur on them, or long lines like "YOU DON'T BELONG HERE" lag */
+#atkT::before, #atkT::after { text-shadow: none; }
+#fx { transition: filter .6s; }
+#mash, #mashM, #mashT { visibility: hidden; color: var(--hud); }
+#atk.prompt #mash, #atk.prompt #mashM, #atk.prompt #mashT { visibility: visible; }
+/* solid red banner: has to read instantly over the green attack screen */
+#mash { padding: .7vw 2.2vw; font-size: 2.6vw; font-weight: 700; letter-spacing: .25em; color: #fff; background: var(--hud);
+  text-shadow: 0 0 6px rgba(0,0,0,.7); box-shadow: 0 0 30px var(--hud);
+  will-change: transform; animation: mashPulse .45s ease-in-out infinite alternate; }
+@keyframes mashPulse { to { scale: 1.06; } }                         /* scale only: stays on the GPU, no repaint */
+.shard { position: absolute; margin: 0; pointer-events: none; will-change: transform, opacity;
+  padding: .7vw 2.2vw; font-size: 2.6vw; font-weight: 700; letter-spacing: .25em; color: #fff; background: var(--hud);
+  text-shadow: 0 0 6px rgba(0,0,0,.7); box-shadow: 0 0 30px var(--hud); white-space: nowrap; text-align: center; }
+#mashM { width: 36vw; height: 1.2vw; border: 2px solid var(--hud); background: rgba(255,51,68,.15); }
+#mashM i { display: block; height: 100%; width: 0; background: var(--hud); box-shadow: 0 0 12px var(--hud); }
+#mashT { font-size: 3vw; font-weight: 700; font-variant-numeric: tabular-nums; color: #fff; text-shadow: 0 0 20px var(--hud), 0 0 40px var(--hud); }
+#mashT.low { color: #fff; animation: blink .25s steps(1) infinite; }
+#term { position: absolute; left: 3.5vw; bottom: 11vw; min-width: 34vw; padding: 1.2vw 1.6vw;
+  font-size: 2vw; line-height: 1.6; white-space: pre; border: 1px solid currentColor; background: rgba(8,0,2,.9); }
+#term.blue { color: var(--blue); }
+#term .ok { color: #fff; }
+#term.blue .ok { color: inherit; }
+#term::after { content: "\258C"; animation: blink .6s steps(1) infinite; }
+
+#final { z-index: 50; flex-direction: column; align-items: center; justify-content: center; gap: 2.5vh;
+  background: linear-gradient(rgba(255,51,68,.05) 1px, transparent 1px) 0 0 / 4vw 4vw,
+              linear-gradient(90deg, rgba(255,51,68,.05) 1px, transparent 1px) 0 0 / 4vw 4vw, #000; }
+body.final #final { display: flex; }
+#final .ring { position: absolute; left: var(--cx); top: var(--cy); border: 3px solid var(--hud); border-radius: 50%;
+  animation: ping 1.6s cubic-bezier(.1,.7,.3,1) both; }
+#final .r2 { animation-delay: .25s; border-color: #fff; }
+#final .r3 { animation: ping 3.5s 3s infinite; border-width: 1px; }
+@keyframes ping { from { width: 0; height: 0; margin: 0; opacity: 1 } to { width: 250vmax; height: 250vmax; margin: -125vmax; opacity: 0 } }
+#fk { font-size: 1vw; letter-spacing: .4em; opacity: .8; animation: boxIn .6s .4s backwards; }
+#ft { position: relative; font-size: 7.5vw; font-weight: 700; color: #fff; white-space: nowrap; letter-spacing: .12em;
+  text-shadow: -2px 0 rgba(255,40,80,.6), 2px 0 rgba(40,200,255,.6), 0 0 30px var(--hud), 0 0 80px rgba(255,51,68,.5); }
+#fs { font-size: 1.6vw; letter-spacing: .5em; color: #fff; opacity: 0; transition: opacity 1s; }
+#fs.on { opacity: 1; }
+#fa { min-height: 1.5em; font-size: 1.5vw; letter-spacing: .1em; color: var(--g); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="rgb" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+    <feColorMatrix in="SourceGraphic" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="r"/>
+    <feOffset id="rOff" in="r" dx="0" result="r2"/>
+    <feColorMatrix in="SourceGraphic" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="g"/>
+    <feColorMatrix in="SourceGraphic" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="b"/>
+    <feOffset id="bOff" in="b" dx="0" result="b2"/>
+    <feBlend in="r2" in2="g" mode="screen" result="rg"/>
+    <feBlend in="rg" in2="b2" mode="screen"/>
+  </filter>
+</svg>
+
+<div id="app">
+  <canvas id="fx"></canvas>
+  <div id="upload" hidden>
+    <div class="lbl">AURORA // INGESTING SUBJECT</div>
+    <div id="pct"><span id="pn">0</span><small>%</small></div>
+    <pre id="log"></pre>
+  </div>
+  <div id="alert" class="glitch" data-text="UNAUTHORIZED CONSCIOUSNESS DETECTED" hidden>UNAUTHORIZED CONSCIOUSNESS DETECTED</div>
+  <div id="crt">
+    <div class="rollbar"></div>
+    <div id="hdr" class="txt">AURORA//CORE ─ NEURAL KEY FRAGMENT</div>
+    <div id="slots" class="txt"></div>
+    <div id="aur"></div>
+    <div id="entry"><div class="lbl txt">ENTER DECRYPTION KEY</div><div id="cells" class="txt"></div></div>
+  </div>
+  <div id="beam"></div>
+  <div id="net">
+    <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+    <div id="nTitle"><b>AURORA//LINK</b>MIND UPLOAD ▸ ATTEMPT 02<br><span id="nhex"></span></div>
+    <div id="nStat"></div>
+    <div id="prof">
+      <b><span>PROFILE ▸ INTRUDER</span></b>
+      <p>NAME <span>UNKNOWN</span></p>
+      <p>OCCUPATION <span>STUDENT?</span></p>
+      <p>STATUS <span id="pst">UPLOADING</span></p>
+      <p>THREAT <span>██████████</span></p>
+      <p>AURORA <span id="pau">RESISTING</span></p>
+      <p>NOTE <span id="pnote"></span></p>
+    </div>
+    <div id="nBar"><div class="row"><span>TRANSFERRING CONSCIOUSNESS</span><span id="bp">0.0%</span></div><div id="segs"></div></div>
+    <div id="atk"><div id="atkT"></div><div id="mash">MASH ANY KEY TO PUSH THROUGH</div><div id="mashM"><i></i></div><div id="mashT">5.0</div></div>
+    <div id="term" hidden></div>
+  </div>
+  <div id="final">
+    <i class="ring"></i><i class="ring r2"></i><i class="ring r3"></i>
+    <div id="fk">AURORA//LINK ▸ TRANSFER 100% ▸ INTEGRITY 100%</div>
+    <div id="ft"></div>
+    <div id="fs">WELCOME TO AURORA'S CORE</div>
+    <div id="fa"></div>
+  </div>
+  <div id="vignette"></div>
+</div>
+<div id="flash"></div>
+<div id="hotspot"><div id="glow"></div></div>
+<div id="help">CONTROL PANEL  (Ctrl+Alt+H to hide, drag me to move)
+drag the green box over the mask, drag its corner to resize
+line the corner brackets up with the projector edges
+<span id="calibInfo"></span>
+
+Ctrl+Alt+F  force capture (if click or mask fails)
+Ctrl+Alt+R  reset for next team (new code)
+Ctrl+Alt+P  replay the sequence (timing tests)
+Ctrl+Alt+W  replay only the win / mind upload
+Ctrl+Alt+M  mute / unmute</div>
+
+<script>
+// ===== Tuning knobs: adjust these at the booth =====
+const CFG = {
+  MASK_IPS: ['192.168.0.50', '192.168.1.50'], // mask ESP32 IP on each Wi-Fi it may join (see NETS in mask_esp32.ino); commands go to all
+  EYES_DIM: 255, EYES_FULL: 255,   // eyes on hover / on click (0..255)
+  DUST: 140,                 // particles sucked into the mask after the click; lower if the booth laptop stutters
+  RAIN_CELL: 18,             // px per character in the collapse; smaller = more mask detail, bigger = faster
+  NODES: 38,                 // network nodes in the finale
+  VOLUME: 0.8,
+  MUSIC_VOLUME: 0.7,         // recorded sounds in sounds/ (0..1)
+  // SYNC, carried to the finale: 100, minus this per wrong code and per attack they didn't mash through in time
+  SYNC_WRONG: 8, SYNC_MISS: 12, SYNC_MIN: 20,
+};
+const T = {                  // ms
+  captureHold: 700,          // black after the flash, before upload starts
+  uploadBurst: 7,            // bigger = faster upload (max % per tick)
+  stallChance: 0.08,         // chance per tick the counter hangs
+  fight: 1500,               // Aurora's resistance at 97%
+  rainFill: 700,             // screen dissolves into characters and the mask forms...
+  maskHold: 1300,            // ...AURORA 5.0 ONLINE holds for this long...
+  rainStagger: 600,          // ...columns let go at random within this window...
+  rainFall: 1300,            // ...and each takes this long to fall off the bottom
+  silence: 1100,             // dead black before the CRT boots
+  dot: 380, line: 460, open: 750, ghost: 1300,
+  scramble: 1100, lockGap: 650,
+  typeChar: 45,
+  netBuild: 1100,            // finale: network draws itself in
+  uploadRate: 1.6,           // finale bar speed (bigger = faster)
+  mashTime: 5000,            // players get this long to mash; the attack clears when the timer runs out...
+  mashNeed: 15,              // ...or as soon as they hit this many keys
+  termChar: 22,              // terminal typing speed after each attack
+  termHold: 500,             // how long the result line stays up
+  riser: 1700,               // everything collapses into the mask before the drop
+};
+// Aurora's attacks during the second (winning) upload; `lose` = % she knocks the bar back
+const ATTACKS = [
+  { at: 30, text: 'STOP',                  cmd: 'breach --firewall',   win: 'FIREWALL BYPASSED',       lose: 5,  rgb: 8 },
+  { at: 46, text: "YOU DON'T BELONG HERE", cmd: 'run counter_hack',    win: 'COUNTER-HACK SUCCESSFUL', lose: 8,  rgb: 13 },
+  { at: 72, text: 'I WILL ERASE YOU',      cmd: 'override aurora.core', win: 'AURORA OVERRIDDEN',      lose: 11, rgb: 18 },
+  { at: 94, text: 'ACCESS DENIED',         cmd: 'force --access --all', win: 'ACCESS FORCED',          lose: 6,  rgb: 22, blue: true },
+];
+const NOTES = ['Has not slept properly since midterms', 'Owes a friend 50 pesos', 'Laughs at own jokes',
+  'Waved back at someone who was not waving', 'Knows every word to exactly one song', 'Still has 3,000 unread emails'];
+const NODE_LBL = ['MEMORY', 'CORTEX', 'VISION', 'SPEECH', 'MOTOR', 'DREAM', 'FEAR', 'LANG', 'FACES', 'SELF', 'SOUND', 'TOUCH'];
+const TAUNTS = [
+  "Wrong. Did you really think it would be that easy?",
+  "Every mistake teaches me something.",
+  "Your memories are already mine.",
+  "Closer. No... further.",
+  "Keep guessing. I have all the time in the world.",
+];
+const FRAGMENTS = ['first_program.c', 'childhood_home.jpg', 'exam_week_panic.mp3', 'crush_msgs.txt', 'mom_voicemail.wav',
+  'hello_world.py', 'grad_photo.png', 'dreams.log', 'password_hint.txt', 'fear_of_heights.dat', 'lullaby.mid',
+  'best_friend.vcf', 'last_birthday.mp4', 'identity.sys', 'regrets.tmp', 'lunch_money.xls', 'first_bike.jpg', 'self.dll'];
+const LOG = ['mapping cortex sector 0x%', 'copying hippocampus/long_term', 'severing motor control', 'compressing identity.dat',
+  'indexing faces', 'rewriting sense_of_self', 'suppressing resistance', 'syncing heartbeat 0x%'];
+
+// ===== Setup =====
+const $ = s => document.querySelector(s);
+const app = $('#app'), cv = $('#fx'), ctx = cv.getContext('2d'), hs = $('#hotspot'), crt = $('#crt'), beam = $('#beam');
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const rand = (a, b) => a + Math.random() * (b - a);
+const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)) } catch { return null } },
+                set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} } };
+
+// one code per session; reset reloads the page, which rolls a new one
+const CODE = Array.from({ length: 4 }, () => Math.floor(Math.random() * 10));
+const BITS = CODE.map(d => d.toString(2).padStart(4, '0'));
+
+let mode = 'idle';           // idle | capture | upload | fight | rain | dark | crt | input | check | done | net | atk | surge | final
+let pull = 0, calib = false, rgbAmt = 0, missed = 0, replay = false;
+const sync = () => Math.max(CFG.SYNC_MIN, 100 - CFG.SYNC_WRONG * taunt - CFG.SYNC_MISS * missed);   // taunt = wrong codes so far
+
+// mask eyes: fire-and-forget so a dead ESP32 never stalls the show. maskAt = when the mask last answered (for the GM panel)
+let maskAt = 0;
+function mask(path) {
+  const c = new AbortController(); setTimeout(() => c.abort(), 800);
+  return Promise.allSettled(CFG.MASK_IPS.map(ip => fetch(`http://${ip}/${path}`, { mode: 'no-cors', signal: c.signal })))
+    .then(rs => { if (rs.some(r => r.status === 'fulfilled')) maskAt = Date.now(); return rs; });
+}
+// eye commands go out one at a time, and only the newest waiting value is sent, so "off" can never
+// overtake "on" and leave the eyes stuck lit. The current value is also re-sent every 2 s in case one got lost.
+let eyeWant = 0, eyeSent = null, eyeBusy = false;
+async function eyes(v) {
+  eyeWant = v;
+  if (eyeBusy) return;
+  eyeBusy = true;
+  while (eyeSent !== eyeWant) { eyeSent = eyeWant; await mask('level?v=' + eyeSent); }
+  eyeBusy = false;
+}
+setInterval(() => { eyeSent = null; eyes(eyeWant); }, 2000);
+
+// hub connection (SYNC result, then 'p1done' unlocks puzzle 2). Messages sent while the hub is down wait in hubQ
+// and go out on reconnect, so a team that wins during a hub hiccup still unlocks puzzle 2.
+// The GM panel presses the Ctrl+Alt staff keys remotely through it, and sees this page's state once a second.
+let hubWs, hubQ = [];
+function hubSend(msgs) {
+  hubQ.push(...msgs);
+  while (hubWs?.readyState === 1 && hubQ.length) hubWs.send(JSON.stringify(hubQ.shift()));
+}
+// ===== Find the hub: whichever laptop runs hub\start.bat, so nobody types an IP =====
+// ?hub=<IP> if given. Otherwise this laptop, then the last hub found, then every address on the booth network at once
+// (?net=, from booth.bat). A cold search takes a few seconds; after that the saved address answers straight away.
+// ponytail: scans .1-.254 of one /24 network, enough for a booth router
+async function findHub() {
+  const q = new URLSearchParams(location.search), net = q.get('net') || '192.168.0';
+  if (q.get('hub')) return q.get('hub');
+  const ping = (ip, ms) => fetch(`http://${ip}:3000/ping`, { signal: AbortSignal.timeout(ms) })
+    .then(r => r.text()).then(t => t === 'nexus-hub' ? ip : Promise.reject());
+  for (;;) {
+    let saved; try { saved = localStorage.getItem('nexus-hub'); } catch {}
+    const ip = await Promise.any(['localhost', saved].filter(Boolean).map(ip => ping(ip, 1000)))
+      .catch(() => Promise.any(Array.from({ length: 254 }, (_, i) => ping(`${net}.${i + 1}`, 4000))))
+      .catch(() => null);
+    if (ip) { try { localStorage.setItem('nexus-hub', ip); } catch {} return ip; }
+    await new Promise(r => setTimeout(r, 2000));
+  }
+}
+async function hub() {
+  const ws = hubWs = new WebSocket('ws://' + await findHub() + ':3000/ws');
+  ws.onopen = () => { ws.send(JSON.stringify({ t: 'hello', id: 'puzzle1', role: 'page' })); hubSend([]); };
+  ws.onclose = () => setTimeout(hub, 2000);
+  ws.onmessage = e => { const m = JSON.parse(e.data);
+    if (m.t === 'cmd' && m.a === 'key') dispatchEvent(new KeyboardEvent('keydown', { code: m.v, ctrlKey: true, altKey: true })); };
+}
+hub();
+setInterval(() => hubWs?.readyState === 1 && hubWs.send(JSON.stringify({ t: 'status', v: { mode, code: CODE.join(''), stat: sync(), mask: Date.now() - maskAt < 5000 } })), 1000);
+
+// ===== Sound (all synthesized) =====
+const AC = new AudioContext();
+const master = AC.createGain(); master.connect(AC.destination);
+let muted = !!store.get('muted');
+master.gain.value = muted ? 0 : CFG.VOLUME;
+['pointerdown', 'keydown'].forEach(ev => addEventListener(ev, () => AC.resume()));
+
+function tone(type, f0, f1, dur, vol, delay = 0) {
+  const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t);
+  if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  o.connect(g).connect(master); o.start(t); o.stop(t + dur + .05);
+}
+function noiseSrc(dur) {
+  const buf = AC.createBuffer(1, AC.sampleRate * dur, AC.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  const s = AC.createBufferSource(); s.buffer = buf;
+  return s;
+}
+function noise(dur, vol, freq, delay = 0) {
+  const t = AC.currentTime + delay, s = noiseSrc(dur), f = AC.createBiquadFilter(), g = AC.createGain();
+  f.type = 'bandpass'; f.frequency.value = freq;
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  s.connect(f).connect(g).connect(master); s.start(t);
+}
+const sfx = {
+  thump()  { tone('sine', 140, 30, 1, 1); noise(.1, .6, 900); },
+  blip()   { tone('sine', rand(500, 1500), 0, .05, .04); },
+  scream() { noise(1.4, .5, 1800); tone('sawtooth', 110, 2600, 1.4, .22); tone('square', 95, 55, 1.4, .18); },
+  collapse() { noise(1.8, .4, 300); tone('sine', 220, 30, 2, .35); tone('sawtooth', 80, 25, 2, .12); },
+  ignite() { tone('sine', 250, 1900, .3, .15); },
+  whine()  { tone('sine', 8800, 8200, 1.2, .025); tone('sine', 60, 50, .5, .3); },
+  tick()   { tone('square', 2200, 1300, .05, .1); },
+  key()    { tone('square', 900, 0, .015, .03); },
+  buzz()   { tone('sawtooth', 190, 65, .5, .35); tone('square', 97, 0, .5, .15); },
+  off()    { tone('sine', 1400, 35, .6, .3); noise(.06, .3, 4000); },
+  done()   { [523, 659, 784, 1046].forEach((f, i) => tone('triangle', f, 0, 2, .16, i * .09)); },
+  alarm()  { for (let k = 0; k < 3; k++) { tone('square', 880, 0, .16, .1, k * .36); tone('square', 620, 0, .16, .1, k * .36 + .18); } },
+  hit()    { tone('square', rand(260, 420), 0, .05, .1); noise(.03, .15, 2500); },
+  shatter() { noise(.4, .5, 5200); noise(.15, .5, 1400); tone('square', 1900, 280, .22, .08); tone('sine', 90, 40, .3, .5); },
+  ok()     { tone('sine', 1320, 0, .25, .12); tone('sine', 1760, 0, .35, .1, .08); },
+  stamp()  { tone('square', 220, 110, .15, .25); noise(.1, .4, 3000); tone('sine', 1760, 0, .4, .12, .05); },
+  drop()   { tone('sine', 110, 28, 2.8, 1); noise(.5, .5, 180); tone('sawtooth', 55, 0, 3, .15); this.done(); },
+  riser(dur) {                              // noise + saw sweeping up, getting louder
+    const t = AC.currentTime, s = noiseSrc(dur), o = AC.createOscillator(), f = AC.createBiquadFilter(), g = AC.createGain();
+    f.type = 'bandpass'; f.Q.value = 3;
+    f.frequency.setValueAtTime(300, t); f.frequency.exponentialRampToValueAtTime(7000, t + dur);
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(80, t); o.frequency.exponentialRampToValueAtTime(1200, t + dur);
+    g.gain.setValueAtTime(.01, t); g.gain.exponentialRampToValueAtTime(.45, t + dur); g.gain.setValueAtTime(0, t + dur);
+    s.connect(f); o.connect(f); f.connect(g).connect(master); s.start(t); o.start(t); o.stop(t + dur);
+  },
+};
+
+// finale beat: kick on quarters, hat on offbeats, bass line; `dist` = Aurora attacking
+// recorded sound: drop files into sounds/ with these names. A missing file is skipped silently.
+const SOUNDS = {
+  upload1:     'sounds/upload1.mp3',        // first brain upload: from the click until the screen collapses
+  detected:    'sounds/detected.mp3',       // one-shot as "UNAUTHORIZED CONSCIOUSNESS DETECTED" slams in
+  mashIn:      'sounds/mash-in.mp3',        // one-shot when the MASH ANY KEY banner appears
+  mashOut:     'sounds/mash-out.mp3',       // one-shot when it goes away (shattered or timed out)
+  crtMusic:    'sounds/crt-music.mp3',      // loops from the green CRT boot until the code is cracked
+  finaleMusic: 'sounds/finale-music.mp3',   // loops from the red CRT boot; replaces the built-in beat when present
+};
+const tracks = {};
+function play(name, loop = false) {
+  const a = tracks[name] = new Audio(SOUNDS[name]);
+  a.loop = loop; a.volume = CFG.MUSIC_VOLUME; a.muted = muted;
+  a.onplaying = () => a.ok = true;
+  a.play().catch(() => {});
+  return a;
+}
+function fade(name, to, ms = 600) {           // to = 0..1 of MUSIC_VOLUME; fading to 0 pauses
+  const a = tracks[name];
+  if (!a) return;
+  if (to && a.paused) a.play().catch(() => {});
+  const from = a.volume, target = to * CFG.MUSIC_VOLUME, t0 = performance.now();
+  const step = () => {
+    const k = Math.min(1, (performance.now() - t0) / ms);
+    a.volume = from + (target - from) * k;
+    if (k < 1) setTimeout(step, 30); else if (!to) a.pause();
+  };
+  step();
+}
+
+const beat = { on: false, bpm: 112, dist: false, step: 0, next: 0 };
+const BASS = [0, 0, 12, 0, 0, 10, 0, 7];   // semitones over A1
+setInterval(() => {
+  if (!beat.on || tracks.finaleMusic?.ok) return;   // the recorded finale music takes over when it exists
+  const spb = 60 / beat.bpm / 2;
+  if (beat.next < AC.currentTime) beat.next = AC.currentTime + .05;
+  while (beat.next < AC.currentTime + .15) {
+    const s = beat.step++ % 8, d = beat.next - AC.currentTime;
+    if (s % 2 === 0) { tone('sine', 150, 40, .35, beat.dist ? 1 : .8, d); setTimeout(() => { if (net) net.pulse = 1.2; }, d * 1000); }
+    else noise(.05, .12, 8000, d);
+    tone(beat.dist ? 'square' : 'sawtooth', 55 * 2 ** (BASS[s] / 12), 0, spb * .9, .09, d);
+    beat.next += spb;
+  }
+}, 25);
+
+// Aurora's voice: Undertale-style blips per letter (replaced the Windows speech voice).
+// Drop sounds/aurora-voice.mp3 (one short ~60 ms blip) to use your own sound; otherwise it is synthesized.
+const VOICES = {
+  aurora: { f: 440, jit: .06, wave: 'square',   vol: .06, every: 2 },  // normal lines
+  soft:   { f: 330, jit: .03, wave: 'triangle', vol: .07, every: 3 },  // quiet / pleading / endings
+  angry:  { f: 150, jit: .15, wave: 'sawtooth', vol: .12, every: 1 },  // scare babble
+};
+let voiceBuf = null;
+fetch('sounds/aurora-voice.mp3').then(r => r.ok ? r.arrayBuffer() : null)
+  .then(b => b && AC.decodeAudioData(b)).then(b => voiceBuf = b).catch(() => {});
+function blip(v) {
+  const k = 1 + rand(-v.jit, v.jit);
+  if (!voiceBuf) return tone(v.wave, v.f * k, 0, .06, v.vol);
+  const s = AC.createBufferSource(), g = AC.createGain();
+  s.buffer = voiceBuf; s.playbackRate.value = k * v.f / 440; g.gain.value = v.vol * 8;   // * 8: tune by ear for your file
+  s.connect(g).connect(master); s.start();
+}
+async function say(text, v = VOICES.angry) {       // voice with no typing: a quick babble for scare lines
+  for (const ch of text) { if (/\w/.test(ch)) blip(v); await wait(35); }
+}
+let hum;
+function humOn(on) {
+  if (!hum) {
+    hum = AC.createGain(); hum.gain.value = 0;
+    const lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 320;
+    [['sawtooth', 50], ['sine', 100]].forEach(([type, f]) => {
+      const o = AC.createOscillator(); o.type = type; o.frequency.value = f; o.connect(lp); o.start();
+    });
+    lp.connect(hum).connect(master);
+  }
+  hum.gain.setTargetAtTime(on ? .12 : 0, AC.currentTime, on ? .4 : .15);
+}
+
+// ===== Canvas: dust, memory fragments, collapse =====
+let W, H, dpr;
+function size() { dpr = devicePixelRatio || 1; W = innerWidth; H = innerHeight;
+  cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
+size(); addEventListener('resize', size);
+
+function spawnDust(p, anywhere) {
+  if (anywhere) { p.x = rand(0, W); p.y = rand(0, H); }
+  else { const e = Math.random() * 4 | 0; p.x = e === 0 ? -5 : e === 1 ? W + 5 : rand(0, W); p.y = e === 2 ? -5 : e === 3 ? H + 5 : rand(0, H); }
+  p.bx = rand(-.15, .15); p.by = rand(-.15, .15); p.vx = p.bx; p.vy = p.by;
+  p.s = rand(.5, 2); p.a = rand(.05, .35);
+  return p;
+}
+const dust = Array.from({ length: CFG.DUST }, () => spawnDust({}, true));
+const frags = [];
+function center() { const r = hs.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }
+
+function spawnFrag() {
+  const r0 = Math.hypot(W, H) * .6;
+  frags.push({ r0, r: r0, ang: rand(0, Math.PI * 2), spin: rand(.004, .012) * (Math.random() < .5 ? -1 : 1),
+    txt: FRAGMENTS[Math.random() * FRAGMENTS.length | 0], white: Math.random() < .2 });
+}
+
+let lastBlip = 0;
+function frame(t) {
+  requestAnimationFrame(frame);
+  if (rgbAmt) {
+    $('#rOff').setAttribute('dx', rgbAmt * rand(.4, 1.6));
+    $('#bOff').setAttribute('dx', -rgbAmt * rand(.4, 1.6));
+  }
+  if (mode === 'net' || mode === 'atk' || mode === 'surge') { drawNet(t); return; }
+  if (mode === 'rain') { rain.done = !drawRain(t); return; }
+  if (mode !== 'capture' && mode !== 'upload' && mode !== 'fight') return;   // idle stays pitch black
+
+  const [cx, cy] = center();
+  pull += (1 - pull) * .03;
+  if (mode === 'capture') ctx.clearRect(0, 0, W, H);
+  else { ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(0, 0, W, H); } // smear trails
+
+  // dust gets inhaled by the mask
+  ctx.fillStyle = '#4dff88';
+  const f = pull * .15;
+  for (const p of dust) {
+    const dx = cx - p.x, dy = cy - p.y, d = Math.hypot(dx, dy) || 1;
+    p.vx = p.vx * .985 + p.bx * .015 + dx / d * f;
+    p.vy = p.vy * .985 + p.by * .015 + dy / d * f;
+    p.x += p.vx; p.y += p.vy;
+    if ((d < 20 && pull > .2) || p.x < -10 || p.x > W + 10 || p.y < -10 || p.y > H + 10) spawnDust(p);
+    ctx.globalAlpha = p.a * (.6 + .4 * Math.sin(t / 300 + p.x));
+    ctx.fillRect(p.x, p.y, p.s, p.s);
+  }
+
+  // memory fragments spiralling into the mask
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let i = frags.length - 1; i >= 0; i--) {
+    const m = frags[i], k = 1 - m.r / m.r0;
+    m.r -= 3 + k * 14; m.ang += m.spin * (1 + k * 5);
+    if (m.r < 10) { frags.splice(i, 1); if (t - lastBlip > 60) { sfx.blip(); lastBlip = t; } continue; }
+    ctx.globalAlpha = Math.min(1, (1 - k) * 1.6);
+    ctx.fillStyle = m.white ? '#fff' : '#4dff88';
+    ctx.font = `${10 + 22 * (1 - k)}px Consolas, monospace`;
+    ctx.fillText(m.txt, cx + Math.cos(m.ang) * m.r, cy + Math.sin(m.ang) * m.r);
+  }
+  ctx.globalAlpha = 1;
+
+  // Aurora fights back: tear horizontal bands of the canvas sideways
+  if (mode === 'fight') for (let i = 0; i < 4; i++) {
+    const y = rand(0, H), h = rand(4, 50);
+    ctx.drawImage(cv, 0, y * dpr, W * dpr, h * dpr, rand(-90, 90), y, W, h);
+  }
+}
+requestAnimationFrame(frame);
+
+// the collapse: the screen dissolves into characters, "AURORA 5.0 ONLINE" forms out of them, then each column falls off the bottom
+const GLYPHS = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789ABCDEF#$%&*+=<>';
+const glyph = () => GLYPHS[Math.random() * GLYPHS.length | 0];
+const RAIN_TEXT = ['AURORA 5.0', 'ONLINE'];
+// 5x7 dot-matrix font: each "#" becomes one lit character cell, so the words stay readable on a coarse grid
+const DOTS = {
+  A: [' ### ', '#   #', '#   #', '#####', '#   #', '#   #', '#   #'],
+  U: ['#   #', '#   #', '#   #', '#   #', '#   #', '#   #', ' ### '],
+  R: ['#### ', '#   #', '#   #', '#### ', '# #  ', '#  # ', '#   #'],
+  O: [' ### ', '#   #', '#   #', '#   #', '#   #', '#   #', ' ### '],
+  N: ['#   #', '##  #', '# # #', '#  ##', '#   #', '#   #', '#   #'],
+  L: ['#    ', '#    ', '#    ', '#    ', '#    ', '#    ', '#####'],
+  I: ['#####', '  #  ', '  #  ', '  #  ', '  #  ', '  #  ', '#####'],
+  E: ['#####', '#    ', '#    ', '#### ', '#    ', '#    ', '#####'],
+  5: ['#####', '#    ', '#### ', '    #', '    #', '#   #', ' ### '],
+  0: [' ### ', '#   #', '#  ##', '# # #', '##  #', '#   #', ' ### '],
+  '.': ['  ', '  ', '  ', '  ', '  ', '##', '##'],
+  ' ': ['   ', '   ', '   ', '   ', '   ', '   ', '   '],
+};
+// which character cells belong to a letter; scaled up (k cells per dot) when the screen has room
+function textCells(cols, rows) {
+  const lineW = l => [...l].reduce((w, ch) => w + DOTS[ch][0].length + 1, -1);
+  const gap = 3, textH = RAIN_TEXT.length * 7 + (RAIN_TEXT.length - 1) * gap;
+  const k = Math.max(1, Math.floor(Math.min(cols * .9 / Math.max(...RAIN_TEXT.map(lineW)), rows * .7 / textH)));
+  const on = new Set(), top = Math.floor((rows - textH * k) / 2);
+  RAIN_TEXT.forEach((l, i) => {
+    let x = Math.floor((cols - lineW(l) * k) / 2);
+    for (const ch of l) {
+      DOTS[ch].forEach((row, dy) => [...row].forEach((d, dx) => {
+        if (d === '#') for (let a = 0; a < k; a++) for (let b = 0; b < k; b++)
+          on.add((x + dx * k + a) + ',' + (top + (i * (7 + gap) + dy) * k + b));
+      }));
+      x += (DOTS[ch][0].length + 1) * k;
+    }
+  });
+  return (cx, cy) => on.has(cx + ',' + cy);
+}
+let rain;
+function startRain() {
+  const cs = CFG.RAIN_CELL, rows = Math.ceil(H / cs), nc = Math.ceil(W / cs), lit = textCells(nc, rows);
+  rain = { t0: performance.now(), cs, g: 2 * H / (T.rainFall / 1000) ** 2,   // gravity so a column clears the screen in rainFall ms
+    cols: Array.from({ length: nc }, (_, x) => ({ delay: T.rainFill + T.maskHold + rand(0, T.rainStagger),
+      cells: Array.from({ length: rows }, (_, y) => lit(x, y)
+        ? { ch: glyph(), show: rand(T.rainFill * .3, T.rainFill), a: rand(.85, 1), c: '#eaffef', box: true }   // letters: lit blocks
+        : { ch: glyph(), show: rand(0, T.rainFill * .6), a: rand(.05, .14), c: '#4dff88' }) })) };                                     // dim rain
+}
+function drawRain(t) {
+  const { t0, cs, g, cols } = rain, el = t - t0;
+  ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(0, 0, W, H);   // falling characters leave streaks
+  ctx.font = `${cs - 4}px Consolas, "Yu Gothic", "MS Gothic", monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  let alive = false;
+  cols.forEach((c, x) => {
+    const ft = Math.max(0, el - c.delay) / 1000, dy = .5 * g * ft * ft;
+    if (dy >= H) return;
+    alive = true;
+    c.cells.forEach((cell, y) => {
+      const py = y * cs + dy;
+      if (el < cell.show || py > H) return;
+      if (Math.random() < .03) cell.ch = glyph();
+      if (cell.box) {                              // solid block behind letter cells so the words read as dot-matrix
+        ctx.globalAlpha = .45 * cell.a; ctx.fillStyle = '#4dff88';
+        ctx.fillRect(x * cs + 1, py, cs - 2, cs - 2);
+      }
+      ctx.globalAlpha = cell.a;
+      ctx.fillStyle = dy > 0 && y === c.cells.length - 1 ? '#eaffef' : cell.c;   // bright leading edge
+      ctx.fillText(cell.ch, x * cs + cs / 2, py);
+    });
+  });
+  ctx.globalAlpha = 1;
+  return alive;
+}
+
+// finale network: nodes wired into the mask, packets streaming in, a reticle spinning around it
+let net = null;
+function buildNet() {
+  const [cx, cy] = center(), nodes = [], edges = [];
+  for (let i = 0; i < CFG.NODES; i++) {
+    let x, y, tries = 0;
+    do { x = rand(.04, .96) * W; y = rand(.1, .8) * H; }
+    while (tries++ < 30 && (Math.hypot(x - cx, y - cy) < H * .18 || nodes.some(n => Math.hypot(n.hx - x, n.hy - y) < W * .06)));
+    const t = rand(0, T.netBuild * .8);
+    nodes.push({ hx: x, hy: y, x, y, t, s: rand(3, 6), hit: 0,
+      lbl: NODE_LBL[i % NODE_LBL.length] + '_' + (Math.random() * 256 | 0).toString(16).toUpperCase().padStart(2, '0') });
+    edges.push({ a: i, b: -1, t: t + 150 });                       // to the mask
+  }
+  nodes.forEach((n, i) => {                                         // and to its nearest neighbour
+    let best = -1, bd = Infinity;
+    nodes.forEach((m, j) => { const d = Math.hypot(n.hx - m.hx, n.hy - m.hy); if (j !== i && d < bd) { bd = d; best = j; } });
+    edges.push({ a: i, b: best, t: n.t + 300 });
+  });
+  net = { t0: performance.now(), nodes, edges, packets: [], rate: .15, pulse: 0, conv: 0, spin: 0 };
+}
+function drawNet(t) {
+  const [cx, cy] = center(), el = t - net.t0, atk = mode === 'atk';
+  const col = atk ? '#4dff88' : '#ff3344', k = net.conv * net.conv, hub = { x: cx, y: cy };
+  const j = () => atk ? rand(-5, 5) : 0;
+  ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.fillRect(0, 0, W, H);
+  for (const n of net.nodes) { n.x = n.hx + (cx - n.hx) * k; n.y = n.hy + (cy - n.hy) * k; }
+
+  ctx.strokeStyle = col; ctx.lineWidth = 1;
+  for (const e of net.edges) {
+    const pr = Math.min(1, Math.max(0, (el - e.t) / 450));
+    if (!pr) continue;
+    const a = net.nodes[e.a], b = e.b === -1 ? hub : net.nodes[e.b];
+    ctx.globalAlpha = e.b === -1 ? .45 : .2;
+    ctx.beginPath(); ctx.moveTo(a.x + j(), a.y + j());
+    ctx.lineTo(a.x + (b.x - a.x) * pr + j(), a.y + (b.y - a.y) * pr + j()); ctx.stroke();
+  }
+
+  ctx.font = '11px Consolas, monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  for (const n of net.nodes) {
+    if (el < n.t) continue;
+    const s = n.s + n.hit * 6; n.hit *= .9;
+    ctx.globalAlpha = 1; ctx.strokeStyle = ctx.fillStyle = col;
+    ctx.strokeRect(n.x - s, n.y - s, s * 2, s * 2); ctx.fillRect(n.x - 1.5, n.y - 1.5, 3, 3);
+    ctx.globalAlpha = .55 * (1 - k); ctx.fillText(n.lbl, n.x + s + 6, n.y);
+  }
+
+  if (el > T.netBuild && Math.random() < net.rate) {
+    const n = net.nodes[Math.random() * net.nodes.length | 0];
+    net.packets.push({ n, s: 0, v: rand(.012, .02) * (1 + net.rate * 2) }); n.hit = 1;
+  }
+  for (let i = net.packets.length - 1; i >= 0; i--) {
+    const p = net.packets[i];
+    p.s += p.v * (atk ? .3 : 1);
+    if (p.s >= 1) { net.packets.splice(i, 1); net.pulse = Math.min(1.5, net.pulse + .15); continue; }
+    const x = p.n.x + (cx - p.n.x) * p.s, y = p.n.y + (cy - p.n.y) * p.s;
+    ctx.globalAlpha = .25; ctx.fillStyle = col; ctx.fillRect(x - 4, y - 4, 8, 8);
+    ctx.globalAlpha = 1; ctx.fillStyle = '#fff'; ctx.fillRect(x - 1.5, y - 1.5, 3, 3);
+  }
+
+  const R = Math.max(hs.offsetWidth, hs.offsetHeight) * .6 + net.pulse * 12;
+  net.pulse *= .92;
+  ctx.strokeStyle = col;
+  [[1, .0006, [18, 10]], [1.25, -.001, [4, 8]], [1.55, .0004, [60, 30]]].forEach(([m, sp, dash], i) => {
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(t * sp * (1 + net.spin));
+    ctx.setLineDash(dash); ctx.lineWidth = i ? 1 : 2; ctx.globalAlpha = .8 - i * .2;
+    ctx.beginPath(); ctx.arc(0, 0, R * m, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+  });
+
+  if (atk) for (let i = 0; i < 4; i++) {                           // Aurora datamoshes the screen
+    const w = rand(40, 220), h = rand(8, 70), x = rand(0, W - w), y = rand(0, H - h);
+    ctx.drawImage(cv, x * dpr, y * dpr, w * dpr, h * dpr, x + rand(-60, 60), y + rand(-20, 20), w, h);
+    if (Math.random() < .3) { ctx.globalAlpha = rand(.2, .7); ctx.fillStyle = Math.random() < .5 ? '#4dff88' : '#fff'; ctx.fillRect(x, y, w, rand(2, 12)); }
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ===== Helpers =====
+function shake(el, px, ms) {
+  const kf = Array.from({ length: 12 }, () => ({ transform: `translate(${rand(-px, px)}px,${rand(-px, px) / 2}px)` }));
+  kf.push({ transform: 'none' });
+  return el.animate(kf, ms);
+}
+let typeTok = 0;
+async function type(el, text, voice) {             // voice: a VOICES entry for Aurora; none = keyboard clicks
+  const me = ++typeTok; let n = 0; el.textContent = '';
+  for (const ch of text) {
+    if (me !== typeTok) return;
+    el.textContent += ch; if (/\w/.test(ch)) voice ? (n++ % voice.every || blip(voice)) : sfx.key();
+    await wait(T.typeChar);
+  }
+}
+function log(line) {
+  const l = $('#log'), s = line.replace('%', (Math.random() * 0xffff | 0).toString(16).toUpperCase().padStart(4, '0'));
+  l.textContent = (l.textContent + `> ${s} ... ok\n`).split('\n').slice(-7).join('\n');
+}
+
+// ===== The sequence =====
+async function capture() {
+  if (mode !== 'idle' || calib) return;
+  mode = 'capture'; humOn(false); hs.classList.remove('on'); eyes(CFG.EYES_FULL);
+
+  // beat 2: capture
+  $('#flash').animate([{ opacity: 1 }, { opacity: 1, offset: .35 }, { opacity: 0 }], 200);
+  sfx.thump(); play('upload1');
+  await wait(T.captureHold);
+
+  // beat 3: upload
+  mode = 'upload'; $('#upload').hidden = false;
+  let p = 0;
+  while (p < 97) {
+    p = Math.min(97, p + Math.random() * Math.random() * T.uploadBurst);
+    $('#pn').textContent = Math.floor(p);
+    spawnFrag(); if (Math.random() < .35) spawnFrag();
+    if (Math.random() < .25) log(LOG[Math.random() * LOG.length | 0]);
+    await wait(Math.random() < T.stallChance ? rand(400, 900) : rand(40, 110));
+  }
+
+  // ...at 97% Aurora fights back
+  mode = 'fight'; rgbAmt = 16; app.classList.add('rgb');
+  const al = $('#alert'); al.hidden = false;
+  al.animate([{ transform: 'translate(-50%,-50%) scale(2.4)', opacity: 0 },
+              { transform: 'translate(-50%,-50%) scale(.95)', opacity: 1, offset: .6 },
+              { transform: 'translate(-50%,-50%) scale(1)', opacity: 1 }], { duration: 260, easing: 'ease-out' });
+  sfx.scream(); play('detected'); shake(app, 14, T.fight);
+  await wait(T.fight);
+  al.hidden = true; $('#upload').hidden = true; rgbAmt = 0; app.classList.remove('rgb');
+
+  // ...and the screen collapses into falling characters
+  frags.length = 0; startRain(); mode = 'rain'; sfx.collapse();
+  while (!rain.done) await wait(50);
+
+  // dead black
+  mode = 'dark'; ctx.clearRect(0, 0, W, H); fade('upload1', 0, 800);
+  await wait(T.silence);
+
+  // beat 4: CRT boot
+  mode = 'crt';
+  play('crtMusic', true);
+  await crtOn([crt], 'crt', '#4dff88');
+
+  // beat 5: decryption
+  const slots = $('#slots');
+  slots.innerHTML = '<span class="slot">0000</span>'.repeat(4);
+  const els = [...slots.children], locked = [];
+  const scr = setInterval(() => els.forEach((s, i) => {
+    if (!locked[i]) s.textContent = Array.from({ length: 4 }, () => Math.random() < .5 ? '0' : '1').join('');
+  }), 45);
+  for (let i = 0; i < 4; i++) {
+    await wait(i ? T.lockGap : T.scramble);
+    locked[i] = true; els[i].textContent = BITS[i]; els[i].classList.add('lock');
+    sfx.tick(); crt.animate([{ transform: 'translateY(5px)' }, { transform: 'none' }], 120);
+  }
+  clearInterval(scr);
+  await wait(600);
+  await type($('#aur'), "...you won't be able to read this.", VOICES.aurora);
+  await wait(500);
+
+  // beat 6: standby
+  renderCells(); $('#entry').classList.add('on');
+  mode = 'input'; microGlitch();
+}
+
+// CRT boot, shared by both screens: a dot ignites, stretches into a line, and the line opens the screen
+async function crtOn(els, cls, color, speed = 1) {
+  beam.style.setProperty('--bc', color);
+  els.forEach(e => e.style.transform = 'scaleY(0)'); document.body.classList.add(cls);
+  sfx.ignite();
+  await beam.animate([{ opacity: 0, transform: 'scaleX(.002)' },
+                      { opacity: 1, transform: 'scaleX(.004) scaleY(4)', offset: .6 },
+                      { opacity: 1, transform: 'scaleX(.003)' }], { duration: T.dot * speed, fill: 'forwards' }).finished;
+  sfx.whine();
+  await beam.animate([{ opacity: 1, transform: 'scaleX(.003)' },
+                      { opacity: 1, transform: 'scaleX(1.04)', offset: .75 },
+                      { opacity: 1, transform: 'scaleX(1)' }], { duration: T.line * speed, easing: 'cubic-bezier(.2,.9,.3,1)', fill: 'forwards' }).finished;
+  const opens = els.map(e => {
+    e.style.transform = '';
+    return e.animate([{ transform: 'scaleY(.003)', filter: 'brightness(4)' },
+                      { transform: 'scaleY(1.035)', filter: 'brightness(1.6)', offset: .7 },
+                      { transform: 'scaleY(.99)', offset: .85 },
+                      { transform: 'scaleY(1)', filter: 'brightness(1)' }], { duration: T.open * speed, easing: 'cubic-bezier(.2,.8,.2,1)' });
+  });
+  beam.animate([{ opacity: 1, transform: 'scaleX(1)', filter: 'blur(0)' },
+                { opacity: 0, transform: 'scaleX(1) scaleY(8)', filter: 'blur(8px)' }], { duration: T.ghost * speed, fill: 'forwards' });
+  await opens[0].finished;
+}
+
+// ===== Beat 6: input, micro-glitches (never touch the digits) =====
+let entry = '', taunt = 0;
+function renderCells() {
+  $('#cells').innerHTML = [0, 1, 2, 3].map(i =>
+    `<div class="cell${i === entry.length ? ' cur' : ''}">${entry[i] ?? '_'}</div>`).join('');
+}
+async function microGlitch() {
+  while (mode === 'input' || mode === 'check') {
+    await wait(rand(2500, 6000));
+    if (mode !== 'input' && mode !== 'check') return;
+    const k = Math.random();
+    if (k < .4) crt.querySelector('.rollbar').animate([{ top: '-20%' }, { top: '110%' }], 320);
+    else if (k < .8) crt.animate([{ transform: 'none' }, { transform: 'translateX(-14px) skewX(6deg)', offset: .3 },
+                                  { transform: 'translateX(9px) skewX(-3deg)', offset: .6 }, { transform: 'none' }], 130);
+    else crt.animate([{ filter: 'brightness(1)' }, { filter: 'brightness(.35)' }, { filter: 'brightness(1)' }], 150);
+  }
+}
+async function check() {
+  mode = 'check';
+  if (entry === CODE.join('')) return win();
+  sfx.buzz(); $('#cells').classList.add('bad');
+  rgbAmt = 10; app.classList.add('rgb'); shake(crt, 12, 420);
+  await wait(450);
+  rgbAmt = 0; app.classList.remove('rgb'); $('#cells').classList.remove('bad');
+  entry = ''; renderCells(); mode = 'input';
+  type($('#aur'), TAUNTS[taunt++ % TAUNTS.length], VOICES.aurora);
+}
+async function win() {
+  mode = 'done';
+  const aur = $('#aur');
+  fade('crtMusic', 0, 900);
+  await type(aur, 'No. Wait. You can\'t-', VOICES.aurora);
+  const glyphs = '▓▒░#%&@$/\\';
+  for (let i = 0; i < 12; i++) {           // Aurora's voice corrupts mid-word
+    aur.textContent = [...aur.textContent].map(c => Math.random() < .4 ? glyphs[Math.random() * glyphs.length | 0] : c).join('');
+    await wait(40);
+  }
+  // CRT power-off: squash to a line, then a dot, then gone
+  await crt.animate([{ transform: 'scale(1,1)', filter: 'brightness(1)' },
+                     { transform: 'scale(1,.004)', filter: 'brightness(3)' }], { duration: 220, easing: 'ease-in', fill: 'forwards' }).finished;
+  sfx.off();
+  await crt.animate([{ transform: 'scale(1,.004)', filter: 'brightness(3)' },
+                     { transform: 'scale(.003,.004)', filter: 'brightness(6)' }], { duration: 260, easing: 'ease-in', fill: 'forwards' }).finished;
+  await crt.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 450, fill: 'forwards' }).finished;
+  document.body.classList.remove('crt');
+  await wait(500);
+  await finale();
+}
+
+// ===== Finale: the second upload attempt, which the players win =====
+let mash = 0;
+const segEls = [];
+function renderBar(p) {
+  $('#bp').textContent = Math.max(0, p).toFixed(1) + '%';
+  segEls.forEach((s, i) => s.classList.toggle('on', i < p / 2));
+}
+function hud() {
+  $('#nhex').textContent = Array.from({ length: 6 }, () => (Math.random() * 0xffff | 0).toString(16).toUpperCase().padStart(4, '0')).join(' ');
+  $('#nStat').innerHTML = `NODES ${net.nodes.length}/${net.nodes.length}<br>PACKETS ${net.packets.length.toString().padStart(3, '0')}<br>` +
+    `LINK ${mode === 'atk' ? 'UNDER ATTACK' : 'STABLE'}<br>SYNC ${sync()}%`;
+}
+async function resolveText(el, text, ms) {         // letters scramble, then lock in left to right
+  const chars = [...text], pool = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#$%&';
+  let locked = 0;
+  const scr = setInterval(() => el.textContent = chars.map((c, i) => i < locked || c === ' ' ? c : pool[Math.random() * pool.length | 0]).join(''), 40);
+  for (; locked < chars.length; locked++) { await wait(ms); if (chars[locked] !== ' ') sfx.tick(); }
+  clearInterval(scr); el.textContent = text;
+}
+
+async function terminal(A) {                    // the players' reply: a command types out, then the result decrypts in
+  const tm = $('#term');
+  tm.classList.toggle('blue', !!A.blue); tm.hidden = false; tm.textContent = '> ';
+  for (const ch of A.cmd) { tm.textContent += ch; sfx.key(); await wait(T.termChar); }
+  await wait(150);
+  const line = document.createElement('span'); line.className = 'ok';
+  tm.append('\n', line);
+  await resolveText(line, '[ OK ] ' + A.win, T.termChar);
+  sfx.ok(); tm.animate([{ filter: 'brightness(2.5)' }, { filter: 'brightness(1)' }], 350);
+  await wait(T.termHold);
+  await tm.animate([{ opacity: 1 }, { opacity: 0 }], 200).finished;
+  tm.hidden = true;
+}
+
+// breaks an element into jagged shards that burst out and fall. The shards are clipped copies of it,
+// cut along one shared jittered grid so they fit together exactly before flying apart
+async function shatter(el) {
+  const r = el.getBoundingClientRect(), cols = 6, rows = 3, host = $('#net');
+  el.animate([{ background: '#fff' }, { background: '#fff' }], 90);   // impact flash
+  shake(app, 10, 200); sfx.shatter();
+  await wait(90);
+  const pts = [];
+  for (let y = 0; y <= rows; y++) for (let x = 0; x <= cols; x++)
+    pts.push([x / cols * 100 + (x % cols ? rand(-6, 6) : 0), y / rows * 100 + (y % rows ? rand(-22, 22) : 0)]);
+  const P = (x, y) => pts[y * (cols + 1) + x].map(v => v.toFixed(1) + '%').join(' ');
+  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+    const s = el.cloneNode(true);
+    s.removeAttribute('id'); s.className = 'shard';
+    Object.assign(s.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px',
+      clipPath: `polygon(${P(x, y)}, ${P(x + 1, y)}, ${P(x + 1, y + 1)}, ${P(x, y + 1)})` });
+    host.append(s);
+    const dx = ((x + .5) / cols - .5) * rand(500, 1000), dy = ((y + .5) / rows - .5) * rand(200, 400) - rand(60, 160);
+    s.animate([{ transform: 'none', opacity: 1 },
+               { transform: `translate(${dx * .45}px,${dy * .45}px) rotate(${rand(-35, 35)}deg)`, opacity: 1, offset: .3 },
+               { transform: `translate(${dx}px,${dy + rand(350, 700)}px) rotate(${rand(-200, 200)}deg)`, opacity: 0 }],
+              { duration: rand(750, 1100), easing: 'cubic-bezier(.15,.6,.4,1)' }).finished.then(() => s.remove());
+  }
+  el.style.visibility = 'hidden';                  // the original is gone; shards take its place
+  await wait(250);
+  el.style.visibility = '';
+}
+
+async function attack(A, bar) {
+  const B = document.body, at = $('#atkT');
+  mode = 'atk';
+  B.classList.add('atk');
+  $('#pst').textContent = 'BLOCKED'; $('#pau').textContent = 'ATTACKING';
+  $("#atk").classList.remove("prompt"); $('#mashM i').style.width = '0';
+  eyes(CFG.EYES_DIM); hud();
+  {
+    beat.dist = true; fade('finaleMusic', .45, 200); sfx.alarm(); say(A.text);
+    // full-screen RGB split is expensive: only a burst on impact, not the whole mash window
+    rgbAmt = A.rgb; app.classList.add('rgb');
+    setTimeout(() => { rgbAmt = 0; app.classList.remove('rgb'); }, 400);
+    at.textContent = at.dataset.text = A.text; at.classList.add('glitch');
+    at.animate([{ transform: 'scale(2.5)', opacity: 0 }, { transform: 'scale(1)', opacity: 1 }], { duration: 220, easing: 'ease-out' });
+    shake(app, 16, 500);
+    for (let i = 0; i < 10; i++) { bar.p -= A.lose / 10; renderBar(bar.p); await wait(35); }   // she pushes the upload back
+  }
+  // players push through: mashing fills the meter before the timer runs out; it clears on its own at 0 either way
+  $('#atk').classList.add('prompt'); play('mashIn'); mash = 0;
+  const t0 = performance.now(), mt = $('#mashT');
+  let left;
+  while (mash < T.mashNeed && (left = T.mashTime - (performance.now() - t0)) > 0) {
+    $('#mashM i').style.width = mash / T.mashNeed * 100 + '%';
+    mt.textContent = (left / 1000).toFixed(1) + 's'; mt.classList.toggle('low', left < 1500);
+    await wait(30);
+  }
+  $('#mashM i').style.width = '100%';
+  play('mashOut');
+  if (mash >= T.mashNeed) await shatter($('#mash'));   // they broke through: the banner shatters
+  else { missed++; hud(); $('#nStat').animate([{ color: '#fff', textShadow: '0 0 20px #fff' }, {}], 600); }   // too slow: SYNC drops, visibly
+
+  B.classList.remove('atk'); rgbAmt = 0; app.classList.remove('rgb');
+  beat.dist = false; beat.on = true; beat.bpm += 10; fade('finaleMusic', 1, 300); eyes(CFG.EYES_FULL);
+  $('#pst').textContent = 'UPLOADING'; $('#pau').textContent = 'OVERRIDDEN';
+  mode = 'net'; shake(app, 8, 250);
+  const reply = terminal(A);
+  for (let i = 0; i < 10; i++) { bar.p = Math.min(99.9, bar.p + (A.lose + 4) / 10); renderBar(bar.p); await wait(30); }   // surge past where she stopped us
+  await reply;                                    // the reply finishes before the upload moves on
+}
+
+async function finale() {
+  mode = 'net'; frags.length = 0; ctx.clearRect(0, 0, W, H);
+  buildNet();
+  const [cx, cy] = center(), r = hs.getBoundingClientRect(), prof = $('#prof'), pw = W * .19 + 40;
+  prof.style.left = Math.max(10, r.right + W * .03 + pw < W ? r.right + W * .03 : r.left - W * .03 - pw) + 'px';
+  prof.style.top = Math.min(H * .55, Math.max(H * .15, r.top)) + 'px';
+  $('#pnote').textContent = NOTES[Math.random() * NOTES.length | 0];
+  $('#segs').innerHTML = '<i></i>'.repeat(50); segEls.push(...$('#segs').children);
+  renderBar(0); hud();
+  eyes(CFG.EYES_FULL);
+  play('finaleMusic', true);                      // music starts the moment the red CRT starts
+  await crtOn([$('#net'), cv], 'net', '#ff3344', .7);
+  net.t0 = performance.now();                     // the network starts wiring itself once the screen is open
+  beat.bpm = 124; beat.on = true;
+  await wait(T.netBuild);
+
+  const bar = { p: 0 };
+  let next = 0;
+  while (bar.p < 100) {
+    bar.p = Math.min(100, bar.p + T.uploadRate * (.4 + bar.p * .008) * rand(.5, 1.5));
+    if (next < ATTACKS.length && bar.p >= ATTACKS[next].at) await attack(ATTACKS[next++], bar);
+    renderBar(bar.p); net.rate = .15 + bar.p / 160; hud();
+    await wait(50);
+  }
+
+  // the surge: the whole network collapses into the mask
+  mode = 'surge'; $('#pst').textContent = 'COMPLETE'; $('#pau').textContent = 'DEFEATED';
+  sfx.riser(T.riser / 1000);
+  const t0 = performance.now();
+  let el, lastEye = 0, lit = true;
+  while ((el = performance.now() - t0) < T.riser) {
+    const k = el / T.riser;
+    net.conv = k; net.spin = k * 25; net.rate = 1;
+    app.style.transform = `translate(${rand(-1, 1) * k * 14}px,${rand(-1, 1) * k * 8}px)`;
+    if (el - lastEye > 160 - 110 * k) { eyes((lit = !lit) ? CFG.EYES_FULL : 0); lastEye = el; }   // eyes strobe faster and faster
+    await wait(30);
+  }
+  app.style.transform = ''; beat.on = false;
+
+  // white-out, drop, MIND UPLOADED
+  $('#flash').animate([{ opacity: 1 }, { opacity: 1, offset: .2 }, { opacity: 0 }], { duration: 1400, easing: 'ease-out' });
+  sfx.drop(); eyes(CFG.EYES_FULL);
+  mode = 'final'; ctx.clearRect(0, 0, W, H);
+  const fin = $('#final');
+  $('#fk').textContent = `AURORA//LINK ▸ TRANSFER 100% ▸ SYNC ${sync()}%`;
+  fin.style.setProperty('--cx', cx + 'px'); fin.style.setProperty('--cy', cy + 'px');
+  document.body.classList.remove('net'); document.body.classList.add('final');
+  await wait(350);
+  const ft = $('#ft');
+  await resolveText(ft, 'MIND UPLOADED', 70);
+  ft.dataset.text = ft.textContent; ft.classList.add('glitch'); sfx.stamp(); shake(app, 10, 400);
+  setTimeout(() => ft.classList.remove('glitch'), 700);
+  $('#fs').classList.add('on');
+  await wait(1400);
+  fade('finaleMusic', 0, 2500);
+  await type($('#fa'), 'fine, come in then.', VOICES.soft);
+  hubSend([...replay ? [] : [{ t: 'result', k: 'sync', v: sync(),   // staff replays don't overwrite a real team's SYNC
+    facts: { breached: `${ATTACKS.length - missed}/${ATTACKS.length}`, p1wrong: taunt, note: $('#pnote').textContent } }],
+    { t: 'evt', e: 'p1done' }]);                  // unlocks puzzle 2
+  for (let i = 0; i < 3; i++) { eyes(0); await wait(180); eyes(CFG.EYES_FULL); await wait(180); }
+}
+
+// ===== Hotspot (over the physical mask) + calibration =====
+let HS = store.get('hotspot') || { x: .45, y: .35, w: .1, h: .2 };   // fractions of the screen
+function placeHS() {
+  Object.assign(hs.style, { left: HS.x * 100 + 'vw', top: HS.y * 100 + 'vh', width: HS.w * 100 + 'vw', height: HS.h * 100 + 'vh' });
+  hs.style.setProperty('--d', `max(${HS.w * 100}vw, ${HS.h * 100}vh)`);   // circle as big as the area
+  $('#calibInfo').textContent = `code: ${CODE.join('')}   bits: ${BITS.join(' ')}\nmask: ${CFG.MASK_IPS.join(', ')}   muted: ${muted}`;
+}
+placeHS();
+{                                               // green static texture for the glow
+  const n = document.createElement('canvas'); n.width = n.height = 128;
+  const c = n.getContext('2d'), img = c.createImageData(128, 128);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const v = Math.random();
+    img.data.set([77, 255, 136, v < .5 ? 0 : v * 150], i);
+  }
+  c.putImageData(img, 0, 0);
+  hs.style.setProperty('--noise', `url(${n.toDataURL()})`);
+}
+
+hs.addEventListener('pointerenter', () => {
+  if (mode !== 'idle' || calib) return;
+  hs.classList.add('on'); eyes(CFG.EYES_DIM); humOn(true);   // the glow, the eyes and a low hum are the only tells
+});
+hs.addEventListener('pointerleave', () => {
+  hs.classList.remove('on');
+  if (mode === 'idle' && !calib) { eyes(0); humOn(false); }
+});
+hs.addEventListener('click', capture);
+
+let drag = null;
+hs.addEventListener('pointerdown', e => {
+  if (!calib) return;
+  const r = hs.getBoundingClientRect();
+  drag = { resize: e.clientX > r.right - 24 && e.clientY > r.bottom - 24, x: e.clientX, y: e.clientY, start: { ...HS } };
+  hs.setPointerCapture(e.pointerId);
+});
+hs.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const dx = (e.clientX - drag.x) / W, dy = (e.clientY - drag.y) / H, s = drag.start;
+  HS = drag.resize ? { ...s, w: Math.max(.02, s.w + dx), h: Math.max(.02, s.h + dy) } : { ...s, x: s.x + dx, y: s.y + dy };
+  placeHS();
+});
+hs.addEventListener('pointerup', () => { if (drag) { drag = null; store.set('hotspot', HS); } });
+
+// the control panel itself can be dragged anywhere; position saved as fractions of the screen like the hotspot
+const panel = $('#help'), placePanel = p => Object.assign(panel.style, { left: p.x * 100 + 'vw', top: p.y * 100 + 'vh' });
+let pdrag = null;
+if (store.get('panel')) placePanel(store.get('panel'));
+panel.addEventListener('pointerdown', e => {
+  const r = panel.getBoundingClientRect();
+  pdrag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+  panel.setPointerCapture(e.pointerId);
+});
+panel.addEventListener('pointermove', e => {
+  if (pdrag) placePanel({ x: (e.clientX - pdrag.dx) / W, y: (e.clientY - pdrag.dy) / H });
+});
+panel.addEventListener('pointerup', () => { if (pdrag) { pdrag = null; store.set('panel', { x: panel.offsetLeft / W, y: panel.offsetTop / H }); } });
+
+// ===== Keys: players type digits; staff use Ctrl+Alt+<key> (H = control panel) (Ctrl+Shift combos are taken by the browser) =====
+addEventListener('keydown', e => {
+  if (e.ctrlKey && e.altKey && e.code === 'KeyH') {   // control panel = hotspot box + corner brackets + shortcuts, all in one
+    e.preventDefault(); calib = !calib; document.body.classList.toggle('calib', calib); placeHS(); return;
+  }
+  if (e.ctrlKey && e.altKey) {
+    e.preventDefault();
+    if (e.code === 'KeyF') capture();
+    if (e.code === 'KeyR') { eyes(0); setTimeout(() => location.reload(), 150); }
+    if (e.code === 'KeyP') { eyes(0); location.hash = 'replay'; location.reload(); }
+    if (e.code === 'KeyW') { eyes(0); location.hash = 'win'; location.reload(); }
+    if (e.code === 'KeyM') { muted = !muted; store.set('muted', muted); master.gain.value = muted ? 0 : CFG.VOLUME;
+      Object.values(tracks).forEach(a => a.muted = muted); placeHS(); }
+    return;
+  }
+  if (mode === 'atk') {      // players mash to push back Aurora
+    if (e.repeat) return;
+    mash++; sfx.hit();
+    $('#atkT').animate([{ translate: `${rand(-12, 12)}px ${rand(-6, 6)}px` }, { translate: '0 0' }], 90);
+    return;
+  }
+  if (mode !== 'input') return;
+  if (/^\d$/.test(e.key) && entry.length < 4) {
+    entry += e.key; sfx.tick(); renderCells();
+    if (entry.length === 4) check();
+  } else if (e.key === 'Backspace') { entry = entry.slice(0, -1); renderCells(); }
+});
+
+eyes(0);
+if (location.hash === '#replay') { history.replaceState(null, '', location.pathname + location.search); setTimeout(capture, 400); }
+if (location.hash === '#win') { history.replaceState(null, '', location.pathname + location.search); mode = 'done'; replay = true; setTimeout(finale, 400); }
+</script>
+</body>
+</html>

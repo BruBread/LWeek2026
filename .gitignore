@@ -1,0 +1,21 @@
+node_modules/
+__pycache__/
+
+# Secrets: kept on the booth machines only
+**/secrets.h
+puzzle2-system-power/devices.json
+signup/pin.txt
+signup/camera.json
+signup/go2rtc.exe
+
+# Event data: sales, player photos, run history
+signup/sales.jsonl
+signup/photos/
+hub/runs.jsonl
+hub/run.json
+
+# Separate teammate repo with its own remote
+LWeek-Queuing-System/
+
+.claude/
+.vscode/

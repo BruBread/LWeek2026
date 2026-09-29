@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AURORA//GM</title>
+<style>
+/* GM panel. Same language as the games (red HUD = the players, green = Aurora), but calm: no flicker, no glitch loops. */
+:root { --hud: #ff3344; --g: #4dff88; --amb: #ffb020; --dim: #8a9499; }
+* { box-sizing: border-box; margin: 0; }
+body { min-height: 100vh; padding: 16px; color: var(--hud); font: 14px/1.45 Consolas, "Cascadia Mono", monospace; letter-spacing: .05em;
+  background: linear-gradient(rgba(255,51,68,.05) 1px, transparent 1px) 0 0 / 40px 40px,
+              linear-gradient(90deg, rgba(255,51,68,.05) 1px, transparent 1px) 0 0 / 40px 40px,
+              radial-gradient(ellipse at center, #1c0508, #000) fixed; }
+body::after { content: ""; position: fixed; inset: 0; pointer-events: none;     /* static scanlines */
+  background: repeating-linear-gradient(to bottom, rgba(0,0,0,.25) 0 1px, transparent 1px 3px); }
+small { color: var(--dim); font-size: 11px; letter-spacing: .25em; }
+.box { border: 1px solid rgba(255,51,68,.45); background: rgba(20,0,4,.85); padding: 14px; }
+button { font: inherit; font-size: 12px; letter-spacing: .12em; color: var(--hud); background: none; border: 1px solid; padding: 7px 10px; cursor: pointer; }
+button:hover { background: var(--hud); color: #000; }
+button.white { color: #fff; } button.white:hover { background: #fff; }
+input { font: inherit; color: #fff; background: #000; border: 1px solid rgba(255,51,68,.6); padding: 7px 8px; width: 200px; }
+
+#top { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; margin-bottom: 16px; }
+#brand b { display: block; color: #fff; font-size: 22px; letter-spacing: .3em; text-shadow: 0 0 8px var(--hud); }
+#who { color: #fff; font-size: 18px; margin-left: auto; }
+#clock { font-size: 44px; font-weight: 700; line-height: 1; color: var(--dim); }
+#clock.ok { color: var(--g); } #clock.warn { color: var(--amb); } #clock.over { color: var(--hud); } #clock.fin { color: #fff; }
+
+#rooms { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px; }
+@media (max-width: 1100px) { #rooms { grid-template-columns: repeat(2, 1fr); } }
+.room h3 { font-size: 12px; font-weight: 400; letter-spacing: .2em; }
+.room h3 b { color: #fff; }
+/* device lights: green = answering, red = not (click one for what to check), grey = can't tell right now */
+.devs { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 6px; font-size: 11px; letter-spacing: .15em; }
+.dev { cursor: pointer; white-space: nowrap; } .dev::before { content: "● "; }
+.dev.ok { color: var(--g); } .dev.down { color: var(--hud); font-weight: 700; } .dev.unk { color: var(--dim); }
+#sys { display: inline-flex; margin-top: 0; }
+.state { font-size: 26px; font-weight: 700; letter-spacing: .15em; margin: 10px 0 2px; color: #fff; }
+.code { color: var(--amb); min-height: 1.5em; margin: 6px 0; }
+.live { display: flex; justify-content: space-between; align-items: baseline; margin-top: 8px; }
+.live b { color: #fff; font-size: 24px; }
+.segs { display: flex; gap: 3px; height: 10px; margin: 4px 0 8px; }
+.segs i { flex: 1; background: currentColor; opacity: .12; } .segs i.on { opacity: 1; }
+.aur { color: var(--g); }   /* TRACE and HUMAN are Aurora's */
+.room.off .live, .room.off .segs { opacity: .35; }
+.res { color: #fff; font-size: 18px; font-weight: 700; display: flex; justify-content: space-between; align-items: center;
+  border-top: 1px solid rgba(255,51,68,.25); padding-top: 10px; }
+.keys { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.room.off .state { color: var(--dim); }
+.room.clear { border-color: var(--g); } .room.clear .state { color: var(--g); }
+.room.alarm { animation: alarm 1s steps(1) infinite; }
+@keyframes alarm { 50% { background: #4a0008; } }
+
+#bottom { display: grid; grid-template-columns: 2fr 1fr 2fr; gap: 16px; }
+#line h4 { font-weight: 400; margin: 10px 0 4px; } #line h4:first-child { margin-top: 0; }
+.grp { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding: 4px 0; border-bottom: 1px solid rgba(255,51,68,.15); }
+.grp .t { color: #fff; margin-right: auto; } .grp .cd { color: var(--amb); } .grp .cd.late { color: var(--hud); font-weight: 700; }
+.ph { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.ph img { height: 56px; width: 56px; object-fit: cover; border: 1px solid rgba(255,51,68,.5); }
+@media (max-width: 1100px) { #bottom { grid-template-columns: 1fr 1fr; } #line { grid-column: 1 / -1; } }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+td, th { padding: 4px 6px; text-align: left; border-bottom: 1px solid rgba(255,51,68,.15); font-weight: 400; color: #ddd; }
+th { color: var(--dim); font-size: 11px; } td.win { color: var(--g); }
+</style>
+</head>
+<body>
+
+<div id="top">
+  <div id="brand"><b>AURORA//GM</b><small><span id="sys" class="devs"></span> · SOUND <span id="snd">CLICK PAGE TO TURN ON</span></small></div>
+  <input id="tname" placeholder="TEAM NAME" maxlength="40"><button onclick="newTeam()">NEW TEAM</button>
+  <div id="who">NO TEAM</div>
+  <div id="clock">--:--</div>
+  <button onclick="finish()">FINISH RUN</button>
+  <button onclick="resetAll()">RESET ALL ROOMS</button>
+</div>
+
+<div id="rooms"></div>
+
+<div id="bottom">
+  <div class="box" id="line"></div>
+  <div class="box">
+    <div class="row"><button class="white" onclick="scene('safe')">SAFE · ALL LIGHTS ON</button><button onclick="scene('finale_red')">FINALE RED</button></div>
+    <div class="row"><a href="/dossier" target="_blank"><button>DOSSIER ↗</button></a></div>
+    <small id="phones"></small>
+  </div>
+  <div class="box"><small>RUN HISTORY</small><div id="hist"></div></div>
+</div>
+
+<script>
+const LIMIT_MIN = 20;        // booth time limit: the clock turns amber at 75%, red past it; ✓ in history = under it
+// the signup kiosk (signup/server.js): the hub tells us its IP once the kiosk page connects ('addr'); until then, or
+// when it runs on the hub laptop, this laptop
+let SIGNUP = 'http://' + location.hostname + ':4000';
+// One card per room. keys = that room's Ctrl+Alt staff keys, pressed remotely; a 3rd item asks to confirm first.
+const ROOMS = [
+  { id: 'puzzle1', name: 'BRAIN UPLOAD',  k: 'sync',  stat: 'SYNC',   hint: -5, devs: ['mask'], keys: [['KeyF', 'FORCE CAPTURE', 'Force the mask capture?'], ['KeyR', 'RESET', 'Reset room 1?']] },
+  { id: 'puzzle2', name: 'SYSTEM POWER',  k: 'power', stat: 'ENERGY', hint: -5, devs: ['bulb', 'camera'], keys: [['KeyU', 'UNLOCK'], ['KeyX', 'CAUGHT', 'Team caught? (-15 POWER, they advance)'], ['KeyR', 'RESET', 'Reset room 2?']] },
+  { id: 'puzzle3', name: 'HIDDEN SIGNAL', k: 'trace', stat: 'TRACE',  aur: 1, hint: 5,  devs: ['beacon', 'decoy'], keys: [['KeyU', 'UNLOCK'], ['KeyF', 'FORCE WIN', 'Force the win?'], ['KeyR', 'RESET', 'Reset room 3?']] },
+  { id: 'puzzle4', name: 'CORE GATE',     k: 'human', stat: 'HUMAN',  aur: 1, hint: 5,  devs: ['ring0', 'ring1'], keys: [['KeyU', 'UNLOCK'], ['KeyF', 'FORCE WIN', 'Force the win?'], ['KeyR', 'RESET', 'Reset room 4?']] },
+];
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
+const mmss = ms => ms == null ? '--:--' : `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
+let ws, run = { splits: {} }, skew = 0, rost = { devices: [], pages: [] };
+const status = {}, seen = {}, wasOn = {}, wasOk = {};
+const send = o => ws?.readyState === 1 && ws.send(JSON.stringify(o));
+const scene = v => send({ t: 'cmd', a: 'scene', v });
+const key = (id, v) => send({ t: 'cmd', to: id, a: 'key', v });
+const online = id => ws?.readyState === 1 && Date.now() - (seen[id] || 0) < 3000;   // rooms report every second
+const clock = () => run.end ?? (run.t0 ? Date.now() + skew - run.t0 : null);
+
+// alerts: a low beep when a room goes silent, a chime when a room is cleared
+const AC = new AudioContext();
+addEventListener('pointerdown', () => AC.resume().then(() => $('#snd').textContent = 'ON'));
+function tone(f, dur, delay = 0) {
+  const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
+  o.frequency.value = f; g.gain.setValueAtTime(.15, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  o.connect(g).connect(AC.destination); o.start(t); o.stop(t + dur);
+}
+
+// ===== Device lights. Each answers [ok, what to check]: ok true = green, false = red (beeps once), null = grey (can't tell) =====
+// Whoever already talks to a device reports it: P1 pings the mask, P3 pushes codes to its boards, P4 reads the ring
+// controllers over USB, the bulb bridge probes the bulb, the signup PC looks for the camera; the rest is the hub's roster.
+const hubUp = () => ws?.readyState === 1, linked = id => rost.pages.includes(id) || rost.devices.includes(id);
+const via = (room, f) => !hubUp() ? [null, 'the hub is down'] : !online(room) ? [null, `can't tell: the ${room} laptop is offline`] : f(status[room]);
+const board = (name, phone, ip) => () => hubUp() && linked(phone) ? [true, `a phone stands in (/beacon${name === 'decoy' ? '?decoy' : ''})`] :
+  via('puzzle3', s => s.boards?.[name] === undefined ? [null, 'checking…'] : s.boards[name] === true ? [true, `ESP32 board answering (${ip})`] :
+    [false, `${name === 'decoy' ? 'decoy' : 'IR beacon'} ESP32 not answering (${ip}), and no phone on /beacon${name === 'decoy' ? '?decoy' : ''}. Switched on? On NexusV?`]);
+const ring = i => () => via('puzzle4', s => s.rings?.[i] ? [true, 'sending knob readings'] :
+  [false, `no readings from the ${i ? 'INNER' : 'OUTER'} ring controller. USB plugged into the P4 laptop? Paired (Ctrl+Alt+P there)? The keys work meanwhile.`]);
+const DEVS = {
+  hub:    ['HUB', () => hubUp() ? [true, 'connected'] : [false, 'not responding. Is hub\\start.bat running on the hub laptop?']],
+  signup: ['SIGNUP', () => S ? [true, 'signup server answering'] : [false, 'signup server not responding. Run signup\\start.bat on the signup PC. Until then: type team names + NEW TEAM.']],
+  kiosk:  ['KIOSK↔HUB', () => !hubUp() ? [null, 'the hub is down'] : linked('signup') ? [true, 'the kiosk page is linked to the hub'] :
+    [S ? false : null, "the kiosk page isn't linked to the hub: no camera pop-up or booth progress on it. Reload it (Ctrl+Alt+R on the signup PC)."]],
+  dossier: ['DOSSIER', () => hubUp() && linked('dossier') ? [true, 'room 5 screen open'] : [null, 'room 5 screen (/dossier) not open']],
+  board:  ['TV BOARD', () => hubUp() && linked('queue-board') ? [true, 'queue board (/queue) open'] : [null, 'queue board (/queue) not open (optional)']],
+  mask:   ['MASK', () => via('puzzle1', s => s.mask ? [true, 'eyes answering'] : [false, 'mask ESP32 not answering (.50). Switched on? On NexusV? Its red Wi-Fi LED lit?'])],
+  bulb:   ['BULB', () => !hubUp() ? [null, 'the hub is down'] : !linked('strip') ? [false, 'bulb bridge not running. hub\\start.bat starts it on the hub laptop.'] :
+    status.strip?.bulb == null ? [null, 'bridge running, looking for the bulb…'] : status.strip.bulb ? [true, 'bulb at ' + status.strip.ip] :
+    [false, 'bridge running, but the bulb is not answering. Lamp switched on at the wall? On NexusV?']],
+  camera: ['CAMERA', () => !S ? [null, "can't tell: the signup server is down"] : !S.camera ? [null, 'checking…'] : S.camera.error ? [false, S.camera.error] :
+    S.camera.ip ? [true, 'camera at ' + S.camera.ip] : [false, 'camera not found on the network. Plugged in? On NexusV?']],
+  beacon: ['IR BEACON', board('beacon', 'beacon-sim', '.51')],
+  decoy:  ['DECOY', board('decoy', 'beacon-decoy', '.52')],
+  ring0:  ['RING OUTER', ring(0)],
+  ring1:  ['RING INNER', ring(1)],
+};
+$('#sys').innerHTML = ['hub', 'signup', 'kiosk', 'dossier', 'board'].map(d => `<span class="dev unk" data-dev="${d}">${DEVS[d][0]}</span>`).join('');
+$('#sys').onclick = e => { const d = e.target.closest('.dev'); if (d) alert(d.textContent + ': ' + d.title); };
+
+// cards are built once and only their text changes, so a click never lands on a rebuilt button
+$('#rooms').innerHTML = ROOMS.map((r, i) => `
+  <div class="box room off" id="${r.id}">
+    <h3>SECTOR 0${i + 1} ▸ <b>${r.name}</b></h3>
+    <div class="devs">${r.devs.map(d => `<span class="dev unk" data-dev="${d}">${DEVS[d][0]}</span>`).join('')}</div>
+    <div class="state"></div><small class="tin"></small>
+    <div class="live ${r.aur ? 'aur' : ''}"><small>${r.stat}</small><b>--</b></div>
+    <div class="segs ${r.aur ? 'aur' : ''}">${'<i></i>'.repeat(25)}</div>
+    <div class="code"></div>
+    <div class="res"><span class="rv"></span><button data-hint>${r.hint > 0 ? '+' : ''}${r.hint} HINT</button></div>
+    <div class="keys">${r.keys.map(([c, l]) => `<button data-key="${c}">${l}</button>`).join('')}</div>
+  </div>`).join('');
+ROOMS.forEach(r => $('#' + r.id).onclick = e => {
+  e.currentTarget.classList.remove('alarm');
+  const d = e.target.closest('.dev'); if (d) return alert(d.textContent + ': ' + d.title);
+  const b = e.target.closest('button'); if (!b) return;
+  if ('hint' in b.dataset) return send({ t: 'adj', k: r.k, d: r.hint, why: 'hint' });
+  const [c, , ask] = r.keys.find(([c]) => c === b.dataset.key);
+  if (!online(r.id)) return alert(r.name + ' is offline. Check its laptop.');
+  if (!ask || confirm(ask)) key(r.id, c);
+});
+
+function render() {
+  ROOMS.forEach((r, i) => {
+    const card = $('#' + r.id), s = status[r.id] || {}, on = online(r.id);
+    const t0 = i ? run.splits[`p${i}done`] : 0, t1 = run.splits[`p${i + 1}done`];
+    const state = t1 != null ? 'CLEARED' : !on ? 'OFFLINE' : s.mode === 'standby' ? (s.unlocked ? 'READY' : 'LOCKED')
+      : s.mode === 'idle' ? 'READY' : 'PLAYING';
+    card.classList.toggle('off', !on); card.classList.toggle('clear', t1 != null);
+    card.querySelector('.state').textContent = state;
+    card.querySelector('.tin').textContent = !run.t0 ? '' : t1 != null ? `IN ${mmss(t1 - t0)}` : t0 != null ? `IN ROOM ${mmss(clock() - t0)}` : 'NOT REACHED';
+    const v = on ? s.stat : null;
+    card.querySelector('.live b').textContent = v != null ? v + '%' : '--';
+    card.querySelectorAll('.segs i').forEach((el, j) => el.classList.toggle('on', v != null && j < v / 4));
+    card.querySelector('.code').textContent = on && s.code ? `CODE ${s.code}${s.decoy ? ` · decoy ${s.decoy}` : ''}` : '';
+    card.querySelector('.rv').textContent = `${r.k.toUpperCase()} ${run[r.k] ?? '--'}`;
+    if (wasOn[r.id] && !on) { card.classList.add('alarm'); tone(220, .5); }
+    if (on) card.classList.remove('alarm');
+    wasOn[r.id] = on;
+  });
+  document.querySelectorAll('[data-dev]').forEach(el => {
+    const [ok, why] = DEVS[el.dataset.dev][1]();
+    el.className = 'dev ' + (ok ? 'ok' : ok === false ? 'down' : 'unk'); el.title = why;
+    if (wasOk[el.dataset.dev] && ok === false) { tone(220, .5); el.closest('.room')?.classList.add('alarm'); }
+    wasOk[el.dataset.dev] = ok;
+  });
+  const ms = clock(), lim = LIMIT_MIN * 60000;
+  $('#clock').textContent = mmss(ms);
+  $('#clock').className = ms == null ? '' : run.end != null ? 'fin' : ms > lim ? 'over' : ms > lim * .75 ? 'warn' : 'ok';
+  $('#who').textContent = run.team || 'NO TEAM';
+}
+
+function newTeam() {
+  const team = $('#tname').value.trim();
+  if (!team) return $('#tname').focus();
+  if (run.t0 && run.end == null && !confirm(`${run.team} hasn't finished. Start ${team} anyway? (their run is not saved)`)) return;
+  send({ t: 'newteam', team }); $('#tname').value = '';
+}
+function finish() {
+  if (!run.t0 || run.end != null || !confirm(`Stop the clock for ${run.team} at ${mmss(clock())}?`)) return;
+  send({ t: 'finish' });
+  const g = S?.sales.find(s => s.status === 'in' && s.team === run.team);
+  if (g) setStatus(g.code, 'done');
+}
+function resetAll() {
+  // mid-run, a reset room unlocks itself again (the hub resends this run's unlocks), so warn when FINISH RUN was skipped
+  const open = run.t0 && run.end == null ? `\n\n${run.team} hasn't finished: the rooms they reached will unlock again. Press FINISH RUN first if they're done.` : '';
+  if (confirm('Reset ALL four rooms? Only between teams.' + open)) ROOMS.forEach(r => key(r.id, 'KeyR'));
+}
+
+// ===== The line, from the signup kiosk: who's inside, who's called, who's next =====
+let S = null, lineHTML = '', calls = null;
+const pad2 = n => String(n).padStart(2, '0');
+const ymd = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const fmtTime = sl => { const [h, m] = sl.time.split(':').map(Number); return `${(h + 11) % 12 + 1}:${pad2(m)} ${h < 12 ? 'AM' : 'PM'}`; };
+const bySlot = (a, b) => (a.slot.date + a.slot.time < b.slot.date + b.slot.time ? -1 : 1);
+const calledAt = s => [...s.history].reverse().find(h => h.to === 'called')?.at;
+async function signupPoll() {
+  try { S = await (await fetch(SIGNUP + '/api/state')).json(); S.skew = S.now - Date.now(); } catch { S = null; }
+  renderLine();
+}
+// a text/plain body keeps this a "simple" cross-origin request with no preflight: the signup server has no OPTIONS route and parses the JSON anyway
+async function setStatus(code, status) {
+  try {
+    const r = await fetch(SIGNUP + '/api/status', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ code, status }) });
+    const b = await r.json(); if (!r.ok) alert(b.error); signupPoll(); return r.ok;
+  } catch { alert('The signup kiosk is not responding.'); return false; }
+}
+async function sendIn(s) {
+  const warn = run.t0 && run.end == null ? `
+
+${run.team} hasn't finished: their run is NOT saved.` : '';
+  if (!confirm(`Send "${s.team}" (${s.size} players) into the booth? This starts the clock.${warn}`)) return;
+  if (await setStatus(s.code, 'in')) send({ t: 'newteam', team: s.team });
+}
+function renderLine() {
+  let h;
+  if (!S) h = '<small>SIGNUP KIOSK NOT RESPONDING · TYPE THE TEAM NAME + NEW TEAM</small>';
+  else {
+    const today = ymd(new Date(Date.now() + S.skew)), sales = S.sales;
+    const inside = sales.find(s => s.status === 'in'), calling = sales.filter(s => s.status === 'called').sort(bySlot);
+    const next = sales.filter(s => s.status === 'booked' && s.slot.date >= today).sort(bySlot).slice(0, 3);
+    const left = sales.filter(s => ['booked', 'called'].includes(s.status) && s.slot.date === today).length;
+    const grp = (s, btns) => `<div class="grp"><span>${s.slot.date === today ? '' : s.slot.date.slice(5) + ' '}${fmtTime(s.slot)}</span>` +
+      `<span class="t">${esc(s.team)} · ${s.size}</span>${btns.map(([a, l]) => `<button data-act="${a}" data-code="${s.code}">${l}</button>`).join('')}</div>`;
+    h = `<small>SOLD ${S.sold}/${S.cfg.TICKETS} · ${left} GROUP${left === 1 ? '' : 'S'} LEFT TODAY</small>` +
+      `<h4><small>IN BOOTH</small></h4>` + (inside ? `<div class="grp"><span class="t">${esc(inside.team)} · ${inside.size} PLAYERS · ${inside.code}</span></div>` +
+        `<div class="ph">${inside.photos.map(u => `<a href="${SIGNUP + u}" target="_blank"><img src="${SIGNUP + u}" alt=""></a>`).join('')}</div>` : '<small>—</small>') +
+      `<h4><small>CALLING</small></h4>` + (calling.map(s => grp(s, [['in', 'SEND IN'], ['noshow', 'NO-SHOW']]).replace('<span class="t">', `<b class="cd" data-at="${Date.parse(calledAt(s))}"></b><span class="t">`)).join('') || '<small>—</small>') +
+      `<h4><small>UP NEXT</small></h4>` + (next.map(s => grp(s, [['call', 'CALL'], ['in', 'SEND IN']])).join('') || '<small>NOBODY BOOKED</small>');
+    const codes = calling.map(s => s.code).join();
+    if (calls != null && codes && codes !== calls && calling.some(s => !calls.includes(s.code))) { tone(880, .15); tone(1320, .3, .15); }
+    calls = codes;
+  }
+  if (h !== lineHTML) $('#line').innerHTML = lineHTML = h;   // unchanged -> untouched, so a click never lands on a rebuilt button
+  tickLine();
+}
+function tickLine() {        // the called groups' grace countdown
+  if (S) document.querySelectorAll('#line .cd').forEach(el => {
+    const r = S.cfg.GRACE_MIN * 60000 - (Date.now() + S.skew - +el.dataset.at);
+    el.textContent = r > 0 ? mmss(r) : 'NO-SHOW?'; el.classList.toggle('late', r <= 0);
+  });
+}
+$('#line').onclick = e => {
+  const b = e.target.closest('[data-act]'), s = b && S?.sales.find(x => x.code === b.dataset.code); if (!s) return;
+  if (b.dataset.act === 'call') setStatus(s.code, 'called');
+  if (b.dataset.act === 'in') sendIn(s);
+  if (b.dataset.act === 'noshow' && confirm(`Mark "${s.team}" as a no-show? Their slot is given up (the kiosk can put them back in line).`)) setStatus(s.code, 'noshow');
+};
+
+function conn() {
+  ws = new WebSocket('ws://' + location.host + '/ws');
+  ws.onopen = () => { send({ t: 'hello', id: 'gm-' + Math.random().toString(36).slice(2, 6), role: 'page' }); };
+  ws.onclose = () => { rost = { devices: [], pages: [] }; render(); setTimeout(conn, 1000); };
+  ws.onmessage = e => {
+    const m = JSON.parse(e.data);
+    if (m.t === 'status') { status[m.id] = m.v; seen[m.id] = Date.now(); }
+    if (m.t === 'run') { run = m; skew = m.now - Date.now(); }
+    if (m.t === 'addr') {
+      SIGNUP = 'http://' + (m.signup || location.hostname) + ':4000';
+      $('#phones').innerHTML = m.hub.length ? `PHONES OPEN · BEACONS <b>${m.hub[0]}:3000/beacon</b> (+ <b>?decoy</b>)` +
+        (m.hub.length > 1 ? `<br>OTHER NETWORKS ON THIS LAPTOP: ${m.hub.slice(1).join(', ')}` : '') : 'THIS LAPTOP IS NOT ON A NETWORK';
+    }
+    if (m.t === 'evt' && /^p\ddone$/.test(m.e)) { tone(880, .15); tone(1320, .3, .15); }
+    if (m.t === 'roster') rost = m;
+    if (m.t === 'history') $('#hist').innerHTML = `<table><tr><th>TEAM</th><th>TIME</th><th>SYNC</th><th>POWER</th><th>TRACE</th><th>HUMAN</th></tr>` +
+      m.runs.slice().reverse().map(x => `<tr><td>${esc(x.team)}</td><td class="${x.end <= LIMIT_MIN * 60000 ? 'win' : ''}">${mmss(x.end)}${x.end <= LIMIT_MIN * 60000 ? ' ✓' : ''}</td>` +
+        ['sync', 'power', 'trace', 'human'].map(k => `<td>${x[k] ?? '-'}</td>`).join('') + '</tr>').join('') + '</table>';
+    render();
+  };
+}
+setInterval(() => { render(); tickLine(); }, 500);
+setInterval(signupPoll, 2000);
+conn(); signupPoll();
+</script>
+</body>
+</html>

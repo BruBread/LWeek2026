@@ -1,0 +1,16 @@
+{
+  "name": "hub",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "NEXUS hub: static pages + WebSocket relay between game laptops, ESP32 props and the GM panel",
+  "dependencies": {
+    "ws": "^8.21.3"
+  }
+}

@@ -1,0 +1,17 @@
+<!doctype html><meta charset=utf-8><title>NEXUS sim</title>
+<style>body{font:15px sans-serif;margin:16px;background:#222;color:#eee}#box{width:160px;height:160px;border-radius:50%;background:#fff}</style>
+<p>Fake device. <code>?id=mask</code> or <code>?id=strip</code>. Shows last command; fail-safe after 3s w/o ping.</p>
+<div id=box></div><pre id=o></pre>
+<script>
+const id=new URLSearchParams(location.search).get('id')||'strip';let ws,last=Date.now();
+const color=(a,v)=>v=='dim'?'#224':v=='red'?'#f00':v=='full'?'#6af':v;
+function conn(){
+  ws=new WebSocket('ws://'+location.host+'/ws');
+  ws.onopen=()=>ws.send(JSON.stringify({t:'hello',id,role:'device'}));
+  ws.onclose=()=>setTimeout(conn,1000);
+  ws.onmessage=e=>{const m=JSON.parse(e.data);last=Date.now();
+    if(m.t=='cmd'){box.style.background=color(m.a,m.v);o.textContent=JSON.stringify(m)}};
+}
+conn();
+setInterval(()=>{if(Date.now()-last>3000){box.style.background='#fff';o.textContent='FAILSAFE'}},500);
+</script>

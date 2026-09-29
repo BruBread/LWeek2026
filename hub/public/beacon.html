@@ -1,0 +1,55 @@
+<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>NEXUS beacon</title>
+<!-- Stand-in for the puzzle 3 beacon boards until the parts arrive. Open on a phone/tablet on the booth Wi-Fi:
+       http://<hub laptop IP>:3000/beacon         the real board (3 white lights)
+       http://<hub laptop IP>:3000/beacon?decoy   the decoy (3 red lights)
+     Tap once for fullscreen. Turn the phone's auto-lock off. It gets the current code from puzzle3/game.html through the hub.
+     Add &debug to show the code on screen (never during a real run). -->
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}
+#row{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;gap:6vmin}
+#row div{display:flex;flex-direction:column;align-items:center;gap:3vmin;color:#333;font:5vmin monospace}
+#row i{width:13vmin;height:13vmin;border-radius:50%;background:#000;border:1px solid #111}
+#s{position:fixed;bottom:6px;left:8px;color:#222;font:11px monospace}</style>
+<div id=row></div><div id=s></div>
+<script>
+// Timing must match beacon_esp32.ino (ms)
+const T = { ON: 250, OFF: 350, LED_GAP: 1000, LOOP_GAP: 3000 };
+const q = new URLSearchParams(location.search), DECOY = q.has('decoy'), DEBUG = q.has('debug');
+const COLOR = DECOY ? '#ff2a2a' : '#e8dcff';
+let code = DECOY ? '241' : '314', steps, t0, total, online = false;   // defaults = the ESP32's boot codes
+row.innerHTML = [1, 2, 3].map(n => `<div><i></i>${n}</div>`).join('');   // numbered like the stickers on the breadboard
+const dots = [...row.querySelectorAll('i')];
+
+function build(c) {                    // [lit LED 0-2 or -1, ms]: LED 1 blinks digit 1 times, pause, LED 2 ..., long pause
+  const s = [];
+  [...c].forEach((ch, i) => { for (let b = 0; b < +ch; b++) s.push([i, T.ON], [-1, b < +ch - 1 ? T.OFF : T.LED_GAP]); });
+  s[s.length - 1][1] = T.LOOP_GAP;
+  return s;
+}
+function set(c) {
+  if (!/^[1-5]{3}$/.test(c) || (c === code && steps)) return;   // same code again: don't restart mid-pattern
+  code = c; steps = build(c); total = steps.reduce((a, x) => a + x[1], 0); t0 = performance.now();
+}
+set(code);
+(function frame() {
+  let t = (performance.now() - t0) % total, lit = -1;
+  for (const [l, d] of steps) { if (t < d) { lit = l; break; } t -= d; }
+  dots.forEach((d, i) => { d.style.background = i === lit ? COLOR : '#000'; d.style.boxShadow = i === lit ? `0 0 6vmin ${COLOR}` : 'none'; });
+  s.textContent = (online ? '.' : 'x') + (DEBUG ? ' ' + code : '');   // tiny link dot, not readable from across the room
+  requestAnimationFrame(frame);
+})();
+
+function conn() {
+  const ws = new WebSocket('ws://' + location.host + '/ws');
+  ws.onopen = () => { online = true; ws.send(JSON.stringify({ t: 'hello', id: DECOY ? 'beacon-decoy' : 'beacon-sim', role: 'page' }));
+                      ws.send(JSON.stringify({ t: 'evt', e: 'p3ask' })); };
+  ws.onclose = () => { online = false; setTimeout(conn, 2000); };
+  ws.onmessage = e => { const m = JSON.parse(e.data);
+    if (m.t === 'evt' && m.e === 'p3code') set(DECOY ? m.v.decoy : m.v.code); };
+}
+conn();
+document.body.onclick = () => document.documentElement.requestFullscreen?.().catch(() => {});
+
+// self-check: "312" = LED 0 three times, LED 1 once, LED 2 twice: the gap after each LED's last blink is LED_GAP, the very last is LOOP_GAP
+const c = build('312');
+console.assert(c.length === 12 && c[0][0] === 0 && c[5][1] === T.LED_GAP && c[6][0] === 1 && c[11][1] === T.LOOP_GAP, 'build() broken');
+</script>

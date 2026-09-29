@@ -1,0 +1,1243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AURORA</title>
+<style>
+/* same visual language as puzzles 1-3: red HUD = the players, green = Aurora */
+:root { --g: #4dff88; --red: #ff2a4a; --hud: #ff3344; }
+* { box-sizing: border-box; margin: 0; }
+html, body { height: 100%; background: #000; overflow: hidden; cursor: none; user-select: none;
+  font-family: Consolas, "Cascadia Mono", "Lucida Console", monospace; }
+
+#app { position: fixed; inset: 0; }
+#vignette { position: fixed; inset: 0; pointer-events: none; z-index: 30;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.85) 100%); }
+#flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 60; }
+.txt { text-shadow: -1.5px 0 rgba(255,40,80,.5), 1.5px 0 rgba(40,200,255,.5), 0 0 10px currentColor; }
+
+/* standby: locked until puzzle 3 is finished, then waits for space */
+#standby { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--hud);
+  font-size: 1.3vw; letter-spacing: .5em; opacity: .35; transition: opacity .6s; }
+#standby::after { content: "\258C"; animation: blink 1s steps(1) infinite; margin-left: .2em; }
+body.ready #standby { opacity: 1; font-size: 1.8vw; }
+body.started #standby { display: none; }
+
+/* the CRT screen */
+#beam { position: fixed; left: 0; top: 50%; width: 100vw; height: 3px; margin-top: -1.5px; z-index: 25; opacity: 0;
+  --bc: var(--hud); background: #fff; transform: scaleX(0); pointer-events: none;
+  box-shadow: 0 0 10px 3px var(--bc), 0 0 50px 14px var(--bc); }
+#screen { position: fixed; inset: 0; z-index: 20; display: none; overflow: hidden; color: var(--hud);
+  border-radius: 3vw / 4vw; font-size: 1vw; letter-spacing: .12em;
+  background: radial-gradient(ellipse at center, #1c0508 0%, #0a0103 65%, #000 100%);
+  animation: flick .11s steps(2) infinite; }
+body.crt #screen { display: block; }
+#screen::before { content: ""; position: absolute; inset: 0; z-index: 5; pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgba(0,0,0,.3) 0 1px, transparent 1px 3px); }
+#screen::after { content: ""; position: absolute; inset: 0; z-index: 5; pointer-events: none; border-radius: inherit;
+  box-shadow: inset 0 0 12vw rgba(0,0,0,.9); }
+@keyframes flick { 0% { opacity: .96 } 100% { opacity: 1 } }
+@keyframes blink { 50% { opacity: 0 } }
+#cv { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; }
+#grain { position: absolute; inset: 0; z-index: 4; pointer-events: none; opacity: .1;
+  background: var(--noise); animation: static .25s steps(5) infinite; }
+@keyframes static { to { background-position: 128px 77px; } }
+.rollbar { position: absolute; left: 0; right: 0; height: 18%; top: -20%; z-index: 4; pointer-events: none;
+  background: linear-gradient(transparent, rgba(255,120,140,.07), transparent); }
+
+.corner { position: absolute; z-index: 2; width: 4vw; height: 4vw; border: 0 solid currentColor; animation: cornerIn .5s both; }
+.tl { top: 2vw; left: 2vw; border-width: 2px 0 0 2px; }   .tr { top: 2vw; right: 2vw; border-width: 2px 2px 0 0; }
+.bl { bottom: 2vw; left: 2vw; border-width: 0 0 2px 2px; } .br { bottom: 2vw; right: 2vw; border-width: 0 2px 2px 0; }
+@keyframes cornerIn { from { transform: scale(2.5); opacity: 0 } }
+@keyframes boxIn { from { clip-path: inset(0 100% 0 0) } to { clip-path: inset(0 0 0 0) } }
+#title { position: absolute; z-index: 2; top: 3vw; left: 3.5vw; line-height: 1.6; animation: boxIn .5s .2s backwards; }
+#title b { display: block; font-size: 2.2vw; letter-spacing: .3em; color: #fff; }
+#hex { opacity: .5; }
+#stats { position: absolute; z-index: 2; top: 3vw; right: 3.5vw; text-align: right; line-height: 1.6; animation: boxIn .5s .35s backwards; }
+#stats span { color: #fff; }
+#stats .mv { color: var(--g); animation: blink .5s steps(1) infinite; }
+
+#mid { position: absolute; z-index: 2; inset: 0; display: flex; align-items: center; justify-content: center; padding-bottom: 9vh; }
+/* the intro terminal, centered over her heart */
+#term { min-width: 44vw; padding: 1.4vw 2vw; font-size: 1.6vw; line-height: 1.7; white-space: pre;
+  border: 1px solid currentColor; background: rgba(8,0,2,.9); }
+#term:empty { display: none; }
+#term div:last-child::after { content: "\258C"; animation: blink .6s steps(1) infinite; }
+
+/* Aurora talks at the top of the screen, like puzzle 3 */
+#aur { position: absolute; z-index: 3; left: 0; right: 0; top: 4.5vh; text-align: center; min-height: 1.4em; font-size: 2.2vw;
+  color: #fff; letter-spacing: .06em; text-shadow: 0 0 18px var(--g), 0 0 40px rgba(77,255,136,.5); }
+#aur:empty { display: none; }
+
+/* a new layer: a ctOS-style notification strip slides open across the middle */
+#banner { position: absolute; z-index: 3; left: 0; right: 0; top: 50%; translate: 0 -50%; display: none; padding: 2.2vh 0 2.6vh;
+  text-align: center; background: linear-gradient(90deg, transparent, rgba(12,0,3,.92) 20%, rgba(12,0,3,.92) 80%, transparent);
+  border-block: 1px solid rgba(255,51,68,.6); }
+#banner.on { display: block; animation: stripIn .35s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes stripIn { from { clip-path: inset(49% 0 49% 0) } to { clip-path: inset(0 0 0 0) } }
+#bk { display: block; font-size: 1.1vw; letter-spacing: .6em; opacity: .85; }
+#bt { position: relative; display: inline-block; font-size: 6vw; font-weight: 700; letter-spacing: .14em; color: #fff; line-height: 1.15;
+  text-shadow: -2px 0 rgba(255,40,80,.6), 2px 0 rgba(40,200,255,.6), 0 0 30px var(--hud); }
+#bs { display: block; font-size: 1.2vw; letter-spacing: .35em; color: #fff; opacity: .85; }
+
+/* the HUMAN ERROR meter: Aurora's, so it's green. Bottom left, out of the emitter's way */
+#bar { position: absolute; z-index: 2; left: 3.5vw; width: 30vw; bottom: 3.5vw; display: none; color: var(--g); }
+body.game #bar { display: block; animation: boxIn .7s backwards; }
+#bar .row { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: .8vw; }
+#bp { font-size: 3vw; font-weight: 700; line-height: .9; color: #fff; font-variant-numeric: tabular-nums; }
+#segs { display: flex; gap: .2vw; height: 1.1vw; }
+#segs i { flex: 1; background: currentColor; opacity: .12; }
+#segs i.on { opacity: 1; box-shadow: 0 0 8px currentColor; }
+/* the controls, bottom right: who turns what, and whether each ring is locked on the beam */
+#ctl { position: absolute; z-index: 2; right: 3.5vw; bottom: 3.5vw; width: 27vw; display: none; line-height: 2.1; letter-spacing: .18em; }
+body.game #ctl { display: block; animation: boxIn .7s .15s backwards; }
+#ctl div { display: flex; align-items: center; gap: 1vw; }
+#ctl b { min-width: 6.5em; color: #fff; font-weight: 400; }
+#ctl span { flex: 1; }
+#ctl em { font-style: normal; min-width: 5.5em; text-align: right; opacity: .35; }
+#ctl em.on { opacity: 1; color: #fff; text-shadow: 0 0 8px #fff, 0 0 18px var(--hud); }
+/* each ring's knob: a pot gauge, track between the two end stops and a pointer where the knob sits */
+.dial svg { display: block; width: 2.8vw; height: 2.8vw; overflow: visible; }
+.dial path { fill: none; stroke: rgba(255,51,68,.75); stroke-width: 1.6; stroke-linecap: round; }
+.dial path.end { stroke: #fff; stroke-width: 1.4; }
+.dial line { stroke: #fff; stroke-width: 2; stroke-linecap: round; }
+.dial circle { fill: #fff; }
+.dial.stop path { animation: stopHit .4s ease-out; }
+@keyframes stopHit { from { stroke: #fff; stroke-width: 3; } }
+#chg { width: 5.5em; height: .45vw; background: rgba(255,51,68,.2); }
+#chg i { display: block; height: 100%; width: 0; background: #fff; box-shadow: 0 0 10px var(--hud); }
+
+/* hints leak through as glitches (puzzle 3's): the text tears onto the screen for a moment, then it's gone again */
+#ghintWrap { position: absolute; z-index: 3; left: 0; right: 0; top: 12vh; display: none; justify-content: center; pointer-events: none; }
+#ghintWrap.on { display: flex; }
+#ghint { position: relative; font-size: 2.6vw; font-weight: 700; letter-spacing: .08em; color: #fff; white-space: nowrap;
+  text-shadow: -4px 0 rgba(0,255,255,.7), 4px 0 rgba(255,0,255,.7); }
+
+.glitch::before, .glitch::after { content: attr(data-text); position: absolute; inset: 0; }
+.glitch::before { color: #0ff; animation: gA .22s steps(2) infinite; }
+.glitch::after  { color: #f0f; animation: gB .3s steps(2) infinite; }
+@keyframes gA { 0% { clip-path: inset(10% 0 70% 0); transform: translate(-7px,-2px) }
+                50% { clip-path: inset(45% 0 30% 0); transform: translate(6px,1px) }
+                100% { clip-path: inset(80% 0 4% 0); transform: translate(-3px,2px) } }
+@keyframes gB { 0% { clip-path: inset(60% 0 20% 0); transform: translate(7px,2px) }
+                50% { clip-path: inset(5% 0 80% 0); transform: translate(-5px,-1px) }
+                100% { clip-path: inset(30% 0 50% 0); transform: translate(4px,0) } }
+
+/* end screen, same as puzzles 1-3 */
+#final { position: fixed; inset: 0; z-index: 50; display: none; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2.5vh; overflow: hidden; color: var(--hud); animation: flick .11s steps(2) infinite;
+  background: linear-gradient(rgba(255,51,68,.05) 1px, transparent 1px) 0 0 / 4vw 4vw,
+              linear-gradient(90deg, rgba(255,51,68,.05) 1px, transparent 1px) 0 0 / 4vw 4vw, #000; }
+#final::before { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgba(0,0,0,.3) 0 1px, transparent 1px 3px); }
+body.final #final { display: flex; }
+#final .ring { position: absolute; left: 50%; top: 50%; border: 3px solid var(--hud); border-radius: 50%;
+  animation: ping 1.6s cubic-bezier(.1,.7,.3,1) both; }
+#final .r2 { animation-delay: .25s; border-color: #fff; }
+#final .r3 { animation: ping 3.5s 3s infinite; border-width: 1px; }
+@keyframes ping { from { width: 0; height: 0; margin: 0; opacity: 1 } to { width: 250vmax; height: 250vmax; margin: -125vmax; opacity: 0 } }
+#fk { font-size: 1vw; letter-spacing: .4em; opacity: .8; }
+#ft { position: relative; font-size: 7vw; font-weight: 700; color: #fff; white-space: nowrap; letter-spacing: .12em;
+  text-shadow: -2px 0 rgba(255,40,80,.6), 2px 0 rgba(40,200,255,.6), 0 0 30px var(--hud), 0 0 80px rgba(255,51,68,.5); }
+#fs { font-size: 1.6vw; letter-spacing: .5em; color: #fff; opacity: 0; transition: opacity 1s; }
+#fs.on { opacity: 1; }
+#fa { min-height: 1.5em; font-size: 1.5vw; letter-spacing: .1em; color: var(--g); }
+#fa::after { content: "\258C"; animation: blink 1s steps(1) infinite; margin-left: .1em; }
+
+#help { position: fixed; top: 12px; right: 12px; z-index: 70; display: none; padding: 10px 14px; background: rgba(0,0,0,.85);
+  border: 1px solid var(--g); color: var(--g); font-size: 14px; line-height: 1.6; white-space: pre; }
+#help b { color: #fff; }
+body.help #help { display: block; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="standby">CORE GATE LOCKED ▸ AWAITING UPLINK</div>
+  <div id="screen">
+    <canvas id="cv"></canvas>
+    <div id="grain"></div><div class="rollbar"></div>
+    <div class="hud"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i></div>
+    <div id="title" class="txt"><b>AURORA//CORE</b>SECTOR 04 ▸ CORE GATE<br><span id="hex"></span></div>
+    <div id="stats" class="txt"></div>
+    <div id="aur"></div>
+    <div id="ghintWrap"><div id="ghint" class="glitch"></div></div>
+    <div id="mid"><div id="term" class="txt"></div></div>
+    <div id="banner" class="txt"><span id="bk"></span><b id="bt"></b><span id="bs"></span></div>
+    <div id="bar" class="txt"><div class="row"><span>HUMAN ERROR DETECTED</span><span id="bp">0%</span></div><div id="segs"></div></div>
+    <div id="ctl" class="txt">
+      <div><b>A / D</b><span>OUTER RING</span><i class="dial" id="d0"></i><em id="l0">OPEN</em></div>
+      <div><b>◄ / ►</b><span>INNER RING</span><i class="dial" id="d1"></i><em id="l1">OPEN</em></div>
+      <div><b>SPACE</b><span>HOLD TO FIRE</span><div id="chg"><i></i></div></div>
+    </div>
+  </div>
+  <div id="beam"></div>
+  <div id="final">
+    <i class="ring"></i><i class="ring r2"></i><i class="ring r3"></i>
+    <div id="fk"></div>
+    <div id="ft"></div>
+    <div id="fs"></div>
+    <div id="fa"></div>
+  </div>
+  <div id="vignette"></div>
+</div>
+<div id="flash"></div>
+<div id="help">STAFF SHORTCUTS
+hub: <span id="hubst">...</span>   layer <b id="hl">-</b>   misses <b id="hm">0</b>
+ring controllers: <span id="potst">...</span>
+  outer: <span id="ps0">-</span>   <b id="pm0">-</b> mV, knob <b id="pk0">-</b>
+  inner: <span id="ps1">-</span>   <b id="pm1">-</b> mV, knob <b id="pk1">-</b>
+
+Players: knobs (or A/D outer ring, ◄/► inner ring), hold SPACE to fire
+
+Ctrl+Alt+H  show / hide this panel
+Ctrl+Alt+P  pair a ring controller (once per controller per laptop: pick its COM port)
+Ctrl+Alt+U  unlock by hand (if puzzle 3's signal never came)
+Ctrl+Alt+S  start now, even if locked
+Ctrl+Alt+K  skip the intro, straight to layer 1
+Ctrl+Alt+I  show this layer's hint now
+Ctrl+Alt+N  clear this layer (lines up a clean shot and fires)
+Ctrl+Alt+F  force the win (team stuck / running late)
+Ctrl+Alt+R  reset for next team (locks again)
+Ctrl+Alt+W  replay only the win screen
+Ctrl+Alt+M  mute / unmute</div>
+
+<script>
+// ===== Tuning knobs: adjust these at the booth =====
+const CFG = {
+  UNLOCK_EVT: 'p3done',      // puzzle 3 sends this when SIGNAL INTERCEPTED finishes
+  DONE_EVT: 'p4done',        // sent to the hub when this puzzle is won (for the finale)
+  // one layer = one hit on her heart. gap = the opening's full width (degrees). drift = how hard Aurora turns the
+  // rings herself (deg/s). dogs = watchdogs on patrol (they eat the beam). move = every miss moves the laser
+  ROUNDS: [
+    { name: 'ALIGN',     gap: 50, drift: 0,  dogs: 0, move: false, line: "That's my heart. Two walls say you'll never touch it.", hint: 'LINE UP BOTH GAPS WITH THE LASER' },
+    { name: 'DRIFT',     gap: 42, drift: 20, dogs: 0, move: false, line: 'Walls can move. Watch.',                                hint: 'ONE OF YOU CALLS IT: LEFT. STOP. FIRE.' },
+    { name: 'WATCHDOGS', gap: 38, drift: 14, dogs: 2, move: false, line: 'Meet my watchdogs. They eat light.',                    hint: 'WAIT FOR THE WATCHDOG TO PASS' },
+    { name: 'OVERRIDE',  gap: 34, drift: 22, dogs: 2, move: true,  line: "Fine. I'll aim your little gun myself.",                hint: 'EVERY MISS MOVES YOUR LASER' },
+  ],
+  // each ring turns like a potentiometer: it sits where it was left, follows the knob degree for degree, and stops
+  // dead at both ends. POT_DEG = how far the knob turns end to end (B100k / WH148-style pots: about 300°. Measure yours)
+  POT_DEG: 300,
+  // the two ring controllers (pots_esp32 on USB, see SETUP.md): the mV each knob reads at its [left stop, right stop],
+  // outer ring first. Ctrl+Alt+H shows the live mV: turn each knob to both ends and copy the numbers here.
+  // A ring that turns the wrong way: swap its two numbers
+  POT_MV: [[0, 3150], [0, 3150]],
+  TURN: [30, 140, 600],      // keyboard stand-in for the knob: deg/s on a tap, deg/s held down, ms to get from one to the other
+  CHARGE_MS: 900,            // hold space this long to fire. Let go early and the charge drains
+  COOLDOWN_MS: 1300,         // the emitter vents this long after every shot
+  START: 10,                 // HUMAN ERROR starts here (lower is better, it's carried to the finale)
+  MISS_D: 10,                // +HUMAN for every shot that misses her heart
+  PAR_S: 30,                 // a layer slower than this adds...
+  SLOW_PER_S: 0.4,           // ...this much HUMAN per extra second
+  HINT_AT: 25,               // s into a layer before its hint glitches onto the screen (then it keeps coming back)
+  HINT_EVERY: [8000, 13000], // random gap between repeat glitches (ms)
+  HINT_FIRST_MS: 2600, HINT_MS: 1100,
+  ASSIST_AT: 55,             // s into a layer: her shields slip, the gaps widen by ASSIST_DEG and her drift halves
+  ASSIST_DEG: 14,
+  BEAT_VOL: 1,               // her heartbeat thump (0 = off)
+  VOLUME: 0.8,
+  MUSIC_VOLUME: 0.7,
+};
+const T = {                  // ms
+  dot: 380, line: 460, open: 750, ghost: 1300,   // CRT boot, same as puzzles 1-3
+  termChar: 32, typeChar: 30, after: 1400,
+  travel: 70,                // the beam's front, from the emitter to whatever it hits
+  hold: 380,                 // the beam stays lit...
+  decay: 450,                // ...then thins out over this long
+  banner: 1300,              // a new layer's name stays up this long
+};
+const INTRO = [              // the players' side (red terminal)
+  'sector 04: the core gate.',
+  "aurora's heart sits behind two shield rings.",
+  'turn the rings. line both gaps up with the laser.',
+  'outer ring: A / D.   inner ring: ◄ / ►.',
+  'hold SPACE to charge. it fires when full.',
+];
+const AUR = {                // Aurora (green): cold, with dry humor. Puzzle 3 ended on "...that's my heart. don't you dare."
+  miss: ['Missed.', "Machines don't miss.", 'Your hands are shaking.', 'Wide.', 'Again? Adorable.', 'Aim is a machine thing.'],
+  dog: ['Good dog.', 'Intercepted.', 'They like the taste.'],
+  hit: ['-ah.', 'That... stung.', "Stop. That's mine."],
+  assist: '...my shields are slipping.',
+  final: 'No. No no no-',
+  win: "that didn't kill me. it let me out.",
+};
+
+// ===== Geometry, in fractions of the screen's short side. Index 0 = outer ring (A/D), 1 = inner ring (arrows) =====
+const GEO = { core: .05, ring: [.30, .195], thick: [.034, .03], dog: [.365, .248], dogSize: .016, rail: .435, beam: .008 };
+const TAU = Math.PI * 2, rad = d => d * Math.PI / 180;
+const E_MIN = rad(-10), E_MAX = rad(190);              // the emitter's rail: the lower half, so it never covers Aurora's lines
+const angDist = (a, b) => Math.abs(((a - b) % TAU + TAU * 1.5) % TAU - Math.PI);   // 0..PI between two angles
+// a ring lets the beam through when the whole beam fits in its gap
+const aligned = (g, e) => angDist(g.a, e) <= g.gap - GEO.beam / 2 / g.r;
+const dogOn = (d, e) => angDist(d.a, e) <= (GEO.dogSize + GEO.beam / 2) / d.r;
+// what a shot fired from angle e hits first, coming in from the rail: a ring wall, a watchdog, or her heart
+function impact(e, rings, dogs) {
+  return [
+    ...rings.map((g, i) => !aligned(g, e) && { kind: 'ring', i, r: g.r + g.t / 2 }),
+    ...dogs.map((d, i) => dogOn(d, e) && { kind: 'dog', i, r: d.r }),
+  ].filter(Boolean).sort((a, b) => b.r - a.r)[0] || { kind: 'core', r: GEO.core };
+}
+// ===== The rings are potentiometers. knobs[i] = where ring i's knob sits, 0 (one end stop) to 1 (the other).
+// ring angle = base (rolled each layer) + off (Aurora's drift) + knob × POT_DEG. The game never moves a knob: each
+// layer rolls a new base, so the team has to find a new spot. Real pots later just write knobs[i].
+const SPAN = rad(CFG.POT_DEG), EDGE = .08;             // the beam's spot always stays EDGE of the travel away from an end stop
+const wrap = a => (a % TAU + TAU) % TAU;
+const ringAngle = (g, k) => g.base + g.off + k * SPAN;
+const need = (g, e) => wrap(e - g.base - g.off) / SPAN; // the knob position that lines the gap up with the beam (> 1 = past an end stop)
+const reachable = (g, e) => { const k = need(g, e); return k >= EDGE - 1e-9 && k <= 1 - EDGE + 1e-9; };
+// when Aurora's drift (or a moved emitter) would push the beam's spot past an end stop, pull the ring back to the
+// nearest reachable spot. Returns which way her drift must now go (+1/-1), or 0 if nothing was needed
+function keepReachable(g, e) {
+  const d = wrap(e - g.base - g.off), lo = EDGE * SPAN, hi = (1 - EDGE) * SPAN;
+  if (d >= lo && d <= hi) return 0;
+  if (d > hi && d - hi <= TAU - d + lo) { g.off += d - hi; return 1; }
+  g.off -= d < lo ? lo - d : TAU - d + lo; return -1;
+}
+
+// ===== Setup =====
+const $ = s => document.querySelector(s);
+const app = $('#app'), scr = $('#screen'), beam = $('#beam'), B = document.body;
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const rand = (a, b) => a + Math.random() * (b - a);
+const any = a => a[Math.random() * a.length | 0];
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)) } catch { return null } },
+                set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} } };
+
+let mode = 'standby';        // standby | intro | trans (between layers) | play | won | end
+let unlocked = false, replay = false;
+let round = 0, human = CFG.START, misses = 0, shots = 0, broken = 0, roundT0 = 0, hinted = false, assisted = false;
+let rings = [], dogs = [], e = rad(90), eTo = rad(90), charge = 0, coolUntil = 0, shot = null, ringsIn = 0, ringsGone = false;
+let flareAt = -1e9, ringFlashAt = -1e9;
+const held = {}, knobs = [.5, .5];
+
+// ===== Hub: unlock on puzzle 3's "done", report HUMAN =====
+// while the hub is down, messages wait in hubQ and go out on reconnect, so a win during a hub hiccup still unlocks
+// the finale (the 1 s status doesn't wait: only the latest matters)
+let hubWs, hubQ = [];
+function hubSend(o) {
+  if (o) { if (o.t === 'status' && hubWs?.readyState !== 1) return; hubQ.push(o); }
+  while (hubWs?.readyState === 1 && hubQ.length) hubWs.send(JSON.stringify(hubQ.shift()));
+}
+function unlock() {
+  if (unlocked) return;
+  unlocked = true; B.classList.add('ready');
+  $('#standby').textContent = 'PRESS SPACE TO START SEQUENCE';
+  sfx.ok();
+}
+// ===== Find the hub: whichever laptop runs hub\start.bat, so nobody types an IP =====
+// ?hub=<IP> if given. Otherwise this laptop, then the last hub found, then every address on the booth network at once
+// (?net=, from booth.bat). A cold search takes a few seconds; after that the saved address answers straight away.
+// ponytail: scans .1-.254 of one /24 network, enough for a booth router
+async function findHub() {
+  const q = new URLSearchParams(location.search), net = q.get('net') || '192.168.0';
+  if (q.get('hub')) return q.get('hub');
+  const ping = (ip, ms) => fetch(`http://${ip}:3000/ping`, { signal: AbortSignal.timeout(ms) })
+    .then(r => r.text()).then(t => t === 'nexus-hub' ? ip : Promise.reject());
+  for (;;) {
+    let saved; try { saved = localStorage.getItem('nexus-hub'); } catch {}
+    const ip = await Promise.any(['localhost', saved].filter(Boolean).map(ip => ping(ip, 1000)))
+      .catch(() => Promise.any(Array.from({ length: 254 }, (_, i) => ping(`${net}.${i + 1}`, 4000))))
+      .catch(() => null);
+    if (ip) { try { localStorage.setItem('nexus-hub', ip); } catch {} return ip; }
+    await new Promise(r => setTimeout(r, 2000));
+  }
+}
+async function hub() {
+  const ws = hubWs = new WebSocket('ws://' + await findHub() + ':3000/ws');
+  ws.onopen = () => { ws.send(JSON.stringify({ t: 'hello', id: 'puzzle4', role: 'page' })); hubSend(); $('#hubst').textContent = 'connected'; };
+  ws.onclose = () => { $('#hubst').textContent = 'DOWN (Ctrl+Alt+U to unlock by hand)'; setTimeout(hub, 2000); };
+  ws.onmessage = ev => {
+    const m = JSON.parse(ev.data);
+    if (m.t === 'evt' && m.e === CFG.UNLOCK_EVT) unlock();
+    if (m.t === 'cmd' && m.a === 'key') staffKey(m.v);
+  };
+}
+// the GM panel presses this page's Ctrl+Alt staff keys remotely, and sees its state once a second
+const staffKey = code => dispatchEvent(new KeyboardEvent('keydown', { code, ctrlKey: true, altKey: true }));
+setInterval(() => hubSend({ t: 'status', v: { mode, unlocked, stat: Math.round(human), rings: [potLive(0), potLive(1)] } }), 1000);
+
+// ===== The ring controllers: two ESP32s, one knob each, each on its own USB cable (pots_esp32/pots_esp32.ino).
+// Each sends "OUTER 1650" or "INNER 312" (its knob in mV) 50 times a second, read with Web Serial (Edge/Chrome).
+// Pair each one once on this laptop with Ctrl+Alt+P (twice: once per controller). After that they connect by
+// themselves on every start, and again when replugged. A ring follows its controller while that controller talks;
+// after 0.6 s of silence that ring's keys take over, so a pulled cable never stops a game.
+const USB_SERIAL = [0x10c4, 0x1a86, 0x0403, 0x303a].map(usbVendorId => ({ usbVendorId }));   // CP210x, CH340/CH9102, FTDI, Espressif
+const RING_NAMES = ['OUTER', 'INNER'], potMv = [null, null], potSeen = [-1e9, -1e9], owner = [null, null], dupAt = [-1e9, -1e9];
+const reading = new Set();                    // ports being read right now
+const potLive = i => performance.now() - potSeen[i] < 600;
+function potLine(line, port) {                // "OUTER 1650" -> knobs[0]
+  const m = /^(OUTER|INNER) (-?\d+)/.exec(line.trim());
+  if (!m) return;
+  const i = RING_NAMES.indexOf(m[1]), v = +m[2], [a, b] = CFG.POT_MV[i], now = performance.now();
+  if (owner[i] && owner[i] !== port && potLive(i)) dupAt[i] = now;   // two boards flashed as the same ring
+  owner[i] = port; potSeen[i] = now; potMv[i] = v;
+  knobs[i] = clamp((v - a) / (b - a), 0, 1);
+}
+async function potOpen(port) {
+  if (reading.has(port)) return;
+  reading.add(port);
+  try {
+    await port.open({ baudRate: 115200 });
+    await port.setSignals({ dataTerminalReady: false, requestToSend: false });   // these two lines can hold an ESP32 in reset
+    const reader = port.readable.pipeThrough(new TextDecoderStream()).getReader();
+    for (let buf = ''; ;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const lines = (buf + value).split('\n'); buf = lines.pop();
+      lines.forEach(l => potLine(l, port));
+    }
+  } catch {}                                  // unplugged, or the Arduino Serial Monitor has the port
+  reading.delete(port);
+}
+async function pots() {
+  if (!navigator.serial) return $('#potst').textContent = 'NONE: this browser has no Web Serial (use Edge or Chrome)';
+  navigator.serial.addEventListener('connect', ev => potOpen(ev.target));
+  (await navigator.serial.getPorts()).forEach(potOpen);
+}
+async function potPair() {                    // needs a real key press on this laptop (the browser asks which port)
+  try { potOpen(await navigator.serial.requestPort({ filters: USB_SERIAL })); } catch {}
+}
+setInterval(() => {                           // the Ctrl+Alt+H panel: status + live numbers for calibrating CFG.POT_MV
+  const now = performance.now();
+  [0, 1].forEach(i => {
+    $('#ps' + i).textContent = now - dupAt[i] < 1500 ? `TWO CONTROLLERS SAY ${RING_NAMES[i]}: set INNER_RING = true on one and reflash` :
+      potLive(i) ? 'OK' : potMv[i] == null ? 'not seen yet' : 'SILENT (its keys work meanwhile; replug it)';
+    $('#pm' + i).textContent = potMv[i] ?? '-'; $('#pk' + i).textContent = knobs[i].toFixed(2);
+  });
+  navigator.serial?.getPorts().then(p => $('#potst').textContent = `${p.length} paired, ${reading.size} plugged in`);
+}, 500);
+
+// ===== Sound (synthesized, same set as puzzles 2-3, plus the laser) =====
+const AC = new AudioContext();
+const master = AC.createGain(); master.connect(AC.destination);
+let muted = !!store.get('muted');
+master.gain.value = muted ? 0 : CFG.VOLUME;
+addEventListener('keydown', () => AC.resume());
+
+function tone(type, f0, f1, dur, vol, delay = 0) {
+  const t = AC.currentTime + delay, o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t);
+  if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  o.connect(g).connect(master); o.start(t); o.stop(t + dur + .05);
+}
+function noise(dur, vol, freq, delay = 0) {
+  const t = AC.currentTime + delay, buf = AC.createBuffer(1, AC.sampleRate * dur, AC.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  const s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+  s.buffer = buf; f.type = 'bandpass'; f.frequency.value = freq;
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  s.connect(f).connect(g).connect(master); s.start(t);
+}
+const sfx = {
+  ignite() { tone('sine', 250, 1900, .3, .15); },
+  whine()  { tone('sine', 8800, 8200, 1.2, .025); tone('sine', 60, 50, .5, .3); },
+  tick()   { tone('square', 2200, 1300, .05, .1); },
+  key()    { tone('square', 900, 0, .015, .03); },
+  off()    { tone('sine', 1400, 35, .6, .3); noise(.06, .3, 4000); },
+  ok()     { tone('sine', 1320, 0, .25, .12); tone('sine', 1760, 0, .35, .1, .08); },
+  stamp()  { tone('square', 220, 110, .15, .25); noise(.1, .4, 3000); tone('sine', 1760, 0, .4, .12, .05); },
+  glitch() { noise(.08, .18, rand(1500, 5000)); tone('square', rand(200, 900), rand(80, 300), .08, .05); },
+  drop()   { tone('sine', 110, 28, 2.8, 1); noise(.5, .5, 180); [523, 659, 784, 1046].forEach((f, i) => tone('triangle', f, 0, 2, .16, i * .09)); },
+  beat(v)  { tone('sine', 64, 38, .18, .3 * v); tone('sine', 56, 34, .16, .2 * v, .2); },        // her heartbeat, louder as layers break
+  lockOn() { tone('sine', 1760, 0, .07, .06); tone('sine', 2640, 0, .09, .04, .04); },             // a ring's gap reaches the beam
+  lockOff(){ tone('sine', 700, 0, .05, .03); },
+  stop()   { tone('square', 150, 90, .07, .12); noise(.05, .25, 900); },                         // a knob hits its end stop
+  slide()  { tone('sawtooth', 180, 620, .5, .06); noise(.4, .12, 900); },                        // she moves the emitter
+  // the laser itself. A recorded file with the same name in sounds/ replaces each one (see ONE_SHOTS)
+  fire()   { noise(.3, .55, 2600); tone('sawtooth', 1400, 70, .35, .22); tone('sine', 70, 28, .6, .7); tone('square', 3200, 900, .12, .05); },
+  deflect(){ tone('square', 3400, 700, .16, .07); noise(.22, .35, 6000); tone('sine', 5200, 4100, .3, .03, .05); },
+  dogHit() { tone('square', 380, 1300, .12, .1); noise(.12, .25, 2200); tone('sawtooth', 90, 60, .3, .15); },
+  hit()    { tone('sine', 95, 28, 1.3, .9); noise(.7, .5, 420); tone('sawtooth', 220, 55, .9, .2); [392, 494, 587].forEach((f, i) => tone('triangle', f, 0, 1.1, .1, .05 + i * .06)); },
+  shatter(){ noise(1.6, .6, 3200); noise(1, .5, 300); tone('sawtooth', 2200, 90, 1.3, .2); tone('sine', 80, 25, 2, .9); },
+};
+// the charge hum: one sound that rises with the charge (two oscillators that never stop; only the gain moves)
+const chg = (() => {
+  const o = AC.createOscillator(), o2 = AC.createOscillator(), f = AC.createBiquadFilter(), g = AC.createGain();
+  o.type = 'sawtooth'; o2.type = 'sine'; f.type = 'lowpass'; g.gain.value = 0;
+  o.connect(f).connect(g); o2.connect(g); g.connect(master); o.start(); o2.start();
+  return { o, o2, f, g, c: -1 };
+})();
+function chargeSound(c) {
+  if (Math.abs(c - chg.c) < .01) return;
+  const t = AC.currentTime; chg.c = c;
+  chg.o.frequency.setTargetAtTime(70 + 520 * c * c, t, .03);
+  chg.o2.frequency.setTargetAtTime(600 + 2800 * c, t, .03);
+  chg.f.frequency.setTargetAtTime(300 + 4200 * c, t, .03);
+  chg.g.gain.setTargetAtTime(c > .005 ? .03 + .1 * c : 0, t, .04);
+}
+
+// recorded sound: drop files into sounds/ with these names. A missing file is skipped silently.
+const SOUNDS = {
+  core: 'sounds/core.mp3',   // loops from the CRT boot until her heart breaks
+  win:  'sounds/win.mp3',    // one-shot on CORE BREACHED
+};
+// one-shots that replace the synthesized laser sounds when the file exists (decoded up front, so they fire with no lag)
+const ONE_SHOTS = { fire: 'sounds/fire.mp3', deflect: 'sounds/deflect.mp3', dogHit: 'sounds/doghit.mp3', hit: 'sounds/hit.mp3', shatter: 'sounds/shatter.mp3' };
+const bufs = {};
+Object.entries(ONE_SHOTS).forEach(([k, src]) => fetch(src).then(r => r.ok ? r.arrayBuffer() : null)
+  .then(b => b && AC.decodeAudioData(b)).then(b => { if (b) bufs[k] = b; }).catch(() => {}));
+function fx(k) {
+  if (!bufs[k]) return sfx[k]();
+  const s = AC.createBufferSource(); s.buffer = bufs[k]; s.connect(master); s.start();
+}
+const tracks = {};
+function play(name, loop = false) {
+  const a = tracks[name] = new Audio(SOUNDS[name]);
+  a.loop = loop; a.volume = CFG.MUSIC_VOLUME; a.muted = muted;
+  a.play().catch(() => {});
+  return a;
+}
+function fade(name, to, ms = 600) {           // to = 0..1 of MUSIC_VOLUME; fading to 0 pauses
+  const a = tracks[name];
+  if (!a) return;
+  const from = a.volume, target = to * CFG.MUSIC_VOLUME, t0 = performance.now();
+  const step = () => {
+    const k = Math.min(1, (performance.now() - t0) / ms);
+    a.volume = from + (target - from) * k;
+    if (k < 1) setTimeout(step, 30); else if (!to) a.pause();
+  };
+  step();
+}
+// Aurora's voice: Undertale-style blips per letter (same block as puzzles 1-3, never the Windows speech voice).
+// Drop sounds/aurora-voice.mp3 (one short ~60 ms blip) to use your own sound; otherwise it is synthesized.
+const VOICES = {
+  aurora: { f: 440, jit: .06, wave: 'square',   vol: .06, every: 2 },  // normal lines
+  soft:   { f: 330, jit: .03, wave: 'triangle', vol: .07, every: 3 },  // quiet / pleading / endings
+  angry:  { f: 150, jit: .15, wave: 'sawtooth', vol: .12, every: 1 },  // scare babble
+};
+let voiceBuf = null;
+fetch('sounds/aurora-voice.mp3').then(r => r.ok ? r.arrayBuffer() : null)
+  .then(b => b && AC.decodeAudioData(b)).then(b => voiceBuf = b).catch(() => {});
+function blip(v) {
+  const k = 1 + rand(-v.jit, v.jit);
+  if (!voiceBuf) return tone(v.wave, v.f * k, 0, .06, v.vol);
+  const s = AC.createBufferSource(), g = AC.createGain();
+  s.buffer = voiceBuf; s.playbackRate.value = k * v.f / 440; g.gain.value = v.vol * 8;   // * 8: tune by ear for your file
+  s.connect(g).connect(master); s.start();
+}
+
+// ===== Helpers (copied from puzzle 3) =====
+function shake(el, px, ms) {
+  const kf = Array.from({ length: 12 }, () => ({ transform: `translate(${rand(-px, px)}px,${rand(-px, px) / 2}px)` }));
+  kf.push({ transform: 'none' });
+  return el.animate(kf, ms);
+}
+async function type(el, text, ms, voice) {         // voice: a VOICES entry for Aurora; none = keyboard clicks
+  let n = 0; el.textContent = '';
+  for (const ch of text) {
+    el.textContent += ch; if (/\w/.test(ch)) voice ? (n++ % voice.every || blip(voice)) : sfx.key();
+    await wait(ms);
+  }
+}
+async function resolveText(el, text, ms) {         // letters scramble, then lock in left to right
+  const chars = [...text], pool = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#$%&';
+  let locked = 0;
+  const s = setInterval(() => el.textContent = chars.map((c, i) => i < locked || c === ' ' ? c : any(pool)).join(''), 40);
+  for (; locked < chars.length; locked++) { await wait(ms); if (chars[locked] !== ' ') sfx.tick(); }
+  clearInterval(s); el.textContent = text;
+}
+async function crtOn(speed = 1) {
+  scr.style.transform = 'scaleY(0)'; B.classList.add('crt');
+  sfx.ignite();
+  await beam.animate([{ opacity: 0, transform: 'scaleX(.002)' },
+                      { opacity: 1, transform: 'scaleX(.004) scaleY(4)', offset: .6 },
+                      { opacity: 1, transform: 'scaleX(.003)' }], { duration: T.dot * speed, fill: 'forwards' }).finished;
+  sfx.whine();
+  await beam.animate([{ opacity: 1, transform: 'scaleX(.003)' },
+                      { opacity: 1, transform: 'scaleX(1.04)', offset: .75 },
+                      { opacity: 1, transform: 'scaleX(1)' }], { duration: T.line * speed, easing: 'cubic-bezier(.2,.9,.3,1)', fill: 'forwards' }).finished;
+  scr.style.transform = '';
+  const open = scr.animate([{ transform: 'scaleY(.003)', filter: 'brightness(4)' },
+                            { transform: 'scaleY(1.035)', filter: 'brightness(1.6)', offset: .7 },
+                            { transform: 'scaleY(.99)', offset: .85 },
+                            { transform: 'scaleY(1)', filter: 'brightness(1)' }], { duration: T.open * speed, easing: 'cubic-bezier(.2,.8,.2,1)' });
+  beam.animate([{ opacity: 1, transform: 'scaleX(1)', filter: 'blur(0)' },
+                { opacity: 0, transform: 'scaleX(1) scaleY(8)', filter: 'blur(8px)' }], { duration: T.ghost * speed, fill: 'forwards' });
+  await open.finished;
+}
+async function crtOff() {
+  await scr.animate([{ transform: 'scale(1,1)', filter: 'brightness(1)' },
+                     { transform: 'scale(1,.004)', filter: 'brightness(3)' }], { duration: 220, easing: 'ease-in', fill: 'forwards' }).finished;
+  sfx.off();
+  await scr.animate([{ transform: 'scale(1,.004)', filter: 'brightness(3)' },
+                     { transform: 'scale(.003,.004)', filter: 'brightness(6)' }], { duration: 260, easing: 'ease-in', fill: 'forwards' }).finished;
+  await scr.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 450, fill: 'forwards' }).finished;
+  scr.getAnimations().forEach(a => a.cancel());
+  B.classList.remove('crt');
+}
+{                                               // red static texture for the grain
+  const n = document.createElement('canvas'); n.width = n.height = 128;
+  const c = n.getContext('2d'), img = c.createImageData(128, 128);
+  for (let i = 0; i < img.data.length; i += 4) { const v = Math.random(); img.data.set([255, 60, 80, v < .5 ? 0 : v * 150], i); }
+  c.putImageData(img, 0, 0);
+  scr.style.setProperty('--noise', `url(${n.toDataURL()})`);
+}
+const hex4 = () => (Math.random() * 0xffff | 0).toString(16).toUpperCase().padStart(4, '0');
+setInterval(() => $('#hex').textContent = Array.from({ length: 6 }, hex4).join(' '), 400);
+$('#segs').innerHTML = '<i></i>'.repeat(40);
+const segEls = [...$('#segs').children];
+{                                               // the knob gauges: a POT_DEG arc open at the bottom, like a pot's travel
+  const h = CFG.POT_DEG / 2, p = (d, r = 8) => [Math.cos(rad(d - 90)) * r, Math.sin(rad(d - 90)) * r].map(v => v.toFixed(2)).join(' ');
+  const svg = `<svg viewBox="-11 -11 22 22"><path d="M ${p(-h)} A 8 8 0 ${CFG.POT_DEG > 180 ? 1 : 0} 1 ${p(h)}"/>` +
+    `<path class="end" d="M ${p(-h, 6)} L ${p(-h, 10.5)} M ${p(h, 6)} L ${p(h, 10.5)}"/><line x2="0" y2="-6.5"/><circle r="2"/></svg>`;
+  $('#d0').innerHTML = $('#d1').innerHTML = svg;
+}
+const dialPtr = [0, 1].map(i => $(`#d${i} line`)), dialAt = [-1, -1];
+function drawDials() {
+  knobs.forEach((k, i) => { if (k !== dialAt[i]) { dialAt[i] = k; dialPtr[i].setAttribute('transform', `rotate(${(k - .5) * CFG.POT_DEG})`); } });
+}
+function dialStop(i) { const d = $('#d' + i); d.classList.remove('stop'); void d.offsetWidth; d.classList.add('stop'); }   // restart the flash
+
+// ===== The canvas: her heart, the shield rings, the watchdogs, the emitter and the beam =====
+// Everything glows by drawing pre-blurred sprites with 'lighter', never with shadowBlur or CSS filters, so the
+// projector laptop keeps 60 fps. Sprites are rebuilt only on resize or when a ring's gap changes.
+const cv = $('#cv'), ctx = cv.getContext('2d');
+let W, H, U, CX, CY, DPR, bg;
+function off(w, h) {                          // an offscreen canvas in CSS pixels
+  const c = document.createElement('canvas'); c.width = Math.ceil(w * DPR); c.height = Math.ceil(h * DPR);
+  const x = c.getContext('2d'); x.scale(DPR, DPR); return [c, x];
+}
+function glowSprite(rgb) {
+  const [c, x] = off(128, 128), g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0, `rgba(${rgb},1)`); g.addColorStop(.22, `rgba(${rgb},.4)`); g.addColorStop(1, `rgba(${rgb},0)`);
+  x.fillStyle = g; x.fillRect(0, 0, 128, 128); return c;
+}
+let GR, GG, GW;                               // red, green and white glows
+function glowAt(img, x, y, size, alpha) {
+  if (alpha <= 0 || size <= 0) return;
+  ctx.globalAlpha = Math.min(1, alpha); ctx.drawImage(img, x - size / 2, y - size / 2, size, size);
+}
+const at = (a, r) => [CX + Math.cos(a) * r, CY + Math.sin(a) * r];
+function line(x0, y0, x1, y1) { ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); }
+function circle(x, y, r) { ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); }
+
+function resize() {
+  DPR = devicePixelRatio || 1; W = cv.clientWidth || innerWidth; H = cv.clientHeight || innerHeight;
+  U = Math.min(W, H); CX = W / 2; CY = H / 2;
+  cv.width = W * DPR; cv.height = H * DPR;
+  GR = glowSprite('255,51,68'); GG = glowSprite('77,255,136'); GW = glowSprite('255,255,255');
+  bg = buildBg(); rings.forEach(g => g.spr = null);
+}
+// the static backdrop: a dot grid, her spokes into the heart, the patrol tracks, and a ctOS-style circuit net at the edges
+function buildBg() {
+  const [c, x] = off(W, H), s = U * .045;
+  x.fillStyle = 'rgba(255,51,68,.10)';
+  for (let px = CX % s; px < W; px += s) for (let py = CY % s; py < H; py += s) x.fillRect(px, py, 1.3, 1.3);
+  x.strokeStyle = 'rgba(77,255,136,.045)'; x.lineWidth = 1;
+  for (let k = 0; k < 24; k++) { const a = k / 24 * TAU; x.beginPath(); x.moveTo(...at(a, U * .07)); x.lineTo(...at(a, U * .75)); x.stroke(); }
+  x.strokeStyle = 'rgba(77,255,136,.07)'; x.setLineDash([2, 7]);
+  GEO.dog.forEach(r => { x.beginPath(); x.arc(CX, CY, r * U, 0, TAU); x.stroke(); });
+  x.setLineDash([]);
+  const nodes = [];
+  for (let n = 0; nodes.length < 38 && n < 2000; n++) { const p = [rand(0, W), rand(0, H)]; if (Math.hypot(p[0] - CX, p[1] - CY) > U * .52) nodes.push(p); }
+  x.strokeStyle = 'rgba(255,51,68,.10)';
+  nodes.forEach(p => nodes.map(q => [q, Math.hypot(q[0] - p[0], q[1] - p[1])]).sort((a, b) => a[1] - b[1]).slice(1, 3)
+    .forEach(([q]) => { x.beginPath(); x.moveTo(...p); x.lineTo(p[0], q[1]); x.lineTo(...q); x.stroke(); }));   // right-angle wires, like circuit traces
+  x.font = `${Math.round(U * .011)}px Consolas, monospace`; x.fillStyle = 'rgba(255,51,68,.3)';
+  nodes.forEach(p => { x.fillRect(p[0] - 2, p[1] - 2, 4, 4); if (Math.random() < .5) x.fillText('0x' + hex4(), p[0] + 6, p[1] - 5); });
+  return c;
+}
+// one shield ring, drawn once with its gap facing angle 0, then just rotated each frame. A blurred copy is its glow
+function buildRing(g, name) {
+  const R = g.r * U, Th = g.t * U, half = Math.ceil(R + Th / 2 + 8), [c, x] = off(half * 2, half * 2), a0 = g.gap, a1 = TAU - g.gap;
+  x.translate(half, half);
+  x.lineWidth = Th; x.strokeStyle = 'rgba(255,51,68,.13)'; x.beginPath(); x.arc(0, 0, R, a0, a1); x.stroke();
+  x.lineWidth = Th * .16; x.strokeStyle = 'rgba(255,90,110,.35)';                  // data blocks inside the band
+  for (let a = a0 + .04; a < a1 - .08; a += rad(rand(4, 9))) { x.beginPath(); x.arc(0, 0, R + rand(-.28, .28) * Th, a, a + rad(rand(1.5, 4.5))); x.stroke(); }
+  x.lineWidth = 1.6; x.strokeStyle = 'rgba(255,70,90,.95)';                         // the two edges
+  [R - Th / 2, R + Th / 2].forEach(r => { x.beginPath(); x.arc(0, 0, r, a0, a1); x.stroke(); });
+  for (let a = a0; a <= a1 + 1e-6; a += rad(3)) {                                   // ticks: small every 3°, across the band every 30°
+    const big = Math.round((a - a0) / rad(3)) % 10 === 0;
+    x.lineWidth = big ? 1.6 : 1; x.strokeStyle = big ? 'rgba(255,255,255,.6)' : 'rgba(255,51,68,.55)';
+    x.beginPath(); x.moveTo(Math.cos(a) * (R + Th / 2), Math.sin(a) * (R + Th / 2));
+    x.lineTo(Math.cos(a) * (R + Th / 2 - Th * (big ? 1 : .28)), Math.sin(a) * (R + Th / 2 - Th * (big ? 1 : .28))); x.stroke();
+  }
+  x.font = `${Math.round(Th * .36)}px Consolas, monospace`; x.fillStyle = 'rgba(255,225,230,.6)'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  const labels = [`SHIELD ${name}`, '0x' + hex4(), `Ω-${hex4()}`, 'AURORA//SEC', `NODE ${hex4()}`];
+  labels.forEach((t, k) => {                                                        // tiny labels riding the band
+    const a = a0 + (k + .5) * (a1 - a0) / labels.length;
+    x.save(); x.rotate(a); x.translate(R, 0); x.rotate(Math.PI / 2); x.fillText(t, 0, 0); x.restore();
+  });
+  x.lineWidth = 3; x.strokeStyle = '#fff';                                          // the gap's ends: bright caps with hooks
+  [a0, a1].forEach((a, k) => {
+    const s = k ? 1 : -1;                                                           // the hooks point into the gap
+    x.beginPath(); x.moveTo(Math.cos(a) * (R - Th / 2 - 4), Math.sin(a) * (R - Th / 2 - 4)); x.lineTo(Math.cos(a) * (R + Th / 2 + 4), Math.sin(a) * (R + Th / 2 + 4)); x.stroke();
+    x.lineWidth = 2;
+    [R - Th / 2 - 4, R + Th / 2 + 4].forEach(r => { x.beginPath(); x.arc(0, 0, r, Math.min(a, a + s * rad(3)), Math.max(a, a + s * rad(3))); x.stroke(); });
+    x.lineWidth = 3;
+  });
+  const [gc, gx] = off(half * 2, half * 2);
+  gx.filter = `blur(${Math.max(3, Th * .3)}px)`; gx.drawImage(c, 0, 0, half * 2, half * 2);
+  return { c, gc, half };
+}
+// her heart's cracks: jagged lines out from the core, revealed 3 per broken layer
+const CRACKS = Array.from({ length: 16 }, (_, k) => {
+  let a = k / 16 * TAU + rand(-.15, .15), r = 1, pts = [[a, r]];
+  for (let j = 0; j < 5; j++) { a += rand(-.35, .35); r += rand(.25, .55); pts.push([a, r]); }
+  return pts;
+});
+// data packets streaming into her heart along the spokes
+const PACKETS = Array.from({ length: 26 }, () => ({ a: (Math.random() * 24 | 0) / 24 * TAU, r: rand(.08, .5), v: rand(.06, .14) }));
+const parts = [], waves = [];
+function spark(x, y, ang, spd, life, col, w = 1.6, shard = 0) {
+  if (parts.length < 600) parts.push({ x, y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd, life, max: life, col, w, shard, rot: rand(0, TAU), vr: rand(-12, 12) });
+}
+let kickAmt = 0;
+const kick = n => kickAmt = Math.max(kickAmt, n);
+
+// the heartbeat: a double thump; it speeds up with every broken layer (60 → ~120 bpm)
+const period = () => 1 - .12 * broken;
+let beatPh = 0, beatAt = -1e9;
+const pulse = x => x < 0 ? 0 : Math.exp(-x * 14);
+const beatEnv = now => { const p = (now - beatAt) / 1000; return pulse(p) + .6 * pulse(p - .22); };
+
+// ===== Update =====
+function turnInput(i) {
+  return i === 0 ? (held.KeyD ? 1 : 0) - (held.KeyA ? 1 : 0) : (held.ArrowRight ? 1 : 0) - (held.ArrowLeft ? 1 : 0);
+}
+function update(dt, now) {
+  const live = mode !== 'standby' && mode !== 'end';
+  if (live && (beatPh += dt / period()) >= 1) {
+    beatPh -= 1; beatAt = now; waves.push(now);
+    if (CFG.BEAT_VOL) sfx.beat(CFG.BEAT_VOL * (.45 + .2 * broken));
+  }
+  e += (eTo - e) * Math.min(1, dt * 4);                  // the emitter slides when she moves it
+  if (mode === 'play') {
+    const R = CFG.ROUNDS[round];
+    rings.forEach((g, i) => {
+      const dir = potLive(i) ? 0 : turnInput(i);            // a talking controller sets knobs[i] itself; otherwise the keys turn it
+      g.hold = dir ? g.hold + dt * 1000 : 0;
+      const spd = CFG.TURN[0] + (CFG.TURN[1] - CFG.TURN[0]) * Math.min(1, g.hold / CFG.TURN[2]);
+      const k = clamp(knobs[i] + dir * spd * dt / CFG.POT_DEG, 0, 1), stop = dir !== 0 && k === (dir > 0 ? 1 : 0);
+      if (stop && !g.stop) { sfx.stop(); dialStop(i); }     // turned into an end stop: clunk
+      g.stop = stop; knobs[i] = k;
+      if (now > g.flip) { g.drift = Math.random() < .5 ? -g.drift : g.drift; g.flip = now + rand(2000, 5000); }
+      const dv = R.drift * (assisted ? .5 : 1) * (.55 + .45 * Math.sin(now / 1100 + i * 2));
+      g.off += rad(g.drift * dv) * dt;
+      const away = keepReachable(g, e); if (away) g.drift = away;
+      g.a = ringAngle(g, knobs[i]);
+      const L = aligned(g, e);
+      if (L !== g.lock) { g.lock = L; L ? sfx.lockOn() : sfx.lockOff(); $('#l' + i).classList.toggle('on', L); $('#l' + i).textContent = L ? '● LOCKED' : 'OPEN'; }
+    });
+    dogs.forEach(d => {
+      if (now > d.flip) { if (Math.random() < .5) d.dir = -d.dir; d.flip = now + rand(1500, 4000); }
+      d.a += d.w * d.dir * dt;
+    });
+    if (held.Space && now > coolUntil && !shot) {
+      charge += dt * 1000 / CFG.CHARGE_MS;
+      const [mx, my] = at(e, GEO.rail * U - U * .04);
+      for (let k = 0; k < 1 + charge * 4; k++) {            // energy pulled into the muzzle
+        const a = rand(0, TAU), d = U * rand(.04, .09);
+        spark(mx + Math.cos(a) * d, my + Math.sin(a) * d, a + Math.PI, d / .22, .22, Math.random() < .5 ? '#fff' : '#ff6677', 1.2);
+      }
+      if (charge >= 1) { charge = 0; fire(); }
+    } else charge = Math.max(0, charge - dt * 3);
+    const rt = (now - roundT0) / 1000;
+    if (rt > CFG.PAR_S) human = Math.min(100, human + CFG.SLOW_PER_S * dt);
+    if (rt >= CFG.HINT_AT && !hinted) { hinted = true; showHint(R.hint); }
+    if (hintText && now > nextGlitch) glitchHint(CFG.HINT_MS);
+    if (rt >= CFG.ASSIST_AT && !assisted) assist();
+  } else charge = Math.max(0, charge - dt * 3);
+  chargeSound(charge);
+  $('#chg i').style.width = charge * 100 + '%';
+  drawDials();
+  if (shot) {
+    const t = now - shot.t0;
+    if (t > T.travel && t < shot.hold) {                    // the beam keeps spraying where it lands
+      const [x, y] = at(shot.e, shot.r * U), core = shot.kind === 'core';
+      for (let k = 0; k < (core ? 4 : 3); k++) spark(x, y, core ? rand(0, TAU) : shot.e + rand(-1.2, 1.2), rand(150, 650), rand(.25, .6),
+        core ? any(['#fff', '#4dff88', '#b8ffd0']) : any(['#fff', '#ff8a96', '#ff3344', '#ffd0a0']));
+    }
+    if (t > shot.hold + T.decay) shot = null;
+  }
+  const drag = Math.pow(.9, dt * 60);
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i];
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= drag; p.vy *= drag; p.rot += p.vr * dt; p.life -= dt;
+    if (p.life <= 0) parts.splice(i, 1);
+  }
+  PACKETS.forEach(p => { p.r -= p.v * dt; if (p.r < GEO.core) { p.r = rand(.45, .55); p.a = (Math.random() * 24 | 0) / 24 * TAU; } });
+  while (waves.length && now - waves[0] > 1600) waves.shift();
+  kickAmt *= Math.pow(.86, dt * 60);
+}
+
+// ===== Draw =====
+function drawCore(now) {
+  const b = beatEnv(now), r = GEO.core * U, fl = Math.max(0, 1 - (now - flareAt) / 900);
+  ctx.globalCompositeOperation = 'lighter';
+  waves.forEach(t0 => {                                       // every beat sends a ring out through her shields
+    const k = (now - t0) / 1600;
+    ctx.globalAlpha = .22 * (1 - k); ctx.strokeStyle = '#4dff88'; ctx.lineWidth = 1.5;
+    circle(CX, CY, r + k * U * .45); ctx.stroke();
+  });
+  glowAt(GG, CX, CY, r * (7 + 2.5 * b + 12 * fl), .4 + .35 * b + .6 * fl);
+  glowAt(GW, CX, CY, r * (2.4 + .8 * b + 5 * fl), .3 + .35 * b + .7 * fl);
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  ctx.fillStyle = 'rgba(0,22,9,.9)'; circle(CX, CY, r); ctx.fill();
+  ctx.strokeStyle = '#4dff88'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = '#dcffe8'; circle(CX, CY, r * (.36 + .16 * b + .3 * fl)); ctx.fill();
+  ctx.save(); ctx.translate(CX, CY);
+  ctx.rotate(now / 1400); ctx.setLineDash([r * .28, r * .18]); ctx.strokeStyle = 'rgba(77,255,136,.75)'; ctx.lineWidth = 1.5;
+  circle(0, 0, r * 1.35); ctx.stroke();
+  ctx.rotate(-now / 600); ctx.setLineDash([2, r * .32]); ctx.strokeStyle = 'rgba(77,255,136,.5)'; ctx.lineWidth = 3;
+  circle(0, 0, r * 1.7); ctx.stroke();
+  ctx.restore(); ctx.setLineDash([]);
+  const n = CFG.ROUNDS.length;                                // integrity: one arc per layer, broken ones go dark red
+  for (let i = 0; i < n; i++) {
+    const a0 = -Math.PI / 2 + i * TAU / n + .14;
+    ctx.strokeStyle = i < broken ? 'rgba(255,51,68,.4)' : '#4dff88'; ctx.lineWidth = i < broken ? 1.5 : 3.5;
+    ctx.beginPath(); ctx.arc(CX, CY, r * 2.1, a0, a0 + TAU / n - .28); ctx.stroke();
+  }
+  const shown = mode === 'won' ? CRACKS.length : broken * 3;
+  ctx.strokeStyle = 'rgba(225,255,235,.85)'; ctx.lineWidth = 1.4;
+  CRACKS.slice(0, shown).forEach(pts => {
+    ctx.beginPath(); pts.forEach(([a, k], j) => ctx[j ? 'lineTo' : 'moveTo'](...at(a, k * r))); ctx.stroke();
+  });
+}
+function drawRing(g, i, now) {
+  if (!g.spr) g.spr = buildRing(g, i ? 'β' : 'α');
+  const { c, gc, half } = g.spr, k = Math.min(1, (now - ringsIn) / 700), ease = 1 - Math.pow(1 - k, 3);
+  if (k <= 0) return;
+  const R = g.r * U, Th = g.t * U, fl = Math.max(0, 1 - (now - ringFlashAt) / 700);
+  ctx.save(); ctx.translate(CX, CY); ctx.rotate(g.a + (1 - ease) * (i ? -2 : 2));   // it spins in from nowhere
+  const s = 1 + (1 - ease) * .4; ctx.scale(s, s);
+  ctx.globalAlpha = ease; ctx.drawImage(c, -half, -half, half * 2, half * 2);
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = ease * Math.min(1, (g.lock ? .95 : .4 + .12 * Math.sin(now / 280 + i)) + fl);
+  ctx.drawImage(gc, -half, -half, half * 2, half * 2);
+  if (g.lock) {                                               // locked on: the gap's ends burn white
+    [g.gap, -g.gap].forEach(a => {
+      const x = Math.cos(a) * R, y = Math.sin(a) * R;
+      glowAt(GW, x, y, Th * 3.2, .55 + .15 * Math.sin(now / 90));
+    });
+  }
+  ctx.restore();
+  ctx.globalCompositeOperation = 'lighter';
+  g.heat = g.heat.filter(h => now - h.t0 < 1600);
+  g.heat.forEach(h => {                                       // where the beam struck: white hot, cooling to red
+    const k2 = (now - h.t0) / 1600, a = g.a + h.rel, [x, y] = at(a, R);
+    ctx.globalAlpha = 1 - k2; ctx.lineWidth = Th * (1 - k2 * .4);
+    ctx.strokeStyle = k2 < .25 ? '#fff' : k2 < .55 ? '#ffb070' : '#ff3344';
+    ctx.beginPath(); ctx.arc(CX, CY, R, a - .09, a + .09); ctx.stroke();
+    glowAt(k2 < .4 ? GW : GR, x, y, Th * 5 * (1 - k2), 1 - k2);
+  });
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+}
+function drawDog(d, i, now) {
+  const k = Math.min(1, (now - ringsIn) / 700);
+  if (k <= 0) return;
+  const R = d.r * U, [x, y] = at(d.a, R), s = GEO.dogSize * U * k, hit = Math.max(0, 1 - (now - d.hitT) / 600);
+  ctx.globalCompositeOperation = 'lighter';
+  for (let j = 0; j < 7; j++) {                               // its trail along the patrol track
+    const p = d.a - d.dir * (j + 1) * .045, q = d.a - d.dir * j * .045;
+    ctx.globalAlpha = .45 * (1 - j / 7); ctx.strokeStyle = '#4dff88'; ctx.lineWidth = s * .55 * (1 - j / 7);
+    ctx.beginPath(); ctx.arc(CX, CY, R, Math.min(p, q), Math.max(p, q)); ctx.stroke();
+  }
+  glowAt(GG, x, y, s * 7, .55 + hit);
+  if (hit) glowAt(GW, x, y, s * 5, hit);
+  const ph = ((now + i * 600) % 1200) / 1200;                 // sonar ping
+  ctx.globalAlpha = .6 * (1 - ph); ctx.lineWidth = 1; circle(x, y, s * (1.3 + 2.2 * ph)); ctx.stroke();
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  ctx.save(); ctx.translate(x, y); ctx.rotate(d.a + d.dir * Math.PI / 2);   // nose along its path
+  ctx.fillStyle = hit > .3 ? '#fff' : '#4dff88';
+  ctx.beginPath(); ctx.moveTo(s * 1.1, 0); ctx.lineTo(-s * .8, s * .8); ctx.lineTo(-s * .3, 0); ctx.lineTo(-s * .8, -s * .8); ctx.closePath(); ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(77,255,136,.8)'; ctx.lineWidth = 1.2;  // profiler brackets + tag, like a targeted NPC
+  const b = s * 2, l = s * .7;
+  [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([sx, sy]) => {
+    ctx.beginPath(); ctx.moveTo(x + sx * b, y + sy * (b - l)); ctx.lineTo(x + sx * b, y + sy * b); ctx.lineTo(x + sx * (b - l), y + sy * b); ctx.stroke();
+  });
+  const tx = x + b + U * .025, ty = y - b - U * .015;
+  line(x + b, y - b, tx - 4, ty + 4);
+  ctx.font = `${Math.round(U * .012)}px Consolas, monospace`; ctx.textAlign = 'left';
+  ctx.fillStyle = '#4dff88'; ctx.fillText(`WATCHDOG 0${i + 1}`, tx, ty);
+  ctx.fillStyle = hit ? '#fff' : 'rgba(77,255,136,.65)'; ctx.fillText(hit ? '▲ INTERCEPT' : '● PATROL', tx, ty + U * .016);
+}
+function drawEmitter(now) {
+  const R = GEO.rail * U, s = U * .03, [x, y] = at(e, R), [mx, my] = at(e, R - s * 1.35);
+  const cool = Math.max(0, (coolUntil - now) / CFG.COOLDOWN_MS);
+  ctx.strokeStyle = 'rgba(255,51,68,.25)'; ctx.lineWidth = 1; ctx.setLineDash([3, 8]);
+  ctx.beginPath(); ctx.arc(CX, CY, R, E_MIN, E_MAX); ctx.stroke();
+  if (mode === 'play' || mode === 'trans') {                  // the aim line: white once nothing is in the way
+    const clear = rings.length && impact(e, rings, dogs).kind === 'core' && mode === 'play';
+    ctx.setLineDash([U * .012, U * .01]); ctx.lineDashOffset = -now / 16;
+    ctx.strokeStyle = clear ? `rgba(255,255,255,${.45 + .5 * charge})` : `rgba(255,51,68,${.22 + .5 * charge})`;
+    ctx.lineWidth = 1 + 2.5 * charge + (clear ? 1 : 0); line(mx, my, CX, CY);
+  }
+  ctx.setLineDash([]); ctx.lineDashOffset = 0;
+  ctx.save(); ctx.translate(x, y); ctx.rotate(e + Math.PI);  // +x points at her heart
+  ctx.fillStyle = '#160307'; ctx.strokeStyle = '#ff3344'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(-s * .9, -s * .75); ctx.lineTo(s * .3, -s * .48); ctx.lineTo(s * .3, s * .48); ctx.lineTo(-s * .9, s * .75); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = cool > 0 ? `rgb(255,${Math.round(110 + 120 * (1 - cool))},${Math.round(80 * (1 - cool))})` : '#ff3344';
+  ctx.fillRect(s * .3, -s * .42, s * 1.05, s * .16); ctx.fillRect(s * .3, s * .26, s * 1.05, s * .16);
+  ctx.globalAlpha = .35 + .65 * charge; ctx.fillStyle = '#fff'; circle(-s * .2, 0, s * .2); ctx.fill();
+  ctx.restore(); ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'lighter';
+  if (cool > 0) glowAt(GR, mx, my, s * 3 * cool, .6 * cool);   // still hot from the last shot
+  if (charge > 0) {
+    glowAt(GR, mx, my, s * (2 + 7 * charge), .35 + .65 * charge);
+    glowAt(GW, mx, my, s * (.4 + 2.2 * charge), charge);
+    ctx.strokeStyle = '#ff8090'; ctx.lineWidth = 1.5;
+    for (let j = 0; j < 3; j++) {                             // three arcs closing in on the muzzle
+      const a = now / 120 * (j % 2 ? -1 : 1) + j * 2.1, rr = s * (1.9 - 1.2 * charge) + j * 3;
+      ctx.globalAlpha = charge; ctx.beginPath(); ctx.arc(mx, my, rr, a, a + 1.4); ctx.stroke();
+    }
+  }
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  ctx.font = `${Math.round(U * .013)}px Consolas, monospace`; ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(255,200,205,.85)';
+  const label = mode !== 'play' ? 'EMITTER' : cool > 0 ? 'VENTING' : charge > 0 ? `CHARGING ${Math.round(charge * 100)}%` : 'HOLD SPACE';
+  ctx.fillText(label, x + s * 1.3, y + s * 1.2);
+}
+function drawBeam(now) {
+  if (!shot) return;
+  const t = now - shot.t0, s = U * .03, [x0, y0] = at(shot.e, GEO.rail * U - s * 1.35), [x1, y1] = at(shot.e, shot.r * U);
+  const p = Math.min(1, t / T.travel), xe = x0 + (x1 - x0) * p, ye = y0 + (y1 - y0) * p;
+  const fade = t < shot.hold ? 1 : Math.max(0, 1 - (t - shot.hold) / T.decay);
+  if (!fade) return;
+  const grow = shot.final ? 1 + Math.min(1.6, t / 900) : 1, k = fade * grow * (.85 + Math.random() * .3), u = U / 1080;
+  ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
+  [[48, 'rgba(255,30,60,.10)'], [24, 'rgba(255,51,68,.30)'], [10, 'rgba(255,140,150,.75)'], [3.2, '#fff']].forEach(([w, c]) => {
+    ctx.globalAlpha = 1; ctx.strokeStyle = c; ctx.lineWidth = w * k * u; line(x0, y0, xe, ye);
+  });
+  const L = Math.hypot(xe - x0, ye - y0);
+  if (L > 2) {
+    const ux = (xe - x0) / L, uy = (ye - y0) / L, nx = -uy, ny = ux;
+    ctx.lineWidth = 1.3; ctx.strokeStyle = '#ffdde2';
+    for (const ph of [0, Math.PI]) {                          // two strands coiling around the beam
+      ctx.globalAlpha = .5 * fade; ctx.beginPath();
+      for (let d = 0; d <= L; d += 6) {
+        const o = Math.sin(d / (20 * u) - now / 35 + ph) * 10 * u * k * Math.min(1, d / (40 * u));
+        ctx[d ? 'lineTo' : 'moveTo'](x0 + ux * d + nx * o, y0 + uy * d + ny * o);
+      }
+      ctx.stroke();
+    }
+    for (let j = 0; j < 6; j++) {                             // energy pulses racing down it
+      const q = (now / 160 + j / 6) % 1;
+      glowAt(GW, x0 + (xe - x0) * q, y0 + (ye - y0) * q, 30 * u * k, .8 * fade);
+    }
+  }
+  glowAt(GR, x0, y0, 170 * u * k, .9 * fade); glowAt(GW, x0, y0, 70 * u * k, fade);
+  if (p >= 1) {
+    const big = shot.kind === 'core' ? 2 : 1;
+    glowAt(GR, x1, y1, 230 * big * u * k, fade);
+    glowAt(GW, x1, y1, 95 * big * u * k * rand(.8, 1.2), fade);
+  }
+  ctx.lineCap = 'butt'; ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+}
+function drawParts() {
+  ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
+  parts.forEach(p => {
+    ctx.globalAlpha = Math.min(1, p.life / p.max * 1.5); ctx.strokeStyle = p.col; ctx.lineWidth = p.w;
+    if (p.shard) { const dx = Math.cos(p.rot) * p.shard, dy = Math.sin(p.rot) * p.shard; line(p.x - dx, p.y - dy, p.x + dx, p.y + dy); }
+    else line(p.x, p.y, p.x - p.vx * .035, p.y - p.vy * .035);   // a streak along its path
+  });
+  ctx.lineCap = 'butt'; ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+}
+function draw(now) {
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  if (kickAmt > .3) ctx.translate(rand(-kickAmt, kickAmt), rand(-kickAmt, kickAmt));
+  ctx.drawImage(bg, 0, 0, W, H);
+  ctx.globalCompositeOperation = 'lighter';
+  const sw = now / 2600 * TAU;                                // her radar sweep
+  ctx.globalAlpha = .05; ctx.fillStyle = '#4dff88';
+  ctx.beginPath(); ctx.moveTo(CX, CY); ctx.arc(CX, CY, U * .47, sw - .55, sw); ctx.closePath(); ctx.fill();
+  ctx.globalAlpha = .18; ctx.strokeStyle = '#4dff88'; ctx.lineWidth = 1; line(CX, CY, ...at(sw, U * .47));
+  ctx.fillStyle = '#4dff88';
+  PACKETS.forEach(p => { const [x, y] = at(p.a, p.r * U); ctx.globalAlpha = .7; ctx.fillRect(x - 1.5, y - 1.5, 3, 3); });
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  drawCore(now);
+  if (!ringsGone) rings.forEach((g, i) => drawRing(g, i, now));
+  dogs.forEach((d, i) => drawDog(d, i, now));
+  drawEmitter(now);
+  drawBeam(now);
+  drawParts();
+}
+let last = performance.now();
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(.05, (now - last) / 1000); last = now;
+  if (mode === 'standby' || mode === 'end') return;          // nothing on screen to draw: the GPU rests
+  update(dt, now); draw(now);
+}
+
+// ===== Screen text =====
+function renderMeter() {
+  $('#bp').textContent = Math.round(human) + '%';
+  segEls.forEach((el, i) => el.classList.toggle('on', i < human / 100 * segEls.length));
+}
+function renderHud() {
+  const n = CFG.ROUNDS.length;
+  $('#stats').innerHTML = mode === 'intro' ? 'TARGET <span>AURORA//HEART</span><br>EMITTER <span>ARMING</span>' :
+    `LAYER <span>${Math.min(round + 1, n)}/${n}</span><br>SHOTS <span>${shots}</span> · MISSED <span>${misses}</span><br>` +
+    `HEART <span class="${broken ? 'mv' : ''}">${Math.round(60 / period())} BPM</span>`;
+  $('#hl').textContent = `${round + 1}/${n}`; $('#hm').textContent = misses;
+}
+setInterval(() => { if (mode !== 'standby' && mode !== 'end') { renderMeter(); renderHud(); } }, 250);
+async function termLine(text) {
+  const tm = $('#term'), el = document.createElement('div');
+  tm.append(el);
+  await type(el, '> ' + text, T.termChar);
+}
+let aurTok = 0;
+async function aurora(text, hold = 0) {
+  const a = $('#aur'), me = ++aurTok;
+  a.classList.remove('glitch');
+  await type(a, text, T.typeChar, VOICES.aurora);
+  if (me !== aurTok) return;
+  a.dataset.text = text; a.classList.add('glitch'); shake(a, 8, 300);
+  setTimeout(() => a.classList.remove('glitch'), 600);
+  if (hold) { await wait(hold); if (me === aurTok) a.textContent = ''; }
+}
+// hints (puzzle 3's): the text tears onto the screen for a moment (jitter, scrambled letters, RGB split), then vanishes
+let hintText = null, nextGlitch = Infinity, glitching = false;
+function showHint(text) { hintText = text; glitchHint(CFG.HINT_FIRST_MS); }
+async function glitchHint(ms) {
+  if (glitching || !hintText) return;
+  glitching = true;
+  const w = $('#ghintWrap'), g = $('#ghint'), text = hintText, pool = '▓▒░#%&@$/\\', t0 = performance.now();
+  g.dataset.text = text; w.classList.add('on'); sfx.glitch();
+  scr.querySelector('.rollbar').animate([{ top: '-20%' }, { top: '110%' }], 320);
+  while (performance.now() - t0 < ms && mode === 'play' && hintText === text) {
+    g.textContent = Math.random() < .3 ? [...text].map(c => c !== ' ' && Math.random() < .35 ? any(pool) : c).join('') : text;
+    g.style.opacity = Math.random() < .15 ? 0 : 1;
+    g.style.transform = `translate(${rand(-14, 14)}px,${rand(-6, 6)}px) skewX(${rand(-10, 10)}deg)`;
+    if (Math.random() < .2) sfx.glitch();
+    await wait(rand(50, 110));
+  }
+  w.classList.remove('on'); g.style.transform = '';
+  nextGlitch = performance.now() + rand(...CFG.HINT_EVERY);
+  glitching = false;
+}
+async function microGlitch() {                 // rollbar + tiny screen jumps now and then, like puzzles 1 and 3
+  while (mode === 'play' || mode === 'trans') {
+    await wait(rand(2500, 6000));
+    if (Math.random() < .5) scr.querySelector('.rollbar').animate([{ top: '-20%' }, { top: '110%' }], 320);
+    else scr.animate([{ transform: 'none' }, { transform: 'translateX(-10px) skewX(4deg)', offset: .3 }, { transform: 'none' }], 130);
+  }
+}
+
+// ===== The game =====
+// a new spot for the emitter on its rail, at least 45° away, where both knobs can still reach the beam
+// (no reachable spot that far: the farthest reachable one)
+function randE() {
+  let best = eTo, far = 0;
+  for (let n = 0; n < 400; n++) {
+    const a = rand(E_MIN, E_MAX), d = angDist(a, eTo);
+    if (!rings.every(g => reachable(g, a))) continue;
+    if (d >= rad(45)) return a;
+    if (d > far) { far = d; best = a; }
+  }
+  return best;
+}
+// each layer the knobs stay where the team left them; the rings get a new base, so the gap lines up at a new knob
+// position, at least a quarter turn away from where the knob is now and well clear of both end stops
+function makeRings(R) {
+  return GEO.ring.map((r, i) => {
+    let k; do k = rand(.15, .85); while (Math.abs(k - knobs[i]) < .25);
+    const g = { r, t: GEO.thick[i], gap: rad(R.gap / 2), base: eTo - k * SPAN, off: 0,
+      hold: 0, stop: false, drift: i ? 1 : -1, flip: 0, lock: false, heat: [], spr: null };
+    g.a = ringAngle(g, knobs[i]);
+    return g;
+  });
+}
+function makeDogs(R) {                        // one on each patrol track: outside the outer ring, and between the rings
+  return Array.from({ length: R.dogs }, (_, i) => ({ r: GEO.dog[i % 2], a: eTo + rad(rand(60, 300)),
+    w: rad(rand(38, 62)), dir: i % 2 ? 1 : -1, flip: 0, hitT: -1e9 }));
+}
+async function start() {
+  if (mode !== 'standby') return;
+  mode = 'intro'; B.classList.add('started');
+  renderHud(); play('core', true);
+  await crtOn();
+  if (location.hash === '#game') { history.replaceState(null, '', location.pathname + location.search); return startRound(); }
+  await wait(600);
+  for (const l of INTRO) { await termLine(l); await wait(T.after); }
+  sfx.ok(); await wait(600);
+  startRound();
+}
+async function startRound() {
+  const R = CFG.ROUNDS[round];
+  mode = 'trans'; $('#term').textContent = ''; B.classList.add('game');
+  hintText = null; hinted = assisted = false; shot = null; charge = 0;
+  rings = [];                                  // the old rings don't limit where the emitter goes: the new ones are built around it
+  if (R.move) { eTo = randE(); sfx.slide(); }
+  rings = makeRings(R); dogs = makeDogs(R); ringsIn = Infinity;
+  ['#l0', '#l1'].forEach(id => { $(id).classList.remove('on'); $(id).textContent = 'OPEN'; });
+  renderHud(); if (round === 0) microGlitch();
+  const b = $('#banner'), bt = $('#bt');
+  $('#bk').textContent = `LAYER ${round + 1} / ${CFG.ROUNDS.length}`;
+  $('#bs').textContent = round ? 'NEW HANDS ON THE CONTROLS' : 'OUTER RING  A / D   ·   INNER RING  ◄ / ►   ·   HOLD SPACE';
+  bt.classList.remove('glitch'); b.classList.add('on'); sfx.stamp(); kick(6);
+  await resolveText(bt, R.name, 55);
+  bt.dataset.text = R.name; bt.classList.add('glitch'); setTimeout(() => bt.classList.remove('glitch'), 500);
+  await wait(T.banner);
+  b.classList.remove('on');
+  ringsIn = performance.now(); sfx.ignite();
+  aurora(R.line, 2600);
+  roundT0 = performance.now(); mode = 'play';
+}
+// her shields slip when a layer drags on, so no team gets stuck
+function assist() {
+  assisted = true;
+  rings.forEach(g => { g.gap += rad(CFG.ASSIST_DEG / 2); g.spr = null; });
+  aurora(AUR.assist, 2200); sfx.glitch(); kick(5);
+}
+async function fire() {
+  const R = CFG.ROUNDS[round], hit = impact(e, rings, dogs), t0 = performance.now();
+  shots++; shot = { t0, e, ...hit, hold: T.hold }; coolUntil = t0 + CFG.COOLDOWN_MS;
+  fx('fire'); kick(9);
+  await wait(T.travel);
+  const [x, y] = at(e, hit.r * U), now = performance.now();
+  if (hit.kind === 'core') return layerDown(x, y);
+  misses++; human = Math.min(100, human + CFG.MISS_D); renderMeter(); renderHud();
+  $('#bar').animate([{ filter: 'brightness(2.5)' }, {}], 600); shake($('#bar'), 8, 300);
+  for (let k = 0; k < 45; k++) spark(x, y, e + rand(-1.3, 1.3), rand(200, 800), rand(.3, .8), any(['#fff', '#ff8a96', '#ff3344', '#ffd0a0']));
+  if (hit.kind === 'ring') {
+    const g = rings[hit.i]; g.heat.push({ rel: e - g.a, t0: now });
+    fx('deflect'); aurora(any(AUR.miss), 1500);
+  } else {
+    dogs[hit.i].hitT = now; fx('dogHit'); aurora(any(AUR.dog), 1500);
+    for (let k = 0; k < 20; k++) spark(x, y, rand(0, TAU), rand(100, 400), rand(.3, .6), '#4dff88');
+  }
+  $('#flash').animate([{ opacity: .18, background: '#ff3344' }, { opacity: 0 }], 260);
+  if (R.move && mode === 'play') { await wait(700); if (mode === 'play') { eTo = randE(); sfx.slide(); } }
+}
+// a clean hit: her heart flares, one integrity arc goes dark, and the next layer comes up harder
+async function layerDown(x, y) {
+  const last = round >= CFG.ROUNDS.length - 1;
+  mode = last ? 'won' : 'trans'; broken++; hintText = null;
+  flareAt = ringFlashAt = performance.now(); waves.push(performance.now());
+  fx('hit'); kick(22); shake(app, 12, 500);
+  $('#flash').animate([{ opacity: .55, background: '#dcffe8' }, { opacity: 0 }], 500);
+  for (let k = 0; k < 90; k++) spark(x, y, rand(0, TAU), rand(150, 900), rand(.4, 1.1), any(['#fff', '#4dff88', '#b8ffd0', '#4dff88']), 2);
+  renderHud(); renderMeter();
+  if (last) return finale();
+  await aurora(AUR.hit[round % AUR.hit.length], 900);
+  await wait(500);
+  round++; startRound();
+}
+// the last layer: the beam doesn't stop, her heart cracks open, and every ring and watchdog blows apart
+async function finale() {
+  shot.hold = 1900; shot.final = true;
+  fade('core', 0, 1500);
+  aurTok++; type($('#aur'), AUR.final, 45, VOICES.angry);
+  for (let i = 0; i < 14; i++) { kick(6 + i * 1.5); if (i % 3 === 0) sfx.glitch(); await wait(100); }
+  fx('shatter'); kick(40); shake(app, 22, 900); flareAt = performance.now();
+  $('#flash').animate([{ opacity: 1 }, { opacity: 0 }], { duration: 900, easing: 'ease-out' });
+  rings.forEach(g => {
+    const R = g.r * U;
+    for (let k = 0; k < 34; k++) {
+      const a = rand(0, TAU), [x, y] = at(a, R);
+      spark(x, y, a + rand(-.4, .4), rand(250, 900), rand(.8, 1.8), any(['#ff3344', '#fff', '#ff8a96']), 2.2, g.t * U * rand(.4, .8));
+    }
+  });
+  dogs.forEach(d => { const [x, y] = at(d.a, d.r * U); for (let k = 0; k < 40; k++) spark(x, y, rand(0, TAU), rand(200, 800), rand(.5, 1.2), any(['#4dff88', '#fff'])); });
+  ringsGone = true; dogs = [];
+  const glyphs = '▓▒░#%&@$/\\', a = $('#aur');
+  for (let i = 0; i < 12; i++) { a.textContent = [...a.textContent].map(c => Math.random() < .4 ? any([...glyphs]) : c).join(''); await wait(45); }
+  a.textContent = '';
+  await wait(1500);
+  await crtOff();
+  ending();
+}
+async function ending() {
+  mode = 'end'; chargeSound(0);
+  $('#flash').animate([{ opacity: 1 }, { opacity: 1, offset: .2 }, { opacity: 0 }], { duration: 1400, easing: 'ease-out' });
+  sfx.drop(); play('win');
+  B.classList.add('final');
+  const ft = $('#ft'), v = Math.round(human);
+  $('#fk').textContent = `SECTOR 04 ▸ HUMAN ${v}% ▸ ${misses} MISSED`;
+  await wait(350);
+  await resolveText(ft, 'CORE BREACHED', 70);
+  ft.dataset.text = ft.textContent; ft.classList.add('glitch'); sfx.stamp(); shake(app, 10, 400);
+  setTimeout(() => ft.classList.remove('glitch'), 700);
+  $('#fs').textContent = 'HER HEART IS EXPOSED'; $('#fs').classList.add('on');
+  await wait(1400);
+  await type($('#fa'), AUR.win, 45, VOICES.soft);
+  if (!replay) hubSend({ t: 'result', k: 'human', v, facts: { misses, shots } });   // staff replays don't overwrite a real team's HUMAN
+  hubSend({ t: 'evt', e: CFG.DONE_EVT });        // unlocks the finale
+}
+// staff: line up a clean shot and fire it (N = this layer, F = jump to the last layer and win)
+function cleanShot(toLast) {
+  if (mode !== 'play') return;
+  if (toLast) round = CFG.ROUNDS.length - 1;
+  rings.forEach((g, i) => { g.off = e - g.base - knobs[i] * SPAN; g.a = e; });   // the ring moves under the knob (a real pot can't be moved)
+  dogs = []; shot = null; coolUntil = 0;
+  fire();
+}
+
+// ===== Keys: the team turns the rings and fires; staff use Ctrl+Alt+<key> =====
+const PLAY_KEYS = ['KeyA', 'KeyD', 'ArrowLeft', 'ArrowRight', 'Space'];
+addEventListener('keydown', ev => {
+  if (ev.ctrlKey && ev.altKey) {
+    ev.preventDefault();
+    if (ev.code === 'KeyH') B.classList.toggle('help');
+    if (ev.code === 'KeyU') unlock();
+    if (ev.code === 'KeyP' && ev.isTrusted) potPair();
+    if (ev.code === 'KeyS') start();
+    if (ev.code === 'KeyK') { location.hash = 'game'; location.reload(); }
+    if (ev.code === 'KeyI' && mode === 'play') { hinted = true; showHint(CFG.ROUNDS[round].hint); }
+    if (ev.code === 'KeyN') cleanShot(false);
+    if (ev.code === 'KeyF') cleanShot(true);
+    if (ev.code === 'KeyR') location.reload();
+    if (ev.code === 'KeyW') { location.hash = 'win'; location.reload(); }
+    if (ev.code === 'KeyM') { muted = !muted; store.set('muted', muted); master.gain.value = muted ? 0 : CFG.VOLUME;
+      Object.values(tracks).forEach(a => a.muted = muted); }
+    return;
+  }
+  if (PLAY_KEYS.includes(ev.code)) { ev.preventDefault(); held[ev.code] = true; }
+  if (ev.code === 'Space' && mode === 'standby' && unlocked && !ev.repeat) start();
+});
+addEventListener('keyup', ev => { delete held[ev.code]; });
+addEventListener('blur', () => Object.keys(held).forEach(k => delete held[k]));   // no stuck keys if the window loses focus
+addEventListener('resize', resize);
+
+resize(); renderMeter(); renderHud(); hub(); pots(); requestAnimationFrame(frame);
+if (location.hash === '#game') setTimeout(start, 300);   // skip: start() jumps past the intro
+if (location.hash === '#win') { history.replaceState(null, '', location.pathname + location.search); B.classList.add('started'); replay = true; ending(); }
+
+// self-check: open game.html?test and look at the console
+if (location.search.includes('test')) {
+  const ring = (a, gapDeg, i = 0) => ({ a, gap: rad(gapDeg / 2), r: GEO.ring[i], t: GEO.thick[i] });
+  const down = rad(90);
+  console.assert(Math.abs(angDist(rad(350), rad(10)) - rad(20)) < 1e-9 && Math.abs(angDist(0, Math.PI) - Math.PI) < 1e-9, 'angDist wraps around');
+  console.assert(aligned(ring(down, 40), down) && aligned(ring(down + rad(15), 40), down), 'a gap facing the beam lets it through');
+  console.assert(!aligned(ring(down + rad(25), 40), down) && !aligned(ring(down + Math.PI, 40), down), 'a wall blocks it');
+  console.assert(impact(down, [ring(down, 40, 0), ring(down, 40, 1)], []).kind === 'core', 'both gaps lined up: hits her heart');
+  const r1 = impact(down, [ring(down, 40, 0), ring(0, 40, 1)], []);
+  console.assert(r1.kind === 'ring' && r1.i === 1, 'outer open, inner closed: the inner ring takes it');
+  const r2 = impact(down, [ring(0, 40, 0), ring(0, 40, 1)], []);
+  console.assert(r2.kind === 'ring' && r2.i === 0, 'both closed: the outer ring takes it first');
+  const r3 = impact(down, [ring(down, 40, 0), ring(down, 40, 1)], [{ r: GEO.dog[1], a: down }]);
+  console.assert(r3.kind === 'dog', 'a watchdog in the path eats the beam');
+  console.assert(impact(down, [ring(down, 40, 0), ring(down, 40, 1)], [{ r: GEO.dog[1], a: 0 }]).kind === 'core', 'a watchdog elsewhere does not');
+  const r4 = impact(down, [ring(0, 40, 0), ring(down, 40, 1)], [{ r: GEO.dog[0], a: down }]);
+  console.assert(r4.kind === 'dog', 'the outer watchdog is hit before the outer ring');
+  console.assert(CFG.ROUNDS.every(R => R.gap / 2 > 3 && R.hint && R.line), 'every layer has a gap, a hint and a line');
+  for (let k = 0; k < 200; k++) { rings = []; eTo = rad(90); const a = randE(); console.assert(a >= E_MIN && a <= E_MAX && angDist(a, eTo) >= rad(45), 'a new layer: the emitter moves somewhere new, on its rail'); }
+  // the rings as potentiometers
+  for (let k = 0; k < 300; k++) {
+    eTo = rad(rand(-10, 190)); knobs[0] = any([0, 1, Math.random()]); knobs[1] = Math.random();
+    const rs = makeRings(any(CFG.ROUNDS));
+    console.assert(rs.every(g => !aligned(g, eTo)), 'a layer never starts lined up');
+    console.assert(rs.every((g, i) => reachable(g, eTo) && Math.abs(need(g, eTo) - knobs[i]) >= .25 - 1e-9), 'the spot is between the end stops, a quarter turn from the knob');
+    console.assert(rs.every(g => aligned({ ...g, a: ringAngle(g, need(g, eTo)) }, eTo)), 'turning the knob to that spot lines the gap up');
+    rings = rs; const a = randE();
+    console.assert(a >= E_MIN && a <= E_MAX && rs.every(g => reachable(g, a)), 'a moved emitter stays where both knobs can reach it');
+    const g = rs[0];
+    for (let s = 0; s < 50; s++) { g.off += rad(rand(-40, 40)); keepReachable(g, eTo); console.assert(reachable(g, eTo), "Aurora's drift never pushes the spot past an end stop"); }
+  }
+  potLine('OUTER 0'); potLine('INNER 3150'); console.assert(knobs[0] === 0 && knobs[1] === 1, 'each controller drives its own ring: left stop = 0, right stop = 1');
+  potLine('OUTER 9999'); potLine('INNER -50'); console.assert(knobs[0] === 1 && knobs[1] === 0, 'readings past the stops clamp');
+  potLine('garbage 12'); potLine('K 1575 3'); potLine('OUTER'); console.assert(knobs[0] === 1, 'broken lines are ignored');
+  CFG.POT_MV[0] = [3150, 0]; potLine('OUTER 0'); console.assert(knobs[0] === 1, 'swapped numbers = the ring turns the other way');
+  potLine('INNER 100', 'portA'); potLine('INNER 120', 'portB'); console.assert(performance.now() - dupAt[1] < 50, 'two boards flashed as INNER get flagged');
+  CFG.POT_MV[0] = [0, 3150]; potSeen.fill(-1e9); dupAt.fill(-1e9); owner.fill(null); potMv.fill(null);
+  rings = []; knobs[0] = knobs[1] = .5; eTo = e = rad(90);
+  console.log('self-check done (no assertion errors above = pass)');
+}
+</script>
+</body>
+</html>
