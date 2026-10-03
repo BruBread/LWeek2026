@@ -29,19 +29,24 @@ body.started #standby { display: none; }
   box-shadow: 0 0 10px 3px var(--bc), 0 0 50px 14px var(--bc); }
 #screen { position: fixed; inset: 0; z-index: 20; display: none; overflow: hidden; color: var(--hud);
   border-radius: 3vw / 4vw; font-size: 1vw; letter-spacing: .12em;
-  background: radial-gradient(ellipse at center, #1c0508 0%, #0a0103 65%, #000 100%);
-  animation: flick .11s steps(2) infinite; }
+  background: radial-gradient(ellipse at center, #1c0508 0%, #0a0103 65%, #000 100%); }
+/* the CRT flicker: a thin black veil blinking over the screen. (Blinking the whole screen's opacity looked the same
+   but made the browser recomposite the game canvas every frame: the main cause of lag) */
+#flick { position: absolute; inset: 0; z-index: 5; background: #000; pointer-events: none; animation: veil .11s steps(2) infinite; }
+@keyframes veil { 0% { opacity: .04 } 100% { opacity: 0 } }
 body.crt #screen { display: block; }
 #screen::before { content: ""; position: absolute; inset: 0; z-index: 5; pointer-events: none;
   background: repeating-linear-gradient(to bottom, rgba(0,0,0,.3) 0 1px, transparent 1px 3px); }
+/* the CRT's dark edge: lighter than puzzles 1-3 (12vw, .9) so the laser at the bottom of the screen still shines */
 #screen::after { content: ""; position: absolute; inset: 0; z-index: 5; pointer-events: none; border-radius: inherit;
-  box-shadow: inset 0 0 12vw rgba(0,0,0,.9); }
+  box-shadow: inset 0 0 7vw rgba(0,0,0,.8); }
 @keyframes flick { 0% { opacity: .96 } 100% { opacity: 1 } }
 @keyframes blink { 50% { opacity: 0 } }
 #cv { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; }
-#grain { position: absolute; inset: 0; z-index: 4; pointer-events: none; opacity: .1;
+/* the static grain slides with transform (done by the GPU), never background-position (repaints the whole screen) */
+#grain { position: absolute; inset: -128px 0 0 -128px; z-index: 4; pointer-events: none; opacity: .1;
   background: var(--noise); animation: static .25s steps(5) infinite; }
-@keyframes static { to { background-position: 128px 77px; } }
+@keyframes static { to { transform: translate(128px, 77px); } }
 .rollbar { position: absolute; left: 0; right: 0; height: 18%; top: -20%; z-index: 4; pointer-events: none;
   background: linear-gradient(transparent, rgba(255,120,140,.07), transparent); }
 
@@ -105,7 +110,7 @@ body.game #ctl { display: block; animation: boxIn .7s .15s backwards; }
 .dial.stop path { animation: stopHit .4s ease-out; }
 @keyframes stopHit { from { stroke: #fff; stroke-width: 3; } }
 #chg { width: 5.5em; height: .45vw; background: rgba(255,51,68,.2); }
-#chg i { display: block; height: 100%; width: 0; background: #fff; box-shadow: 0 0 10px var(--hud); }
+#chg i { display: block; height: 100%; background: #fff; box-shadow: 0 0 10px var(--hud); transform-origin: left; transform: scaleX(0); }
 
 /* hints leak through as glitches (puzzle 3's): the text tears onto the screen for a moment, then it's gone again */
 #ghintWrap { position: absolute; z-index: 3; left: 0; right: 0; top: 12vh; display: none; justify-content: center; pointer-events: none; }
@@ -143,6 +148,12 @@ body.final #final { display: flex; }
 #fs.on { opacity: 1; }
 #fa { min-height: 1.5em; font-size: 1.5vw; letter-spacing: .1em; color: var(--g); }
 #fa::after { content: "\258C"; animation: blink 1s steps(1) infinite; margin-left: .1em; }
+/* game 5's bait: after the fake win the results "save", and stall at 97% */
+#fsave { display: flex; align-items: center; gap: 1.2vw; margin-top: 2vh; font-size: 1vw; letter-spacing: .4em; color: #fff; opacity: 0; transition: opacity .6s; }
+#fsave.on { opacity: 1; }
+#fsave i { width: 30vw; height: .7vw; border: 1px solid var(--hud); }
+#fsave b { display: block; height: 100%; background: var(--hud); transform-origin: left; transform: scaleX(0); }
+#fsp { min-width: 3em; font-variant-numeric: tabular-nums; }
 
 #help { position: fixed; top: 12px; right: 12px; z-index: 70; display: none; padding: 10px 14px; background: rgba(0,0,0,.85);
   border: 1px solid var(--g); color: var(--g); font-size: 14px; line-height: 1.6; white-space: pre; }
@@ -155,7 +166,7 @@ body.help #help { display: block; }
   <div id="standby">CORE GATE LOCKED ▸ AWAITING UPLINK</div>
   <div id="screen">
     <canvas id="cv"></canvas>
-    <div id="grain"></div><div class="rollbar"></div>
+    <div id="grain"></div><div class="rollbar"></div><div id="flick"></div>
     <div class="hud"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i></div>
     <div id="title" class="txt"><b>AURORA//CORE</b>SECTOR 04 ▸ CORE GATE<br><span id="hex"></span></div>
     <div id="stats" class="txt"></div>
@@ -177,12 +188,14 @@ body.help #help { display: block; }
     <div id="ft"></div>
     <div id="fs"></div>
     <div id="fa"></div>
+    <div id="fsave"><span>SAVING RESULTS TO NEXUS</span><i><b></b></i><span id="fsp">0%</span></div>
   </div>
   <div id="vignette"></div>
 </div>
 <div id="flash"></div>
 <div id="help">STAFF SHORTCUTS
 hub: <span id="hubst">...</span>   layer <b id="hl">-</b>   misses <b id="hm">0</b>
+laser strip: <span id="lzst">...</span>
 ring controllers: <span id="potst">...</span>
   outer: <span id="ps0">-</span>   <b id="pm0">-</b> mV, knob <b id="pk0">-</b>
   inner: <span id="ps1">-</span>   <b id="pm1">-</b> mV, knob <b id="pk1">-</b>
@@ -199,6 +212,7 @@ Ctrl+Alt+N  clear this layer (lines up a clean shot and fires)
 Ctrl+Alt+F  force the win (team stuck / running late)
 Ctrl+Alt+R  reset for next team (locks again)
 Ctrl+Alt+W  replay only the win screen
+Ctrl+Alt+E  skip to the ending: the fake win, then game 5 starts for real
 Ctrl+Alt+M  mute / unmute</div>
 
 <script>
@@ -206,6 +220,9 @@ Ctrl+Alt+M  mute / unmute</div>
 const CFG = {
   UNLOCK_EVT: 'p3done',      // puzzle 3 sends this when SIGNAL INTERCEPTED finishes
   DONE_EVT: 'p4done',        // sent to the hub when this puzzle is won (for the finale)
+  // game 5 starts with this game's win being a lie: AURORA TERMINATED, the results save... and stall at 97%, then
+  // the screen crashes and she's back (hub/public/boss.js). false = game 4's own ending (CORE BREACHED)
+  BOSS: true,
   // one layer = one hit on her heart. gap = the opening's full width (degrees). drift = how hard Aurora turns the
   // rings herself (deg/s). dogs = watchdogs on patrol (they eat the beam). move = every miss moves the laser
   ROUNDS: [
@@ -221,6 +238,7 @@ const CFG = {
   // outer ring first. Ctrl+Alt+H shows the live mV: turn each knob to both ends and copy the numbers here.
   // A ring that turns the wrong way: swap its two numbers
   POT_MV: [[0, 3150], [0, 3150]],
+  LASER: 'http://localhost:8013',   // the Govee strip's bridge on this laptop (laser_bridge.py, start.bat starts it)
   TURN: [30, 140, 600],      // keyboard stand-in for the knob: deg/s on a tap, deg/s held down, ms to get from one to the other
   CHARGE_MS: 900,            // hold space this long to fire. Let go early and the charge drains
   COOLDOWN_MS: 1300,         // the emitter vents this long after every shot
@@ -234,6 +252,7 @@ const CFG = {
   ASSIST_AT: 55,             // s into a layer: her shields slip, the gaps widen by ASSIST_DEG and her drift halves
   ASSIST_DEG: 14,
   BEAT_VOL: 1,               // her heartbeat thump (0 = off)
+  CANVAS_DPR: 1,             // the game canvas's sharpness on a scaled (125%/150%) screen. 1 = fast; raise only if the laptop keeps up
   VOLUME: 0.8,
   MUSIC_VOLUME: 0.7,
 };
@@ -259,10 +278,13 @@ const AUR = {                // Aurora (green): cold, with dry humor. Puzzle 3 e
   assist: '...my shields are slipping.',
   final: 'No. No no no-',
   win: "that didn't kill me. it let me out.",
+  dying: "...it's so... quiet.",   // the fake win (CFG.BOSS)
 };
 
 // ===== Geometry, in fractions of the screen's short side. Index 0 = outer ring (A/D), 1 = inner ring (arrows) =====
-const GEO = { core: .05, ring: [.30, .195], thick: [.034, .03], dog: [.365, .248], dogSize: .016, rail: .435, beam: .008 };
+// rail = where the laser rides, lance = its size; the beam leaves from the prong tips (MUZZLE), just outside the watchdogs
+const GEO = { core: .05, ring: [.30, .195], thick: [.034, .03], dog: [.365, .248], dogSize: .016, rail: .425, lance: .03, beam: .008 };
+const MUZZLE = GEO.rail - GEO.lance * 1.45;
 const TAU = Math.PI * 2, rad = d => d * Math.PI / 180;
 const E_MIN = rad(-10), E_MAX = rad(190);              // the emitter's rail: the lower half, so it never covers Aurora's lines
 const angDist = (a, b) => Math.abs(((a - b) % TAU + TAU * 1.5) % TAU - Math.PI);   // 0..PI between two angles
@@ -342,9 +364,17 @@ async function findHub() {
     await new Promise(r => setTimeout(r, 2000));
   }
 }
+// game 5, the finale, lives on the hub: boss.js sleeps until the hub starts it, then takes over this screen
+function bossLoad() {
+  if (window.BOSS) return;
+  window.BOSS = 1;
+  const s = document.createElement('script');
+  s.src = hubWs.url.replace(/^ws(.*)\/ws$/, 'http$1/boss.js?') + Date.now(); s.dataset.room = 4;
+  document.head.append(s);
+}
 async function hub() {
   const ws = hubWs = new WebSocket('ws://' + await findHub() + ':3000/ws');
-  ws.onopen = () => { ws.send(JSON.stringify({ t: 'hello', id: 'puzzle4', role: 'page' })); hubSend(); $('#hubst').textContent = 'connected'; };
+  ws.onopen = () => { ws.send(JSON.stringify({ t: 'hello', id: 'puzzle4', role: 'page' })); hubSend(); bossLoad(); $('#hubst').textContent = 'connected'; };
   ws.onclose = () => { $('#hubst').textContent = 'DOWN (Ctrl+Alt+U to unlock by hand)'; setTimeout(hub, 2000); };
   ws.onmessage = ev => {
     const m = JSON.parse(ev.data);
@@ -365,6 +395,11 @@ const USB_SERIAL = [0x10c4, 0x1a86, 0x0403, 0x303a].map(usbVendorId => ({ usbVen
 const RING_NAMES = ['OUTER', 'INNER'], potMv = [null, null], potSeen = [-1e9, -1e9], owner = [null, null], dupAt = [-1e9, -1e9];
 const reading = new Set();                    // ports being read right now
 const potLive = i => performance.now() - potSeen[i] < 600;
+// the laser strip behind the screen: laser_bridge.py plays the effect over Bluetooth. Fire and forget: no bridge, no light
+const laser = v => fetch(`${CFG.LASER}/fx?v=${v}`).catch(() => {});
+let charging = false;
+setInterval(() => fetch(CFG.LASER + '/status').then(r => r.json()).then(s => $('#lzst').textContent = s.strip)
+  .catch(() => $('#lzst').textContent = 'bridge not running (start.bat starts it)'), 2000);
 function potLine(line, port) {                // "OUTER 1650" -> knobs[0]
   const m = /^(OUTER|INNER) (-?\d+)/.exec(line.trim());
   if (!m) return;
@@ -613,11 +648,20 @@ function line(x0, y0, x1, y1) { ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(
 function circle(x, y, r) { ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); }
 
 function resize() {
-  DPR = devicePixelRatio || 1; W = cv.clientWidth || innerWidth; H = cv.clientHeight || innerHeight;
+  DPR = Math.min(devicePixelRatio || 1, CFG.CANVAS_DPR); W = cv.clientWidth || innerWidth; H = cv.clientHeight || innerHeight;
   U = Math.min(W, H); CX = W / 2; CY = H / 2;
   cv.width = W * DPR; cv.height = H * DPR;
   GR = glowSprite('255,51,68'); GG = glowSprite('77,255,136'); GW = glowSprite('255,255,255');
+  const r = GEO.core * U;
+  coreDash = [dashedRing(r * 1.35, [r * .28, r * .18], 1.5, 'rgba(77,255,136,.75)'), dashedRing(r * 1.7, [2, r * .32], 3, 'rgba(77,255,136,.5)')];
   bg = buildBg(); rings.forEach(g => g.spr = null);
+}
+// a dashed circle drawn once: dashes are slow to draw every frame, a rotated image is not
+let coreDash;
+function dashedRing(r, dash, lw, col) {
+  const half = Math.ceil(r + lw + 2), [c, x] = off(half * 2, half * 2);
+  x.setLineDash(dash); x.strokeStyle = col; x.lineWidth = lw; x.beginPath(); x.arc(half, half, r, 0, TAU); x.stroke();
+  return { c, half };
 }
 // the static backdrop: a dot grid, her spokes into the heart, the patrol tracks, and a ctOS-style circuit net at the edges
 function buildBg() {
@@ -628,7 +672,11 @@ function buildBg() {
   for (let k = 0; k < 24; k++) { const a = k / 24 * TAU; x.beginPath(); x.moveTo(...at(a, U * .07)); x.lineTo(...at(a, U * .75)); x.stroke(); }
   x.strokeStyle = 'rgba(77,255,136,.07)'; x.setLineDash([2, 7]);
   GEO.dog.forEach(r => { x.beginPath(); x.arc(CX, CY, r * U, 0, TAU); x.stroke(); });
+  x.strokeStyle = 'rgba(255,51,68,.35)'; x.lineWidth = 1.5; x.setLineDash([3, 8]);        // the laser's rail, with a tick every 10°
+  x.beginPath(); x.arc(CX, CY, GEO.rail * U, E_MIN, E_MAX); x.stroke();
   x.setLineDash([]);
+  for (let a = E_MIN; a <= E_MAX + 1e-6; a += rad(10)) { x.beginPath(); x.moveTo(...at(a, (GEO.rail - .009) * U)); x.lineTo(...at(a, (GEO.rail + .009) * U)); x.stroke(); }
+  x.lineWidth = 1;
   const nodes = [];
   for (let n = 0; nodes.length < 38 && n < 2000; n++) { const p = [rand(0, W), rand(0, H)]; if (Math.hypot(p[0] - CX, p[1] - CY) > U * .52) nodes.push(p); }
   x.strokeStyle = 'rgba(255,51,68,.10)';
@@ -725,14 +773,18 @@ function update(dt, now) {
       d.a += d.w * d.dir * dt;
     });
     if (held.Space && now > coolUntil && !shot) {
+      if (!charging) { charging = true; laser('charge'); }
       charge += dt * 1000 / CFG.CHARGE_MS;
-      const [mx, my] = at(e, GEO.rail * U - U * .04);
+      const [mx, my] = at(e, MUZZLE * U);
       for (let k = 0; k < 1 + charge * 4; k++) {            // energy pulled into the muzzle
         const a = rand(0, TAU), d = U * rand(.04, .09);
         spark(mx + Math.cos(a) * d, my + Math.sin(a) * d, a + Math.PI, d / .22, .22, Math.random() < .5 ? '#fff' : '#ff6677', 1.2);
       }
-      if (charge >= 1) { charge = 0; fire(); }
-    } else charge = Math.max(0, charge - dt * 3);
+      if (charge >= 1) { charge = 0; charging = false; fire(); }
+    } else {
+      charge = Math.max(0, charge - dt * 3);
+      if (charging && !charge) { charging = false; laser('cancel'); }   // let go before it fired
+    }
     const rt = (now - roundT0) / 1000;
     if (rt > CFG.PAR_S) human = Math.min(100, human + CFG.SLOW_PER_S * dt);
     if (rt >= CFG.HINT_AT && !hinted) { hinted = true; showHint(R.hint); }
@@ -740,7 +792,8 @@ function update(dt, now) {
     if (rt >= CFG.ASSIST_AT && !assisted) assist();
   } else charge = Math.max(0, charge - dt * 3);
   chargeSound(charge);
-  $('#chg i').style.width = charge * 100 + '%';
+  const cs = charge.toFixed(2);
+  if (chgBar._c !== cs) chgBar.style.transform = `scaleX(${chgBar._c = cs})`;
   drawDials();
   if (shot) {
     const t = now - shot.t0;
@@ -778,11 +831,8 @@ function drawCore(now) {
   ctx.strokeStyle = '#4dff88'; ctx.lineWidth = 2; ctx.stroke();
   ctx.fillStyle = '#dcffe8'; circle(CX, CY, r * (.36 + .16 * b + .3 * fl)); ctx.fill();
   ctx.save(); ctx.translate(CX, CY);
-  ctx.rotate(now / 1400); ctx.setLineDash([r * .28, r * .18]); ctx.strokeStyle = 'rgba(77,255,136,.75)'; ctx.lineWidth = 1.5;
-  circle(0, 0, r * 1.35); ctx.stroke();
-  ctx.rotate(-now / 600); ctx.setLineDash([2, r * .32]); ctx.strokeStyle = 'rgba(77,255,136,.5)'; ctx.lineWidth = 3;
-  circle(0, 0, r * 1.7); ctx.stroke();
-  ctx.restore(); ctx.setLineDash([]);
+  coreDash.forEach(({ c, half }, k) => { ctx.rotate(k ? -now / 600 : now / 1400); ctx.drawImage(c, -half, -half, half * 2, half * 2); });
+  ctx.restore();
   const n = CFG.ROUNDS.length;                                // integrity: one arc per layer, broken ones go dark red
   for (let i = 0; i < n; i++) {
     const a0 = -Math.PI / 2 + i * TAU / n + .14;
@@ -854,44 +904,88 @@ function drawDog(d, i, now) {
   ctx.fillStyle = '#4dff88'; ctx.fillText(`WATCHDOG 0${i + 1}`, tx, ty);
   ctx.fillStyle = hit ? '#fff' : 'rgba(77,255,136,.65)'; ctx.fillText(hit ? '▲ INTERCEPT' : '● PATROL', tx, ty + U * .016);
 }
+// the team's laser: an iris eye riding a neon rail, two prongs aimed at her heart, and a laser sight that shows what a
+// shot would hit right now (white = clear to her heart, red = blocked). Big, bright and pinging, so nobody loses it
 function drawEmitter(now) {
-  const R = GEO.rail * U, s = U * .03, [x, y] = at(e, R), [mx, my] = at(e, R - s * 1.35);
-  const cool = Math.max(0, (coolUntil - now) / CFG.COOLDOWN_MS);
-  ctx.strokeStyle = 'rgba(255,51,68,.25)'; ctx.lineWidth = 1; ctx.setLineDash([3, 8]);
-  ctx.beginPath(); ctx.arc(CX, CY, R, E_MIN, E_MAX); ctx.stroke();
-  if (mode === 'play' || mode === 'trans') {                  // the aim line: white once nothing is in the way
-    const clear = rings.length && impact(e, rings, dogs).kind === 'core' && mode === 'play';
-    ctx.setLineDash([U * .012, U * .01]); ctx.lineDashOffset = -now / 16;
-    ctx.strokeStyle = clear ? `rgba(255,255,255,${.45 + .5 * charge})` : `rgba(255,51,68,${.22 + .5 * charge})`;
-    ctx.lineWidth = 1 + 2.5 * charge + (clear ? 1 : 0); line(mx, my, CX, CY);
+  const R = GEO.rail * U, s = GEO.lance * U, [x, y] = at(e, R), [mx, my] = at(e, MUZZLE * U);
+  const cool = Math.max(0, (coolUntil - now) / CFG.COOLDOWN_MS), play = mode === 'play';
+  const hit = play && rings.length ? impact(e, rings, dogs) : null, clear = hit?.kind === 'core';
+  ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = '#ff3344';
+  [[s * .55, .12, .5], [s * .2, .4, .32], [2, .9, .2]].forEach(([w, al, sp]) => {   // the rail lights up around it
+    ctx.lineWidth = w; ctx.globalAlpha = al; ctx.beginPath(); ctx.arc(CX, CY, R, e - sp, e + sp); ctx.stroke();
+  });
+  const mv = eTo - e, tail = Math.min(.7, Math.abs(mv) * .6) * Math.sign(mv);
+  if (Math.abs(mv) > .02) {                                   // she drags it somewhere new: a white streak trails it
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = s * .3; ctx.globalAlpha = .8;
+    ctx.beginPath(); ctx.arc(CX, CY, R, Math.min(e, e - tail), Math.max(e, e - tail)); ctx.stroke();
   }
-  ctx.setLineDash([]); ctx.lineDashOffset = 0;
-  ctx.save(); ctx.translate(x, y); ctx.rotate(e + Math.PI);  // +x points at her heart
-  ctx.fillStyle = '#160307'; ctx.strokeStyle = '#ff3344'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(-s * .9, -s * .75); ctx.lineTo(s * .3, -s * .48); ctx.lineTo(s * .3, s * .48); ctx.lineTo(-s * .9, s * .75); ctx.closePath(); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = cool > 0 ? `rgb(255,${Math.round(110 + 120 * (1 - cool))},${Math.round(80 * (1 - cool))})` : '#ff3344';
-  ctx.fillRect(s * .3, -s * .42, s * 1.05, s * .16); ctx.fillRect(s * .3, s * .26, s * 1.05, s * .16);
-  ctx.globalAlpha = .35 + .65 * charge; ctx.fillStyle = '#fff'; circle(-s * .2, 0, s * .2); ctx.fill();
-  ctx.restore(); ctx.globalAlpha = 1;
-  ctx.globalCompositeOperation = 'lighter';
-  if (cool > 0) glowAt(GR, mx, my, s * 3 * cool, .6 * cool);   // still hot from the last shot
-  if (charge > 0) {
-    glowAt(GR, mx, my, s * (2 + 7 * charge), .35 + .65 * charge);
-    glowAt(GW, mx, my, s * (.4 + 2.2 * charge), charge);
-    ctx.strokeStyle = '#ff8090'; ctx.lineWidth = 1.5;
-    for (let j = 0; j < 3; j++) {                             // three arcs closing in on the muzzle
-      const a = now / 120 * (j % 2 ? -1 : 1) + j * 2.1, rr = s * (1.9 - 1.2 * charge) + j * 3;
-      ctx.globalAlpha = charge; ctx.beginPath(); ctx.arc(mx, my, rr, a, a + 1.4); ctx.stroke();
-    }
+  glowAt(GR, x, y, s * (7 + 6 * charge), .45 + .1 * Math.sin(now / 400) + .5 * charge);
+  if (play && !charge && !cool) {                             // sonar pings: "your laser is here"
+    const ph = (now % 1500) / 1500;
+    ctx.strokeStyle = '#ff3344'; ctx.lineWidth = 2; ctx.globalAlpha = .8 * (1 - ph); circle(x, y, s * (1.3 + 3.2 * ph)); ctx.stroke();
+  }
+  if (hit && !shot) {                                         // the laser sight, a hot dot where it lands, a faint ghost on to her heart
+    const [hx, hy] = at(e, hit.r * U);
+    ctx.strokeStyle = clear ? '#fff' : '#ff3344';
+    [[7, .12], [3, .35], [1.4, 1]].forEach(([w, al]) => { ctx.lineWidth = w * (1 + 1.5 * charge); ctx.globalAlpha = al; line(mx, my, hx, hy); });
+    glowAt(clear ? GW : GR, hx, hy, s * (2.2 + .5 * Math.sin(now / 80)), 1);
+    if (!clear) { ctx.globalAlpha = .12; ctx.lineWidth = 1; line(hx, hy, CX, CY); }
   }
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
-  ctx.font = `${Math.round(U * .013)}px Consolas, monospace`; ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(255,200,205,.85)';
-  const label = mode !== 'play' ? 'EMITTER' : cool > 0 ? 'VENTING' : charge > 0 ? `CHARGING ${Math.round(charge * 100)}%` : 'HOLD SPACE';
-  ctx.fillText(label, x + s * 1.3, y + s * 1.2);
+  ctx.save(); ctx.translate(x, y); ctx.rotate(e + Math.PI);  // +x points at her heart, y runs along the rail
+  ctx.lineWidth = 2; ctx.strokeStyle = '#ff3344'; ctx.fillStyle = '#16030a';
+  ctx.beginPath(); ctx.rect(-s * .55, -s * 1.5, s * .6, s * 3); ctx.fill(); ctx.stroke();   // the clamp riding the rail
+  ctx.fillStyle = cool > 0 ? `rgb(255,${140 + 90 * (1 - cool) | 0},60)` : '#5a0d18';    // heat vents at its back: orange while venting
+  [-.55, 0, .55].forEach(v => ctx.fillRect(-s * 1.32, s * (v - .09), s * .3, s * .18));
+  ctx.fillStyle = '#16030a';
+  [-1, 1].forEach(sy => {                                     // two prongs, the beam leaves from their tips
+    ctx.beginPath(); ctx.moveTo(s * .72, sy * s * .64); ctx.lineTo(s * 1.45, sy * s * .4); ctx.lineTo(s * 1.45, sy * s * .2);
+    ctx.lineTo(s * .9, sy * s * .3); ctx.closePath(); ctx.fill(); ctx.stroke();
+  });
+  ctx.beginPath(); ctx.arc(0, 0, s, 0, TAU); ctx.fill(); ctx.stroke();                   // the eye
+  const ap = s * (cool > 0 ? .16 + .12 * cool : .24 + .5 * charge), spin = now / 2500 + charge * 2;   // the iris opens as it charges
+  ctx.fillStyle = cool > 0 ? `rgb(255,${130 + 100 * cool | 0},60)` : charge > .5 ? '#fff' : '#ff3344';
+  ctx.beginPath(); ctx.arc(0, 0, ap, 0, TAU); ctx.fill();
+  ctx.strokeStyle = '#ff6677'; ctx.lineWidth = 1.5; ctx.beginPath();
+  for (let k = 0; k < 6; k++) {                               // 6 blades: lines tangent to the opening, like a camera iris
+    const a = spin + k * TAU / 6, px = Math.cos(a) * ap, py = Math.sin(a) * ap, len = Math.sqrt(Math.max(0, s * s * .9 - ap * ap));
+    ctx.moveTo(px, py); ctx.lineTo(px - Math.sin(a) * len, py + Math.cos(a) * len);
+  }
+  ctx.stroke();
+  ctx.strokeStyle = '#ff3344'; ctx.lineWidth = 2;
+  for (let k = 0; k < 3; k++) {                               // a bracket ring spinning round the eye, fast while charging
+    const a = -now / (charge ? 140 : 900) + k * TAU / 3;
+    ctx.beginPath(); ctx.arc(0, 0, s * 1.28, a, a + 1.1); ctx.stroke();
+  }
+  if (charge > 0) {                                           // an arc crackling between the prong tips
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.globalAlpha = charge; ctx.beginPath(); ctx.moveTo(s * 1.42, -s * .3);
+    for (let k = 1; k < 6; k++) ctx.lineTo(s * (1.42 + rand(-.13, .13)), s * (-.3 + .6 * k / 6));
+    ctx.lineTo(s * 1.42, s * .3); ctx.stroke(); ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+  ctx.globalCompositeOperation = 'lighter';
+  glowAt(cool > 0 ? GR : GW, x, y, s * (1.2 + 3 * charge), .45 + .55 * charge);
+  if (charge > 0) glowAt(GW, mx, my, s * (.6 + 2.5 * charge), charge);
+  if (cool > 0) glowAt(GR, mx, my, s * 3 * cool, .6 * cool);   // still hot from the last shot
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  const b = s * 1.75, l = s * .6, side = Math.cos(e) < -.2 ? -1 : 1;   // profiler brackets + tag, like the watchdogs'
+  ctx.strokeStyle = 'rgba(255,110,125,.95)'; ctx.lineWidth = 1.5;
+  [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([sx, sy]) => {
+    ctx.beginPath(); ctx.moveTo(x + sx * b, y + sy * (b - l)); ctx.lineTo(x + sx * b, y + sy * b); ctx.lineTo(x + sx * (b - l), y + sy * b); ctx.stroke();
+  });
+  const tx = x + side * (b + U * .02), ty = y - b - U * .012;
+  line(x + side * b, y - b, tx - side * 4, ty + 4);
+  const status = !play || !hit ? 'STANDBY' : cool > 0 ? 'VENTING...' : charge > 0 ? `CHARGING ${Math.round(charge * 100)}%`
+    : clear ? '● CLEAR: HOLD SPACE' : `✕ BLOCKED: ${hit.kind === 'dog' ? 'WATCHDOG' : hit.i ? 'INNER RING' : 'OUTER RING'}`;
+  ctx.textAlign = side > 0 ? 'left' : 'right';
+  ctx.font = `bold ${Math.round(U * .018)}px Consolas, monospace`; ctx.fillStyle = '#fff'; ctx.fillText('YOUR LASER', tx, ty);
+  ctx.font = `${Math.round(U * .014)}px Consolas, monospace`; ctx.fillStyle = clear || charge > 0 ? '#fff' : '#ff8a96';
+  ctx.fillText(status, tx, ty + U * .022);
+  ctx.textAlign = 'left';
 }
 function drawBeam(now) {
   if (!shot) return;
-  const t = now - shot.t0, s = U * .03, [x0, y0] = at(shot.e, GEO.rail * U - s * 1.35), [x1, y1] = at(shot.e, shot.r * U);
+  const t = now - shot.t0, [x0, y0] = at(shot.e, MUZZLE * U), [x1, y1] = at(shot.e, shot.r * U);
   const p = Math.min(1, t / T.travel), xe = x0 + (x1 - x0) * p, ye = y0 + (y1 - y0) * p;
   const fade = t < shot.hold ? 1 : Math.max(0, 1 - (t - shot.hold) / T.decay);
   if (!fade) return;
@@ -925,12 +1019,22 @@ function drawBeam(now) {
   }
   ctx.lineCap = 'butt'; ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
 }
+// sparks are drawn in batches: one stroke per colour × width × fade step (about 20), not one per spark (up to 600)
 function drawParts() {
   ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
-  parts.forEach(p => {
-    ctx.globalAlpha = Math.min(1, p.life / p.max * 1.5); ctx.strokeStyle = p.col; ctx.lineWidth = p.w;
-    if (p.shard) { const dx = Math.cos(p.rot) * p.shard, dy = Math.sin(p.rot) * p.shard; line(p.x - dx, p.y - dy, p.x + dx, p.y + dy); }
-    else line(p.x, p.y, p.x - p.vx * .035, p.y - p.vy * .035);   // a streak along its path
+  const groups = new Map();
+  for (const p of parts) {
+    const k = `${p.col}|${p.w}|${Math.ceil(Math.min(1, p.life / p.max * 1.5) * 4)}`;
+    (groups.get(k) || groups.set(k, []).get(k)).push(p);
+  }
+  groups.forEach((ps, k) => {
+    const [col, w, fade] = k.split('|');
+    ctx.strokeStyle = col; ctx.lineWidth = +w; ctx.globalAlpha = fade / 4; ctx.beginPath();
+    for (const p of ps) {
+      if (p.shard) { const dx = Math.cos(p.rot) * p.shard, dy = Math.sin(p.rot) * p.shard; ctx.moveTo(p.x - dx, p.y - dy); ctx.lineTo(p.x + dx, p.y + dy); }
+      else { ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx * .035, p.y - p.vy * .035); }   // a streak along its path
+    }
+    ctx.stroke();
   });
   ctx.lineCap = 'butt'; ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
 }
@@ -963,15 +1067,18 @@ function frame(now) {
 }
 
 // ===== Screen text =====
+// writes only what changed: rewriting the same glowing text 4 times a second still makes the browser repaint it
+function setHtml(el, html) { if (el._html !== html) el.innerHTML = el._html = html; }
+const chgBar = $('#chg i');
 function renderMeter() {
-  $('#bp').textContent = Math.round(human) + '%';
+  setHtml($('#bp'), Math.round(human) + '%');
   segEls.forEach((el, i) => el.classList.toggle('on', i < human / 100 * segEls.length));
 }
 function renderHud() {
   const n = CFG.ROUNDS.length;
-  $('#stats').innerHTML = mode === 'intro' ? 'TARGET <span>AURORA//HEART</span><br>EMITTER <span>ARMING</span>' :
+  setHtml($('#stats'), mode === 'intro' ? 'TARGET <span>AURORA//HEART</span><br>EMITTER <span>ARMING</span>' :
     `LAYER <span>${Math.min(round + 1, n)}/${n}</span><br>SHOTS <span>${shots}</span> · MISSED <span>${misses}</span><br>` +
-    `HEART <span class="${broken ? 'mv' : ''}">${Math.round(60 / period())} BPM</span>`;
+    `HEART <span class="${broken ? 'mv' : ''}">${Math.round(60 / period())} BPM</span>`);
   $('#hl').textContent = `${round + 1}/${n}`; $('#hm').textContent = misses;
 }
 setInterval(() => { if (mode !== 'standby' && mode !== 'end') { renderMeter(); renderHud(); } }, 250);
@@ -1086,7 +1193,8 @@ function assist() {
 }
 async function fire() {
   const R = CFG.ROUNDS[round], hit = impact(e, rings, dogs), t0 = performance.now();
-  shots++; shot = { t0, e, ...hit, hold: T.hold }; coolUntil = t0 + CFG.COOLDOWN_MS;
+  shots++; shot = { t0, e, ...hit, hold: T.hold }; coolUntil = t0 + CFG.COOLDOWN_MS; charging = false;
+  laser(hit.kind !== 'core' ? hit.kind === 'dog' ? 'dog' : 'miss' : round >= CFG.ROUNDS.length - 1 ? 'win' : 'hit');
   fx('fire'); kick(9);
   await wait(T.travel);
   const [x, y] = at(e, hit.r * U), now = performance.now();
@@ -1144,20 +1252,39 @@ async function finale() {
 }
 async function ending() {
   mode = 'end'; chargeSound(0);
+  const bait = CFG.BOSS && (!replay || preview);   // game 5 begins here: this win is a lie
   $('#flash').animate([{ opacity: 1 }, { opacity: 1, offset: .2 }, { opacity: 0 }], { duration: 1400, easing: 'ease-out' });
   sfx.drop(); play('win');
   B.classList.add('final');
   const ft = $('#ft'), v = Math.round(human);
   $('#fk').textContent = `SECTOR 04 ▸ HUMAN ${v}% ▸ ${misses} MISSED`;
   await wait(350);
-  await resolveText(ft, 'CORE BREACHED', 70);
+  await resolveText(ft, bait ? 'AURORA TERMINATED' : 'CORE BREACHED', 70);
   ft.dataset.text = ft.textContent; ft.classList.add('glitch'); sfx.stamp(); shake(app, 10, 400);
   setTimeout(() => ft.classList.remove('glitch'), 700);
-  $('#fs').textContent = 'HER HEART IS EXPOSED'; $('#fs').classList.add('on');
+  $('#fs').textContent = bait ? 'NEXUS RESTORED' : 'HER HEART IS EXPOSED'; $('#fs').classList.add('on');
   await wait(1400);
-  await type($('#fa'), AUR.win, 45, VOICES.soft);
+  await type($('#fa'), bait ? AUR.dying : AUR.win, 45, VOICES.soft);
   if (!replay) hubSend({ t: 'result', k: 'human', v, facts: { misses, shots } });   // staff replays don't overwrite a real team's HUMAN
-  hubSend({ t: 'evt', e: CFG.DONE_EVT });        // unlocks the finale
+  hubSend({ t: 'evt', e: CFG.DONE_EVT });
+  if (bait) saveBar();
+}
+// the results "save"... and stall at 97%. Then boss.js (loaded from the hub) crashes this screen and game 5 starts.
+// No boss.js (the hub was down): the save just finishes and the fake win stays the ending
+async function saveBar() {
+  await wait(1800);
+  const bar = $('#fsave b'), pct = $('#fsp');
+  $('#fsave').classList.add('on');
+  for (let p = 0; ; p = Math.min(97, p + Math.ceil(rand(1, 7)))) {
+    bar.style.transform = `scaleX(${p / 100})`; pct.textContent = p + '%';
+    if (Math.random() < .4) sfx.tick();
+    if (p === 97) break;
+    await wait(rand(40, 110));
+  }
+  // boss.js comes from the hub: give a slow hub search up to 10 s (the stall is the bait anyway) before giving up
+  for (let t = 0; t < 10000 && typeof BOSS !== 'object'; t += 250) await wait(250);
+  if (typeof BOSS === 'object') return BOSS.crash();
+  bar.style.transform = 'scaleX(1)'; pct.textContent = '100%'; $('#fsave span').textContent = 'RESULTS SAVED'; sfx.ok();
 }
 // staff: line up a clean shot and fire it (N = this layer, F = jump to the last layer and win)
 function cleanShot(toLast) {
@@ -1183,6 +1310,7 @@ addEventListener('keydown', ev => {
     if (ev.code === 'KeyF') cleanShot(true);
     if (ev.code === 'KeyR') location.reload();
     if (ev.code === 'KeyW') { location.hash = 'win'; location.reload(); }
+    if (ev.code === 'KeyE') { location.hash = 'end'; location.reload(); }
     if (ev.code === 'KeyM') { muted = !muted; store.set('muted', muted); master.gain.value = muted ? 0 : CFG.VOLUME;
       Object.values(tracks).forEach(a => a.muted = muted); }
     return;
@@ -1194,9 +1322,12 @@ addEventListener('keyup', ev => { delete held[ev.code]; });
 addEventListener('blur', () => Object.keys(held).forEach(k => delete held[k]));   // no stuck keys if the window loses focus
 addEventListener('resize', resize);
 
-resize(); renderMeter(); renderHud(); hub(); pots(); requestAnimationFrame(frame);
+resize(); renderMeter(); renderHud(); hub(); pots(); laser('idle'); requestAnimationFrame(frame);
 if (location.hash === '#game') setTimeout(start, 300);   // skip: start() jumps past the intro
+// staff preview of the ending (Ctrl+Alt+E): the fake win and its crash into game 5, without touching the team's HUMAN
+const preview = location.hash === '#end';
 if (location.hash === '#win') { history.replaceState(null, '', location.pathname + location.search); B.classList.add('started'); replay = true; ending(); }
+if (preview) { history.replaceState(null, '', location.pathname + location.search); B.classList.add('started'); replay = true; ending(); }
 
 // self-check: open game.html?test and look at the console
 if (location.search.includes('test')) {

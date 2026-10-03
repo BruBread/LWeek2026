@@ -102,10 +102,34 @@ body.aur #screen, body.aur #modal { filter: hue-rotate(150deg) saturate(1.3) bri
 .grid figure.sel { border-color: #fff; }
 .grid img { width: 100%; display: block; }
 .grid figcaption { text-align: center; font-size: 1vw; margin-top: .3vw; }
-.slots { display: grid; grid-template-columns: repeat(6, 1fr); gap: .6vw; width: 66vw; }
-.slots i { font-style: normal; text-align: center; padding: .6vw 0; font-size: 1.4vw; border: 1px solid rgba(255,51,68,.4); }
-.slots i.x { opacity: .35; text-decoration: line-through; }
-.slots i.sel { background: var(--hud); color: #000; text-shadow: none; }
+/* PLAY LATER: the booking dial. Aurora's core in the middle, one ring per day, one block per slot, a laser to the pick */
+.dial { display: flex; align-items: center; gap: 3vw; }
+.dial svg { width: min(32vw, 52vh); height: min(32vw, 52vh); flex: none; overflow: visible; }
+.dial .seg { fill: none; stroke: var(--hud); stroke-opacity: .6; }
+.dial .seg.x { stroke-opacity: .16; }
+.dial .seg.gone { stroke-opacity: .05; }
+.dial .seg.sel { stroke: #fff; stroke-opacity: 1; filter: drop-shadow(0 0 3px #fff); }
+.dial text { fill: currentColor; font-size: 5.5px; text-anchor: middle; dominant-baseline: central; letter-spacing: .08em; }
+.dial text.hr { font-size: 4.5px; opacity: .8; }
+.dial text.on { fill: #fff; }
+.dial text.full { opacity: .35; }
+.dial .tick { stroke: currentColor; stroke-opacity: .5; }
+.dial .beam { transition: transform .16s ease-out; }
+.dial .beam line { vector-effect: non-scaling-stroke; stroke: #fff; stroke-width: 3px; }
+.dial .beam line.glow { stroke: var(--hud); stroke-width: 12px; stroke-opacity: .35; }
+.dial .core { fill: var(--g); animation: beat 1.1s ease-in-out infinite; }
+.dial .orb { fill: none; stroke: var(--g); stroke-width: 1; stroke-dasharray: 2 3; animation: spin 8s linear infinite; }
+@keyframes beat { 50% { transform: scale(.82); opacity: .75 } }
+@keyframes spin { to { transform: rotate(360deg) } }
+.dread { min-width: 22vw; }
+.dread .lab { font-size: 1vw; letter-spacing: .4em; margin-top: 2.2vh; }
+.dread .dv { font-size: 2.3vw; color: #fff; letter-spacing: .12em; margin-top: .4vh; }
+.dread .dv.huge { font-size: 4vw; }
+.dread .legend { margin-top: 3.5vh; font-size: 1vw; letter-spacing: .2em; line-height: 2.2; }
+.dread .legend i { display: inline-block; width: 1.6vw; height: .7vw; margin-right: .8vw; background: var(--hud); opacity: .6; }
+.dread .legend i.x { opacity: .16; }
+.dread .legend i.s { background: #fff; opacity: 1; box-shadow: 0 0 6px #fff; }
+.dread .aur { margin-top: 3vh; min-height: 2.8em; font-size: 1.2vw; color: var(--g); text-shadow: 0 0 12px var(--g); letter-spacing: .06em; line-height: 1.4; }
 
 /* the line, always at the bottom */
 #line { position: absolute; left: 3.5vw; right: 3.5vw; bottom: 3.2vw; display: flex; gap: 2.5vw; align-items: flex-end; font-size: 1.05vw; letter-spacing: .25em; }
@@ -294,7 +318,7 @@ const clockOff = clock ? Date.parse(clock) - Date.now() : 0;
 const now = () => new Date(Date.now() + clockOff);
 
 let S = { cfg: BOOTH, sold: 0, sales: [] };   // config.js until the server answers (test mode never needs it)
-let serverUp = false, mode = 'idle', flow = false, assist = false, testing = false, cheat = '';
+let serverUp = false, mode = 'idle', flow = false, assist = false, testing = false, bypass = false, cheat = '';
 const left = () => S.cfg.TICKETS - S.sold;
 async function refresh() {
   try { S = await (await fetch('/api/state')).json(); serverUp = true; } catch { serverUp = false; }
@@ -505,15 +529,16 @@ addEventListener('keydown', e => {
     if (/^Key[A-Z]$/.test(e.code)) cheat = (cheat + e.code[3]).slice(-6);
     // ASSIST: lifts the party limit for one signup (players who need helpers with them); free, not counted in the 400
     // TEST: runs the whole flow for one signup, but the sale is never saved
+    // BYPASS: lifts the MIN_PARTY minimum for one signup (works mid-signup too); paid, counted and saved like any sale
     // ICPEP: the staff line screen (from the main screen)
     // CAMERA: game 2's camera pop-up on its own, to check the camera: static, the live feed 4 s later, closes after 20 s
     if (cheat.endsWith('ICPEP')) { cheat = ''; if (!flow) deliver({ staff: true, key: '' }); return; }
     if (cheat.endsWith('CAMERA')) { cheat = ''; feedOpen(); setTimeout(feedLive, 4000); clearTimeout(feedT); feedT = setTimeout(feedClose, 24000); return; }
-    const code = cheat.endsWith('NEXUS') ? 'assist' : cheat.endsWith('TEST') ? 'testing' : null;
+    const code = cheat.endsWith('NEXUS') ? 'assist' : cheat.endsWith('TEST') ? 'testing' : cheat.endsWith('BYPASS') ? 'bypass' : null;
     if (code) {
       cheat = '';
-      if (code === 'assist') assist = !assist; else testing = !testing;
-      (code === 'assist' ? assist : testing) ? sfx.magic() : sfx.shut(); renderStats();
+      const on = code === 'assist' ? (assist = !assist) : code === 'testing' ? (testing = !testing) : (bypass = !bypass);
+      on ? sfx.magic() : sfx.shut(); renderStats();
       if (mode === 'idle') renderIdle(true);
       return;
     }
@@ -600,7 +625,8 @@ function renderStats() {
     `${fmtDay(ymd(now()))} <span>${now().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>` +
     (!serverUp ? '<br><span class="warn" style="color:var(--g)">SIGNUP SERVER DOWN</span>' : '') +
     (assist ? `<br><span class="assist">ASSIST · UP TO ${S.cfg.ASSIST_MAX} · FREE</span>` : '') +
-    (testing ? '<br><span class="assist" style="background:#fff">TEST · NOT RECORDED</span>' : '');
+    (testing ? '<br><span class="assist" style="background:#fff">TEST · NOT RECORDED</span>' : '') +
+    (bypass ? `<br><span class="assist" style="background:var(--hud)">BYPASS · NO ${S.cfg.MIN_PARTY}-PLAYER MINIMUM</span>` : '');
 }
 function renderLine() {
   const at = now(), L = line(S, at), inside = S.sales.find(s => s.status === 'in');
@@ -622,7 +648,7 @@ setInterval(refresh, 5000);
 
 // ===== Idle =====
 let idleAur = '', idleBuilt = false, idleSel = 0;   // idleSel: 0 = SIGN UP, 1 = VIEW THE LINE
-const soldOut = () => left() < S.cfg.MIN_PARTY && !assist && !testing;
+const soldOut = () => left() < (bypass ? 1 : S.cfg.MIN_PARTY) && !assist && !testing;
 function renderIdle(force) {
   const out = soldOut(), off = !serverUp && !testing;   // test mode never needs the server
   const html = `<div class="hero"><div class="n">NEXUS</div>` +
@@ -632,6 +658,7 @@ function renderIdle(force) {
     (off ? '<div class="sub warn">RUN signup/start.bat, THEN OPEN http://localhost:4000</div>' : '') +
     (assist ? '<div class="sub" style="color:var(--g)">ASSIST MODE: NO PARTY LIMIT, FREE, NOT COUNTED IN THE TICKETS</div>' : '') +
     (testing ? '<div class="sub" style="color:#fff">TEST MODE: THE NEXT SIGNUP IS NOT RECORDED</div>' : '') +
+    (bypass ? `<div class="sub" style="color:#fff">BYPASS: NO ${S.cfg.MIN_PARTY}-PLAYER MINIMUM FOR THE NEXT SIGNUP</div>` : '') +
     `<div class="aur"></div>`;
   if (!idleBuilt || force || box.dataset.out !== `${out}${off}`) {
     $('#q').innerHTML = ''; $('#keys').innerHTML = ''; $('#a').innerHTML = html;
@@ -779,15 +806,16 @@ async function photos(t) {                   // fills t.shots; photos already ta
 // one question at a time. Nothing about money is shown to players.
 // Every step returns its answer, or BACK (ESC): signup() then goes one step back.
 const cost = (t, n = t.size) => t.assist ? 0 : n * S.cfg.PRICE;
-const minSize = t => t.assist || t.test ? 1 : S.cfg.MIN_PARTY;   // assist and test mode: any size, even 1
+// assist and test mode: any size, even 1. BYPASS is read live, so staff can type it while this question is up
+const minSize = t => t.assist || t.test || bypass ? 1 : S.cfg.MIN_PARTY;
 const maxSize = t => t.assist ? S.cfg.ASSIST_MAX : t.test ? S.cfg.MAX_PARTY : Math.min(S.cfg.MAX_PARTY, left());
 async function askSize(t) {                  // how many players are in this group
-  const lo = minSize(t), hi = maxSize(t);
   for (;;) {
     const v = await askText(t.assist ? 'ASSIST GROUP: HOW MANY PLAYERS?' : 'HOW MANY PLAYERS?', { max: 2, allow: /^\d$/,
-      sub: `${lo} TO ${hi} PLAYERS` + (t.assist ? ' · ASSIST' : '') + (t.test ? ' · TEST MODE' : '') + (!t.test && !t.assist && left() < S.cfg.MAX_PARTY ? ` · ONLY ${left()} TICKETS LEFT` : '') });
+      sub: `${minSize(t)} TO ${maxSize(t)} PLAYERS` + (t.assist ? ' · ASSIST' : '') + (t.test ? ' · TEST MODE' : '') + (bypass ? ' · BYPASS' : '') + (!t.test && !t.assist && left() < S.cfg.MAX_PARTY ? ` · ONLY ${left()} TICKETS LEFT` : '') });
     if (v === BACK) return BACK;
-    const n = +v;
+    const n = +v, lo = minSize(t), hi = maxSize(t);
+    t.bypass = n < S.cfg.MIN_PARTY;          // sent with the sale, so turning BYPASS off later can't strand it
     if (n < lo) { await notice(`AT LEAST ${lo} PLAYERS`, `A GROUP NEEDS ${lo} TO ${hi} PLAYERS.`); continue; }
     if (n > hi) { await notice(!t.assist && !t.test && n <= S.cfg.MAX_PARTY ? `ONLY ${left()} TICKETS LEFT` : `AT MOST ${hi} PLAYERS`, 'BIGGER GROUP? SPLIT INTO TWO SIGNUPS.'); continue; }
     if (await yn(`${n} PLAYERS. CORRECT?`, `EVERY PLAYER NEEDS A PHOTO NEXT.${t.test ? '<br>TEST MODE: NOTHING IS RECORDED.' : ''}`)) return n;
@@ -807,25 +835,83 @@ function slotView() {
   const DAYS = S.cfg.DAYS.some(d => d.date === today) ? S.cfg.DAYS : [{ date: today, open: '00:00', close: '23:59' }, ...S.cfg.DAYS];
   return { ...S, cfg: { ...S.cfg, DAYS }, sales: [] };
 }
-async function pickLater() {                // day, then time. null = back
+// ===== PLAY LATER: the booking dial =====
+// One ring per booth day (the first day outside), one block per slot, clockwise like a clock from the gap at the top,
+// where the day names sit. The same time sits at the same angle on every ring, so ↑↓ keeps the time and changes the day.
+// A laser from Aurora's core points at the pick. ← → walk through every open slot in time order (into the next day too).
+function dialRings(V, at) {                  // -> { lo, hi, rings: [{ date, slots: [{ date, time, m, st: 'free' | 'x' | 'gone' }] }] }
+  const real = S.cfg.DAYS, lo = Math.min(...real.map(d => toMin(d.open))), hi = Math.max(...real.map(d => toMin(d.close)));
+  const busy = new Set(V.sales.filter(holds).map(s => slotKey(s.slot)));
+  return { lo, hi, rings: V.cfg.DAYS.map(d => ({ date: d.date, slots: daySlots(V.cfg, d.date)
+    .filter(sl => toMin(sl.time) >= lo && toMin(sl.time) + V.cfg.SLOT_MIN <= hi)    // test mode's all-day "today": booth hours only
+    .map(sl => ({ ...sl, m: toMin(sl.time), st: slotAt(sl) <= at ? 'gone' : busy.has(slotKey(sl)) ? 'x' : 'free' })) })) };
+}
+function dialStep(rings, [r, i], key) {      // the next open block from [ring, slot] for an arrow key, or null
+  if (key === 'ArrowLeft' || key === 'ArrowRight') {
+    const open = rings.flatMap((g, a) => g.slots.flatMap((s, b) => s.st === 'free' ? [[a, b]] : []));
+    return open[open.findIndex(([a, b]) => a === r && b === i) + (key === 'ArrowRight' ? 1 : -1)] || null;
+  }
+  const d = key === 'ArrowUp' ? -1 : key === 'ArrowDown' ? 1 : 0, m = rings[r].slots[i].m;
+  for (let a = r + d; d && a >= 0 && a < rings.length; a += d) {
+    const s = rings[a].slots, open = s.map((x, b) => b).filter(b => s[b].st === 'free');
+    if (open.length) return [a, open.reduce((p, b) => Math.abs(s[b].m - m) < Math.abs(s[p].m - m) ? b : p)];
+  }
+  return null;
+}
+const dialAng = (D, m) => 30 + 300 * (m - D.lo) / (D.hi - D.lo);   // degrees clockwise from 12 o'clock; the top 60° holds the day names
+const polar = (r, a) => [r * Math.sin(a * Math.PI / 180), -r * Math.cos(a * Math.PI / 180)].map(v => v.toFixed(2)).join(' ');
+function dialSVG(D) {                        // viewBox -100..100, the core at 0,0
+  const n = D.rings.length, pitch = n > 1 ? 50 / (n - 1) : 0, w = Math.min(9, pitch * .68 || 9);
+  const per = 300 * S.cfg.SLOT_MIN / (D.hi - D.lo), pad = Math.min(1.2, per * .15);
+  D.rings.forEach((g, r) => g.r = 80 - r * pitch);
+  let s = '';
+  for (let h = Math.ceil(D.lo / 60); h * 60 <= D.hi; h++) {                // hour marks outside the outer ring
+    const a = dialAng(D, h * 60), [x, y] = polar(93, a).split(' ');
+    s += `<path class="tick" d="M ${polar(85, a)} L ${polar(88, a)}"/><text class="hr" x="${x}" y="${y}">${(h + 11) % 12 + 1}${h < 12 ? 'AM' : 'PM'}</text>`;
+  }
+  D.rings.forEach((g, r) => {
+    const day = new Date(g.date + 'T00:00');
+    s += `<text class="day${g.slots.some(x => x.st === 'free') ? '' : ' full'}" x="0" y="${-g.r}">${day.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()} ${day.getDate()}</text>`;
+    g.slots.forEach((sl, i) => {
+      const a0 = dialAng(D, sl.m) + pad / 2, a1 = dialAng(D, sl.m + S.cfg.SLOT_MIN) - pad / 2;
+      s += `<path class="seg ${sl.st}" data-k="${r}-${i}" stroke-width="${w}" d="M ${polar(g.r, a0)} A ${g.r} ${g.r} 0 0 1 ${polar(g.r, a1)}"/>`;
+    });
+  });
+  return `<svg viewBox="-100 -100 200 200">${s}<g class="beam"><line class="glow" x1="0" y1="0" x2="0" y2="-1"/><line x1="0" y1="0" x2="0" y2="-1"/></g>` +
+    `<circle class="orb" r="15"/><circle class="core" r="10"/></svg>`;
+}
+async function pickLater() {                 // the slot, once confirmed. null = back
+  const D = dialRings(slotView(), now());
+  let sel = null;
+  for (const [r, g] of D.rings.entries()) { const i = g.slots.findIndex(x => x.st === 'free'); if (i >= 0) { sel = [r, i]; break; } }
+  if (!sel) return null;
+  show('WHEN DO YOU BREAK IN?', `<div class="dial">${dialSVG(D)}<div class="dread">` +
+    `<div class="lab">DAY</div><div class="dv" id="dday"></div><div class="lab">TIME</div><div class="dv huge" id="dtime"></div>` +
+    `<div class="legend"><i></i>OPEN<br><i class="x"></i>TAKEN<br><i class="s"></i>YOUR PICK</div><div class="aur"></div></div></div>`,
+    '[← →] TIME   [↑↓] DAY   [SPACE] LOCK IN   [ESC] BACK');
+  const paint = () => {                      // move the highlight, the laser and the readout. The SVG itself is built once
+    const [r, i] = sel, g = D.rings[r], sl = g.slots[i];
+    box.querySelector('.seg.sel')?.classList.remove('sel');
+    box.querySelector(`.seg[data-k="${r}-${i}"]`).classList.add('sel');
+    box.querySelectorAll('text.day').forEach((t, j) => t.classList.toggle('on', j === r));
+    box.querySelector('.beam').style.transform = `rotate(${dialAng(D, sl.m + S.cfg.SLOT_MIN / 2)}deg) scale(1, ${g.r})`;
+    $('#dday').textContent = fmtDay(sl.date); $('#dtime').textContent = fmtTime(sl);
+  };
+  paint();
+  type(box.querySelector('.dread .aur'), 'Every ring is a day. Pick your door. I will leave it open.', 40, VOICES.aurora);
   for (;;) {
-    const at = now(), V = slotView(), days = V.cfg.DAYS.map(d => ({ date: d.date, free: freeSlots(V, d.date, at).length }));
-    const d = await askChoice('WHICH DAY?', days.map(x => ({ label: fmtDay(x.date), sub: x.free ? `${x.free} SLOT${x.free > 1 ? 'S' : ''} FREE` : 'FULL', off: !x.free })));
-    if (d < 0) return null;
-    const date = days[d].date, all = daySlots(V.cfg, date), free = new Set(freeSlots(V, date, now()).map(slotKey));
-    let sel = all.findIndex(sl => free.has(slotKey(sl)));
-    for (;;) {
-      show(`${fmtDay(date)}: PICK A TIME`, `<div class="slots">${all.map((sl, i) =>
-        `<i class="${free.has(slotKey(sl)) ? '' : 'x'}${i === sel ? ' sel' : ''}">${fmtTime(sl)}</i>`).join('')}</div>`,
-        '[ARROWS] MOVE   [SPACE] PICK   [ESC] BACK');
-      const e = await k();
-      if (e.key === 'Escape') break;
-      if (go(e)) return all[sel];
-      const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -6, ArrowDown: 6 }[e.key];
-      if (!step) { sfx.nope(); continue; }
-      for (let j = sel + step; j >= 0 && j < all.length; j += Math.sign(step)) if (free.has(slotKey(all[j])) && (Math.abs(step) === 1 || (j - sel) % 6 === 0)) { sel = j; break; }
-      sfx.move();
+    const e = await k();
+    if (e.key === 'Escape') return null;
+    if (go(e)) {
+      const sl = D.rings[sel[0]].slots[sel[1]];
+      box.querySelector('.beam line:not(.glow)').animate([{ strokeWidth: '14px' }, { strokeWidth: '3px' }], 450);
+      $('#flash').animate([{ opacity: .5 }, { opacity: 0 }], 300); sfx.stamp(); shake(box, 8, 300);
+      await wait(450);
+      if (await yn(`${fmtDay(sl.date)} AT ${fmtTime(sl)}. CONFIRM?`, `BE AT THE BOOTH BEFORE ${fmtTime(sl)}.<br>IF YOU'RE NOT HERE ${S.cfg.GRACE_MIN} MINUTES AFTER WE CALL YOU, THE NEXT GROUP GOES.`)) return { date: sl.date, time: sl.time };
+      continue;
     }
+    const to = dialStep(D.rings, sel, e.key);
+    if (to) { sel = to; paint(); sfx.move(); } else { sfx.nope(); if (/Arrow/.test(e.key)) shake(box.querySelector('svg'), 5, 200); }
   }
 }
 async function when(team) {
@@ -833,15 +919,15 @@ async function when(team) {
     const at = now(), V = slotView(), ns = nowSlot(V, at), anyLater = V.cfg.DAYS.some(d => freeSlots(V, d.date, at).length);
     const c = await askChoice('WHEN DO YOU WANT TO PLAY?', [
       { label: 'PLAY NOW', sub: ns ? `GET IN LINE TODAY · ${ahead(S, ns)} GROUP${ahead(S, ns) === 1 ? '' : 'S'} AHEAD` : 'NO SLOTS LEFT TODAY', off: !ns },
-      { label: 'PLAY LATER', sub: anyLater ? 'BOOK A DAY AND TIME' : 'ALL DAYS FULL', off: !anyLater },
+      { label: 'PLAY LATER', sub: anyLater ? 'BOOK A SLOT ON AURORA\'S DIAL' : 'ALL DAYS FULL', off: !anyLater },
     ]);
     if (c < 0) return BACK;
     if (c === 0) {
       if (await yn(`PLAY NOW: TODAY, ${fmtTime(ns)} SLOT?`, `${ahead(S, ns)} GROUP${ahead(S, ns) === 1 ? '' : 'S'} AHEAD OF YOU. STAY NEAR THE BOOTH.<br>WHEN WE CALL "${esc(team)}" YOU HAVE ${S.cfg.GRACE_MIN} MINUTES TO SHOW UP, OR THE NEXT GROUP GOES.`)) return { slot: ns, walkin: true };
       continue;
     }
-    const sl = await pickLater();
-    if (sl && await yn(`${fmtDay(sl.date)} AT ${fmtTime(sl)}. CONFIRM?`, `BE AT THE BOOTH BEFORE ${fmtTime(sl)}.<br>IF YOU'RE NOT HERE ${S.cfg.GRACE_MIN} MINUTES AFTER WE CALL YOU, THE NEXT GROUP GOES.`)) return { slot: sl, walkin: false };
+    const sl = await pickLater();             // confirms inside: NO stays on the dial
+    if (sl) return { slot: sl, walkin: false };
   }
 }
 function summary(t) {
@@ -862,7 +948,7 @@ async function save(t) {                     // the sale is written only here, w
   if (t.test) return { code: 'TEST', team: t.team, size: t.size, slot: t.slot, walkin: t.walkin, assist: t.assist, amount: cost(t), test: true };
   for (;;) {
     show('SAVING…', '', '');
-    const [saved, b] = await post('/api/sale', { team: t.team, size: t.size, photos: t.shots, slot: t.slot, walkin: t.walkin, assist: t.assist });
+    const [saved, b] = await post('/api/sale', { team: t.team, size: t.size, photos: t.shots, slot: t.slot, walkin: t.walkin, assist: t.assist, bypass: t.bypass });
     if (saved) return b;
     await notice(b.error || 'COULD NOT SAVE', 'NOTHING WAS SAVED YET. CALL A STAFF MEMBER IF THIS KEEPS HAPPENING.');
     if (/SLOT/.test(b.error)) { const w = await when(t.team); if (w) Object.assign(t, w); }
@@ -897,7 +983,7 @@ async function signup() {
     step--;
   }
   const sale = await save(t);
-  flow = false; assist = testing = false; renderStats();
+  flow = false; assist = testing = bypass = false; renderStats();
   await receipt(sale);
 }
 
@@ -958,7 +1044,7 @@ async function main() {
     flow = true; mode = 'signup';
     try { await signup(); }
     catch (e) { unmodal(); if (e !== CANCEL) { console.error(e); flow = false; await notice('SOMETHING BROKE. CALL A STAFF MEMBER.', esc(e.message)); } }
-    flow = false; assist = testing = false; vid.hidden = true; document.body.append(vid); renderStats();
+    flow = false; assist = testing = bypass = false; vid.hidden = true; document.body.append(vid); renderStats();
   }
 }
 
@@ -1030,6 +1116,13 @@ if (location.search === '?test') {
   CFG.CAMERA = 'hd uvc';
   console.assert(cams(['USB2.0 HD UVC WebCam', 'Logitech C270']) === 'USB2.0 HD UVC WebCam,Logitech C270', 'CFG.CAMERA forces one first');
   CFG.CAMERA = '';
+  const ring = sts => ({ slots: sts.map((st, i) => ({ m: 540 + i * 25, st })) });
+  const R = [ring(['free', 'x', 'free']), ring(['x', 'x', 'x']), ring(['gone', 'free', 'free'])];
+  console.assert(dialStep(R, [0, 0], 'ArrowRight') + '' === '0,2', 'dial: → skips a taken slot');
+  console.assert(dialStep(R, [0, 2], 'ArrowRight') + '' === '2,1', 'dial: → past the last slot goes on to the next open day');
+  console.assert(dialStep(R, [0, 0], 'ArrowLeft') === null && dialStep(R, [2, 2], 'ArrowRight') === null, 'dial: stops at both ends');
+  console.assert(dialStep(R, [0, 0], 'ArrowDown') + '' === '2,1', 'dial: ↓ skips a full day and lands on the nearest open time');
+  console.assert(dialStep(R, [2, 2], 'ArrowUp') + '' === '0,2' && dialStep(R, [0, 0], 'ArrowUp') === null, 'dial: ↑ keeps the time; nothing above the first day');
   console.log('self-check done (no assertion errors above = pass)');
 } else if (location.pathname.endsWith('/queue') || new URLSearchParams(location.search).has('queue')) board();
 else main();

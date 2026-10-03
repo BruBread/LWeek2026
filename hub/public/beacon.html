@@ -1,7 +1,6 @@
 <!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>NEXUS beacon</title>
 <!-- Stand-in for the puzzle 3 beacon boards until the parts arrive. Open on a phone/tablet on the booth Wi-Fi:
-       http://<hub laptop IP>:3000/beacon         the real board (3 white lights)
-       http://<hub laptop IP>:3000/beacon?decoy   the decoy (3 red lights)
+       http://<hub laptop IP>:3000/beacon         the IR board (3 white lights)
      Tap once for fullscreen. Turn the phone's auto-lock off. It gets the current code from puzzle3/game.html through the hub.
      Add &debug to show the code on screen (never during a real run). -->
 <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}
@@ -13,9 +12,9 @@
 <script>
 // Timing must match beacon_esp32.ino (ms)
 const T = { ON: 250, OFF: 350, LED_GAP: 1000, LOOP_GAP: 3000 };
-const q = new URLSearchParams(location.search), DECOY = q.has('decoy'), DEBUG = q.has('debug');
-const COLOR = DECOY ? '#ff2a2a' : '#e8dcff';
-let code = DECOY ? '241' : '314', steps, t0, total, online = false;   // defaults = the ESP32's boot codes
+const DEBUG = new URLSearchParams(location.search).has('debug');
+const COLOR = '#e8dcff';
+let code = '314', steps, t0, total, online = false;   // default = the ESP32's boot code
 row.innerHTML = [1, 2, 3].map(n => `<div><i></i>${n}</div>`).join('');   // numbered like the stickers on the breadboard
 const dots = [...row.querySelectorAll('i')];
 
@@ -40,11 +39,11 @@ set(code);
 
 function conn() {
   const ws = new WebSocket('ws://' + location.host + '/ws');
-  ws.onopen = () => { online = true; ws.send(JSON.stringify({ t: 'hello', id: DECOY ? 'beacon-decoy' : 'beacon-sim', role: 'page' }));
+  ws.onopen = () => { online = true; ws.send(JSON.stringify({ t: 'hello', id: 'beacon-sim', role: 'page' }));
                       ws.send(JSON.stringify({ t: 'evt', e: 'p3ask' })); };
   ws.onclose = () => { online = false; setTimeout(conn, 2000); };
   ws.onmessage = e => { const m = JSON.parse(e.data);
-    if (m.t === 'evt' && m.e === 'p3code') set(DECOY ? m.v.decoy : m.v.code); };
+    if (m.t === 'evt' && m.e === 'p3code') set(m.v.code); };
 }
 conn();
 document.body.onclick = () => document.documentElement.requestFullscreen?.().catch(() => {});

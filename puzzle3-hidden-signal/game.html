@@ -123,18 +123,6 @@ body.hunt #bar, body.won #bar { display: block; animation: boxIn .7s .5s backwar
 #segs i.on { opacity: 1; box-shadow: 0 0 8px currentColor; }
 body.traced #segs i.on { animation: blink .8s steps(1) infinite; }
 
-/* NICE TRY: the decoy slam */
-#big { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%); z-index: 40; white-space: nowrap;
-  font-size: 8vw; font-weight: 700; letter-spacing: .06em; color: #fff; text-shadow: 0 0 30px var(--g), 0 0 90px var(--g); }
-#big.jit { animation: jit .07s steps(1) infinite; }
-@keyframes jit { 0% { translate: -8px 4px } 25% { translate: 7px -5px; scale: 1.02 } 50% { translate: -4px -3px } 75% { translate: 9px 5px; scale: .99 } }
-#bigSub { position: fixed; left: 0; right: 0; top: 62%; z-index: 40; text-align: center; font-size: 2vw; letter-spacing: .3em;
-  color: var(--g); text-shadow: 0 0 20px var(--g); }
-#scareBg { position: fixed; inset: 0; z-index: 39; display: none; overflow: hidden; padding: 1vw; word-break: break-all;
-  color: var(--g); font-size: 1.3vw; font-weight: 700; line-height: 1.25; opacity: .3; animation: scareFlick .09s steps(2) infinite; }
-body.scare #scareBg { display: block; }
-@keyframes scareFlick { 50% { opacity: .1; background: #030; } }
-
 /* end screen, same as puzzles 1-2 */
 #final { position: fixed; inset: 0; z-index: 50; display: none; flex-direction: column; align-items: center; justify-content: center;
   gap: 2.5vh; overflow: hidden; color: var(--hud); animation: flick .11s steps(2) infinite;
@@ -181,9 +169,6 @@ body.help #help { display: block; }
     <div id="bar" class="txt"><div class="row"><span>AURORA TRACING YOU ▸ <b id="tl">5:00</b> LEFT</span><span id="bp">0%</span></div><div id="segs"></div></div>
   </div>
   <div id="beam"></div>
-  <div id="scareBg"></div>
-  <div id="big" class="glitch" hidden></div>
-  <div id="bigSub" hidden></div>
   <div id="final">
     <i class="ring"></i><i class="ring r2"></i><i class="ring r3"></i>
     <div id="fk"></div>
@@ -196,9 +181,9 @@ body.help #help { display: block; }
 <div id="flash"></div>
 <div id="dim"></div>
 <div id="help">STAFF SHORTCUTS
-code <b id="hcode"></b>   decoy <b id="hdecoy"></b>
-IR board: <span id="hbeacon">...</span>   decoy: <span id="hdecoyb">...</span>   hub: <span id="hubst">...</span>
-(no board yet? a phone on :3000/beacon, decoy phone on :3000/beacon?decoy)
+code <b id="hcode"></b>
+IR board: <span id="hbeacon">...</span>   hub: <span id="hubst">...</span>
+(no board yet? a phone on :3000/beacon)
 
 Ctrl+Alt+H  show / hide this panel
 Ctrl+Alt+U  unlock by hand (if puzzle 2's signal never came)
@@ -216,12 +201,10 @@ const CFG = {
   UNLOCK_EVT: 'p2done',      // puzzle 2 sends this when SYSTEM POWERED finishes
   DONE_EVT: 'p3done',        // sent to the hub when this puzzle is won (for puzzle 4)
   BEACON_IPS: ['192.168.0.51', '192.168.1.51'],   // the hidden IR board (see NETS in beacon_esp32.ino). The phone stand-ins get the codes through the hub instead
-  DECOY_IPS: ['192.168.0.52', '192.168.1.52'],   // the decoy ESP32 (same sketch, DECOY_BOARD = true), somewhere easier to find
-  PUSH_MS: 3000,             // resend the codes to both boards this often
+  PUSH_MS: 3000,             // resend the code to the board this often
   DIM: 0.65,                 // how much darker the screen gets during the hunt (0 = normal, 1 = black). Staff panel (Ctrl+Alt+H) stays bright
   // TRACE, carried to the finale = the trace bar when they crack it (lower is better). Mistakes push the bar forward:
-  WRONG_TRACE: 5,            // % per wrong code...
-  DECOY_TRACE: 10,           // ...and for entering the decoy
+  WRONG_TRACE: 5,            // % per wrong code
   LOCK_MS: 2500,             // input locked this long after a wrong code
   TRACE_S: 300,              // the hunt clock: the trace bar fills over this many seconds, then time is up (TRACE 100%, team moves on)
   // hints glitch onto the screen at these seconds into the hunt; Ctrl+Alt+I shows the next one early.
@@ -242,7 +225,6 @@ const T = {                  // ms
   typeChar: 45,              // Aurora's typing speed
   after: 1400,               // pause after each intro line
   auroraHold: 4000,          // how long Aurora's taunts stay up during the hunt
-  niceTry: 2200,             // how long NICE TRY stays up after the decoy code
 };
 const INTRO = [              // the players' side (red terminal)
   'sector 03: aurora\'s control signal.',
@@ -256,7 +238,6 @@ const INTRO = [              // the players' side (red terminal)
 const AUR = {                // Aurora (green)
   intro: "You'll never see it. Human eyes are so... limited.",
   wrong: ['Wrong frequency.', "That's not me.", 'Keep looking. Or don\'t.', 'Static. Just like your thinking.', 'Colder.'],
-  decoy: "That's what I wanted you to see.",
   traced: 'I see you. All of you.',
   caught: 'No. That frequency is-',
   win: "...that's my heart. don't you dare.",
@@ -276,11 +257,10 @@ const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)) } catc
 const LIGHTS = 3;            // digits in the code = IR lights on the beacon (must match IR_PINS in beacon_esp32.ino)
 const roll = () => Array.from({ length: LIGHTS }, () => 1 + (Math.random() * 5 | 0)).join('');
 const CODE = roll();
-let DECOY; do DECOY = roll(); while (DECOY === CODE);
 
 let mode = 'standby';        // standby | intro | hunt | check | won | end
 let unlocked = false, entry = '', huntT0 = 0, hintN = 0, traced = false;
-let tracePen = 0, trace = 0, wrong = 0, tookDecoy = false, huntS = 0, replay = false;   // trace = bar %, frozen on the win
+let tracePen = 0, trace = 0, wrong = 0, huntS = 0, replay = false;   // trace = bar %, frozen on the win
 
 // ===== Hub: unlock on puzzle 2's "done", hand the code to the phone stand-in, report TRACE =====
 // while the hub is down, messages wait in hubQ and go out on reconnect, so a win during a hub hiccup still unlocks
@@ -290,7 +270,7 @@ function hubSend(o) {
   if (o) { if (o.t === 'status' && hubWs?.readyState !== 1) return; hubQ.push(o); }
   while (hubWs?.readyState === 1 && hubQ.length) hubWs.send(JSON.stringify(hubQ.shift()));
 }
-const sendCode = () => hubSend({ t: 'evt', e: 'p3code', v: { code: CODE, decoy: DECOY } });
+const sendCode = () => hubSend({ t: 'evt', e: 'p3code', v: { code: CODE } });
 function unlock() {
   if (unlocked) return;
   unlocked = true; document.body.classList.add('ready');
@@ -315,9 +295,17 @@ async function findHub() {
     await new Promise(r => setTimeout(r, 2000));
   }
 }
+// game 5, the finale, lives on the hub: boss.js sleeps until the hub starts it, then takes over this screen
+function bossLoad() {
+  if (window.BOSS) return;
+  window.BOSS = 1;
+  const s = document.createElement('script');
+  s.src = hubWs.url.replace(/^ws(.*)\/ws$/, 'http$1/boss.js?') + Date.now(); s.dataset.room = 3;
+  document.head.append(s);
+}
 async function hub() {
   const ws = hubWs = new WebSocket('ws://' + await findHub() + ':3000/ws');
-  ws.onopen = () => { ws.send(JSON.stringify({ t: 'hello', id: 'puzzle3', role: 'page' })); hubSend(); sendCode(); $('#hubst').textContent = 'connected'; };
+  ws.onopen = () => { ws.send(JSON.stringify({ t: 'hello', id: 'puzzle3', role: 'page' })); hubSend(); bossLoad(); sendCode(); $('#hubst').textContent = 'connected'; };
   ws.onclose = () => { $('#hubst').textContent = 'DOWN (Ctrl+Alt+U to unlock by hand)'; setTimeout(hub, 2000); };
   ws.onmessage = e => { const m = JSON.parse(e.data);
     if (m.t === 'cmd' && m.a === 'key') staffKey(m.v);
@@ -328,7 +316,7 @@ async function hub() {
 }
 // the GM panel presses this page's Ctrl+Alt staff keys remotely, and sees its state once a second
 const staffKey = code => dispatchEvent(new KeyboardEvent('keydown', { code, ctrlKey: true, altKey: true }));
-setInterval(() => hubSend({ t: 'status', v: { mode, unlocked, code: CODE, decoy: DECOY, stat: trace, boards } }), 1000);
+setInterval(() => hubSend({ t: 'status', v: { mode, unlocked, code: CODE, stat: trace, boards } }), 1000);
 
 // the boards: fire-and-forget like the mask, so a dead ESP32 never stalls the game.
 // boards = did each one answer the last push (for the GM panel): true / false / 'none' (no IPs set: a phone stands in)
@@ -339,9 +327,9 @@ function push(ips, code, el, name) {
   Promise.any(ips.map(ip => fetch(`http://${ip}/code?v=${code}`, { mode: 'no-cors', signal: c.signal })))
     .then(() => { boards[name] = true; $(el).textContent = 'OK'; }, () => { boards[name] = false; $(el).textContent = 'OFFLINE'; });
 }
-function pushBeacon() { push(CFG.BEACON_IPS, CODE, '#hbeacon', 'beacon'); push(CFG.DECOY_IPS, DECOY, '#hdecoyb', 'decoy'); }
+const pushBeacon = () => push(CFG.BEACON_IPS, CODE, '#hbeacon', 'beacon');
 setInterval(pushBeacon, CFG.PUSH_MS);
-$('#hcode').textContent = CODE; $('#hdecoy').textContent = DECOY;
+$('#hcode').textContent = CODE;
 
 // ===== Sound (synthesized, same set as puzzle 2) =====
 const AC = new AudioContext();
@@ -375,7 +363,6 @@ const sfx = {
   alarm()  { for (let k = 0; k < 3; k++) { tone('square', 880, 0, .16, .1, k * .36); tone('square', 620, 0, .16, .1, k * .36 + .18); } },
   ok()     { tone('sine', 1320, 0, .25, .12); tone('sine', 1760, 0, .35, .1, .08); },
   stamp()  { tone('square', 220, 110, .15, .25); noise(.1, .4, 3000); tone('sine', 1760, 0, .4, .12, .05); },
-  scream() { noise(1.4, .5, 1800); tone('sawtooth', 110, 2600, 1.4, .22); tone('square', 95, 55, 1.4, .18); },
   boom()   { tone('sine', 70, 22, 1.8, 1); noise(.6, .7, 160); },
   blip()   { tone('sine', rand(2400, 3400), 0, .04, .02); },   // the carrier's radar chirp while hidden
   glitch() { noise(.08, .18, rand(1500, 5000)); tone('square', rand(200, 900), rand(80, 300), .08, .05); },   // hint tearing onto the screen
@@ -386,7 +373,6 @@ const sfx = {
 // recorded sound: drop files into sounds/ with these names. A missing file is skipped silently.
 const SOUNDS = {
   hunt:     'sounds/hunt.mp3',       // loops from the CRT boot until the code is cracked
-  nicetry:  'sounds/nicetry.mp3',    // one-shot on the decoy slam
   win:      'sounds/win.mp3',        // one-shot on SIGNAL INTERCEPTED
 };
 const tracks = {};
@@ -412,7 +398,6 @@ function fade(name, to, ms = 600) {           // to = 0..1 of MUSIC_VOLUME; fadi
 const VOICES = {
   aurora: { f: 440, jit: .06, wave: 'square',   vol: .06, every: 2 },  // normal lines
   soft:   { f: 330, jit: .03, wave: 'triangle', vol: .07, every: 3 },  // quiet / pleading / endings
-  angry:  { f: 150, jit: .15, wave: 'sawtooth', vol: .12, every: 1 },  // scare babble
 };
 let voiceBuf = null;
 fetch('sounds/aurora-voice.mp3').then(r => r.ok ? r.arrayBuffer() : null)
@@ -423,9 +408,6 @@ function blip(v) {
   const s = AC.createBufferSource(), g = AC.createGain();
   s.buffer = voiceBuf; s.playbackRate.value = k * v.f / 440; g.gain.value = v.vol * 8;   // * 8: tune by ear for your file
   s.connect(g).connect(master); s.start();
-}
-async function say(text, v = VOICES.angry) {       // voice with no typing: a quick babble for scare lines
-  for (const ch of text) { if (/\w/.test(ch)) blip(v); await wait(35); }
 }
 
 // ===== Helpers (copied from puzzle 2) =====
@@ -633,13 +615,11 @@ function hunt() {
 async function check() {
   mode = 'check';
   if (entry === CODE) return win();
-  const decoy = entry === DECOY;
-  wrong++; tookDecoy ||= decoy;
-  tracePen += decoy ? CFG.DECOY_TRACE : CFG.WRONG_TRACE; renderTrace();   // she hears them: the trace jumps
+  wrong++;
+  tracePen += CFG.WRONG_TRACE; renderTrace();   // she hears them: the trace jumps
   $('#bar').animate([{ color: '#fff', filter: 'brightness(2.5)' }, {}], 700); shake($('#bar'), 10, 400);
   sfx.buzz(); spike = 1.2; $('#cells').classList.add('bad'); shake(scr, 12, 420);
-  if (decoy) await niceTry();
-  else aurora(any(AUR.wrong), T.auroraHold);
+  aurora(any(AUR.wrong), T.auroraHold);
   await wait(450);
   $('#cells').classList.replace('bad', 'lock');
   await wait(CFG.LOCK_MS);
@@ -647,21 +627,6 @@ async function check() {
   $('#cells').classList.remove('lock');
   entry = ''; mode = 'hunt'; renderCells();
 }
-// the decoy: Aurora slams it in green, the whole screen mocking them
-async function niceTry() {
-  const big = $('#big'), sub = $('#bigSub');
-  $('#scareBg').textContent = 'NICE TRY '.repeat(600);
-  document.body.classList.add('scare');
-  big.textContent = big.dataset.text = 'NICE TRY.'; big.hidden = false; big.classList.add('jit');
-  sub.textContent = AUR.decoy.toUpperCase(); sub.hidden = false;
-  big.animate([{ transform: 'translate(-50%,-50%) scale(3)', opacity: 0 },
-               { transform: 'translate(-50%,-50%) scale(1)', opacity: 1 }], { duration: 180, easing: 'ease-out' });
-  $('#flash').animate([{ opacity: .8, background: '#4dff88' }, { opacity: 0 }], 300);
-  sfx.scream(); play('nicetry'); say(AUR.decoy); shake(app, 18, 800);
-  await wait(T.niceTry);
-  big.hidden = sub.hidden = true; big.classList.remove('jit'); document.body.classList.remove('scare');
-}
-
 async function win() {
   renderTrace(); huntS = (performance.now() - huntT0) / 1000;   // freeze TRACE before mode leaves the hunt
   mode = 'won'; entry = CODE; renderCells(); renderHud();
@@ -710,7 +675,7 @@ async function ending(won = true) {
   await wait(1400);
   await type($('#fa'), line, T.typeChar, VOICES.soft);
   if (!replay) hubSend({ t: 'result', k: 'trace', v: trace,   // staff replays don't overwrite a real team's TRACE
-    facts: { decoy: tookDecoy, p3wrong: wrong, time: `${huntS / 60 | 0}:${String(Math.floor(huntS % 60)).padStart(2, '0')}` } });
+    facts: { p3wrong: wrong, time: `${huntS / 60 | 0}:${String(Math.floor(huntS % 60)).padStart(2, '0')}` } });
   hubSend({ t: 'evt', e: CFG.DONE_EVT });        // unlocks puzzle 4 either way
 }
 
@@ -745,7 +710,7 @@ if (location.hash === '#win') { history.replaceState(null, '', location.pathname
 // self-check: open game.html?test and look at the console
 if (location.search === '?test') {
   const re = new RegExp(`^[1-5]{${LIGHTS}}$`);
-  console.assert(re.test(CODE) && re.test(DECOY) && CODE !== DECOY, 'codes are LIGHTS digits 1-5 and differ');
+  console.assert(re.test(CODE), 'code is LIGHTS digits 1-5');
   console.assert(ecg(0) === 0 && ecg(100) > 1 && ecg(500) === 0, 'heartbeat shape: flat, spike, flat');
   console.assert(CFG.HINTS.every((h, i) => !i || h.at > CFG.HINTS[i - 1].at), 'hints are in time order');
   console.log('self-check done (no assertion errors above = pass)');

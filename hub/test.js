@@ -1,5 +1,6 @@
 // smoke test: device receives finale_red, gets state replayed after reconnect; carried resources store, clamp, merge facts, reset;
-// GM panel protocol (status, staff keys, run clock, finish); unlocks resent on hello; the run surviving a hub restart.
+// GM panel protocol (status, staff keys, run clock, finish); unlocks resent on hello; the run surviving a hub restart;
+// game 5's finale state (phases in order, task swap, kill switch judging).
 // Starts its own hub on :3000 with temp run files (stop the real hub first), so test runs never land in runs.jsonl.
 const WebSocket = require('ws'), assert = require('assert'), { spawn } = require('child_process'), fs = require('fs'), os = require('os'), path = require('path');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-hub-'));
@@ -79,10 +80,59 @@ const unlocked = (w, e) => w.msgs.some(m => m.t === 'evt' && m.e === e);
   assert(r.team === 'Team Test' && r.t0 > 0 && r.splits.p1done >= 0, 'the run survives a hub restart');
   assert(unlocked(await open('puzzle2', 'page'), 'p1done'), 'unlocks resent after a hub restart');
 
+  // game 5: the finale's state lives in the hub, and boss.js on each room laptop follows it
+  const [f1, f2, f3, f4] = await Promise.all([1, 2, 3, 4].map(n => open('fin' + n, 'fin')));
+  const fin = w => w.msgs.filter(m => m.t === 'fin').pop(), F = (w, o) => w.send(JSON.stringify({ t: 'fin', ...o }));
+  assert.strictEqual(fin(f1).phase, null, 'the finale sleeps until room 4 crashes');
+  F(f3, { a: 'takeover' }); await wait(100);
+  assert.strictEqual(fin(f1).phase, null, 'phases only move in order');
+  F(f4, { a: 'crash' }); await wait(100);
+  assert.strictEqual(fin(f1).phase, 'crash', 'room 4 crashes: every room hears it');
+  F(f4, { a: 'takeover' }); await wait(100);
+  let s = fin(f2);
+  assert(s.phase === 'takeover' && s.at > s.now, 'the takeover is set a moment ahead, so every screen flips at once');
+  F(f1, { a: 'sync', c: 123 }); await wait(100);
+  assert(f1.msgs.some(m => m.t === 'sync' && m.c === 123 && m.now > 0), 'clock sync answers the asker');
+  F(f3, { a: 'trace' }); await wait(100);
+  assert.strictEqual(fin(f1).phase, 'fight', 'the map traces her: the fight starts');
+  F(f2, { a: 'step', task: 'binary', done: 1 }); await wait(100);
+  assert.strictEqual(fin(f1).tasks.binary.done, 0, 'only the room holding a task can move it');
+  F(f1, { a: 'step', task: 'binary', done: 2 }); F(f4, { a: 'clear', task: 'cross' }); await wait(100);
+  s = fin(f3);
+  assert(s.tasks.binary.room === 2 && s.tasks.words.room === 1 && s.ev.swap, 'the first task down: rooms 1 and 2 swap');
+  assert.strictEqual(s.tasks.binary.done, 2, 'progress moves with the task');
+  F(f2, { a: 'clear', task: 'binary' }); await wait(100);
+  s = fin(f3);
+  assert(s.tasks.words.room === 1 && !s.ev.swap && s.phase === 'fight', 'she only jumps once');
+  F(f1, { a: 'clear', task: 'words' }); await wait(100);
+  assert.strictEqual(fin(f3).phase, 'regroup', 'all three down: back to the map');
+  F(f3, { a: 'brief' }); await wait(50); F(f3, { a: 'kill' }); await wait(100);
+  assert.strictEqual(fin(f3).phase, 'kill', 'the briefing leads to the kill switch');
+  F(f1, { a: 'press', ts: Date.now() }); F(f2, { a: 'press', ts: Date.now() }); F(f3, { a: 'press', ts: Date.now() }); await wait(100);
+  assert.deepStrictEqual(fin(f3).ready, { 1: true, 2: true }, 'a first press only says ready; the map is not a kill room');
+  F(f4, { a: 'press', ts: Date.now() }); await wait(100);
+  assert.strictEqual(fin(f3).phase, 'kill', 'the last room to arrive is ready, not a kill press');
+  g({ t: 'result', k: 'trace', v: 100 }); await wait(100);
+  assert.strictEqual(fin(f3).win, 0.4, 'TRACE sets the kill window');
+  let t = Date.now();
+  F(f1, { a: 'press', ts: t }); F(f2, { a: 'press', ts: t + 2000 }); F(f4, { a: 'press', ts: t }); await wait(100);
+  s = fin(f3);
+  assert(s.phase === 'kill' && s.fails === 1 && s.ev.k === 'fail' && s.ev.spread === 2, '2 s apart: OUT OF SYNC, try again');
+  t = Date.now();
+  F(f1, { a: 'press', ts: t }); F(f2, { a: 'press', ts: t + 300 }); F(f4, { a: 'press', ts: t + 100 }); await wait(100);
+  s = fin(f3);
+  assert(s.phase === 'end' && s.ev.k === 'kill' && s.ev.spread === 0.3, 'within the window: she dies');
+  assert(last(gm).splits.p5done >= 0, 'the end sets the p5done split');
+  hub.kill(); await wait(300); await startHub();
+  gm = await open('gm1', 'page');
+  assert.strictEqual(fin(await open('fin3', 'fin')).phase, 'end', 'the finale survives a hub restart');
+
   g({ t: 'finish' }); await wait(200);
   assert(last(gm).end >= 0, 'finish stops the clock');
   assert(gm.msgs.filter(m => m.t === 'history').pop().runs.some(x => x.team === 'Team Test'), 'finish adds to history');
   assert(!unlocked(await open('puzzle2', 'page'), 'p1done'), 'after FINISH RUN a reset room stays locked');
+  assert.strictEqual(fin(await open('fin1', 'fin')).phase, null, 'FINISH RUN puts the finale to sleep');
+  assert(!JSON.parse(fs.readFileSync(path.join(tmp, 'runs.jsonl'), 'utf8').trim().split('\n').pop()).fin, 'the finale state stays out of the run history');
   g({ t: 'newteam' }); await wait(100);
   console.log('OK'); hub.kill(); process.exit(0);
 })().catch(e => { console.error(e.message); hub?.kill(); process.exit(1); });

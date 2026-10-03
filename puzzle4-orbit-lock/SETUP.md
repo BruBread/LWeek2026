@@ -82,6 +82,45 @@ From then on they connect by themselves every time the game starts, and again af
 5. Let go of both knobs. The rings should sit still. If one shivers, add the 104 capacitor to that board or raise `STEP_MV` in the sketch (4-5).
 6. Pull one USB cable mid-layer: within a second that ring's keys work, and the other knob still works. Plug it back in: the knob takes over again.
 
+## Laser strip (Govee H6143, Bluetooth)
+A **Govee H6143** (5 m, 15 segments, 12 V) taped along the wall behind the screen. It's driven over **Bluetooth** from the Puzzle 4 laptop by `laser_bridge.py`, which `start.bat` starts. There's no Wi-Fi, no IP and no hub involved: this strip's firmware (1.08.06) has no LAN Control, so its Wi-Fi isn't used.
+
+| In the game | On the strip |
+|---|---|
+| Waiting / between shots | dim red glow |
+| Holding Space | heats up from dim to bright red over 0.9 s (drops back if they let go) |
+| Hit | a white beam shoots along the strip, the whole strip blows white, then cools to dim red |
+| Miss (ring or watchdog) | the beam stops halfway, sputters red, back to dim |
+| Last hit | full beam, white/red strobe, a long white burn |
+
+**Some LEDs on this strip are damaged**: they lose green and blue, so they show pink or red where others are white. Every effect stays in reds and white so it doesn't show. Don't add green.
+
+### One-time setup (each laptop that might be the Puzzle 4 laptop)
+1. With internet: `python -m pip install bleak`.
+2. Turn **Bluetooth on** (Settings → Bluetooth & devices). No pairing in Windows needed: the bridge finds the strip by its name, `ihoment_H6143_…`.
+3. **Close the Govee Home app on every phone**, or turn the phone's Bluetooth off. The strip takes one Bluetooth connection at a time; a phone that grabs it locks the laptop out.
+4. Test it: `python laser_bridge.py test` in this folder. It lights **segment 1** white for 2 s, then plays CHARGE → HIT, CHARGE → MISS, CHARGE → WIN.
+5. Segment 1 must be the end **next to the emitter** (the bottom of the screen). If it's the far end, either turn the strip around or set `REVERSE = True` at the top of `laser_bridge.py`.
+
+### At the booth
+- Keep the strip within about 10 m of the P4 laptop. It's in the same room, so that's fine. Bodies absorb Bluetooth: don't put the laptop behind the crowd.
+- `start.bat` opens a minimized **nexus-laser** window. It prints `strip: connected (A4:C1:38:26:71:49)` and one `fx …` line per effect. It restarts itself if it ever crashes and reconnects by itself if the strip drops.
+- **Ctrl+Alt+H** in the game shows `laser strip: connected …`.
+- If the bridge or the strip is down, the game plays on: the strip just stays on its last colour.
+
+| Problem | Fix |
+|---|---|
+| `bridge not running` in Ctrl+Alt+H | `bleak` isn't installed on this laptop, or the nexus-laser window was closed. Install it, rerun `start.bat` |
+| `not found (strip powered? …)` | Strip unplugged, Bluetooth off, or a phone has it: close the Govee app |
+| The beam skips a step | Raise `STEP_S` in `laser_bridge.py` (0.05 → 0.07) |
+| Wrong colours, pink spots | The damaged LEDs. Expected |
+
+### Mounting
+- Tape it along the wall behind the screen, in a straight line, **segment 1 next to where the emitter is** (the bottom of the screen).
+- Wipe the wall first, press the tape down along the whole length. Use extra clear tape at the ends: the stock adhesive lets go on painted walls.
+- Bend only gently: no sharp folds. Don't cut it.
+- Keep the controller box and adapter where staff can reach them, not players.
+
 ## How a round goes
 1. Standby "CORE GATE LOCKED" until puzzle 3 finishes, then PRESS SPACE.
 2. A red terminal explains: turn the rings, line both gaps up with the laser, hold Space to fire.

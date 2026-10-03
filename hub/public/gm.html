@@ -95,8 +95,8 @@ let SIGNUP = 'http://' + location.hostname + ':4000';
 // One card per room. keys = that room's Ctrl+Alt staff keys, pressed remotely; a 3rd item asks to confirm first.
 const ROOMS = [
   { id: 'puzzle1', name: 'BRAIN UPLOAD',  k: 'sync',  stat: 'SYNC',   hint: -5, devs: ['mask'], keys: [['KeyF', 'FORCE CAPTURE', 'Force the mask capture?'], ['KeyR', 'RESET', 'Reset room 1?']] },
-  { id: 'puzzle2', name: 'SYSTEM POWER',  k: 'power', stat: 'ENERGY', hint: -5, devs: ['bulb', 'camera'], keys: [['KeyU', 'UNLOCK'], ['KeyX', 'CAUGHT', 'Team caught? (-15 POWER, they advance)'], ['KeyR', 'RESET', 'Reset room 2?']] },
-  { id: 'puzzle3', name: 'HIDDEN SIGNAL', k: 'trace', stat: 'TRACE',  aur: 1, hint: 5,  devs: ['beacon', 'decoy'], keys: [['KeyU', 'UNLOCK'], ['KeyF', 'FORCE WIN', 'Force the win?'], ['KeyR', 'RESET', 'Reset room 3?']] },
+  { id: 'puzzle2', name: 'SYSTEM POWER',  k: 'power', stat: 'ENERGY', hint: -5, devs: ['bulb', 'camera'], keys: [['KeyU', 'UNLOCK'], ['KeyX', 'CAUGHT', 'Team caught? (-15 POWER, they advance)'], ['KeyF', 'SKIP (FINALE)', "Skip room 2's finale step?"], ['KeyR', 'RESET', 'Reset room 2?']] },
+  { id: 'puzzle3', name: 'HIDDEN SIGNAL', k: 'trace', stat: 'TRACE',  aur: 1, hint: 5,  devs: ['beacon'], keys: [['KeyU', 'UNLOCK'], ['KeyF', 'FORCE WIN', 'Force the win?'], ['KeyR', 'RESET', 'Reset room 3?']] },
   { id: 'puzzle4', name: 'CORE GATE',     k: 'human', stat: 'HUMAN',  aur: 1, hint: 5,  devs: ['ring0', 'ring1'], keys: [['KeyU', 'UNLOCK'], ['KeyF', 'FORCE WIN', 'Force the win?'], ['KeyR', 'RESET', 'Reset room 4?']] },
 ];
 
@@ -125,9 +125,9 @@ function tone(f, dur, delay = 0) {
 // controllers over USB, the bulb bridge probes the bulb, the signup PC looks for the camera; the rest is the hub's roster.
 const hubUp = () => ws?.readyState === 1, linked = id => rost.pages.includes(id) || rost.devices.includes(id);
 const via = (room, f) => !hubUp() ? [null, 'the hub is down'] : !online(room) ? [null, `can't tell: the ${room} laptop is offline`] : f(status[room]);
-const board = (name, phone, ip) => () => hubUp() && linked(phone) ? [true, `a phone stands in (/beacon${name === 'decoy' ? '?decoy' : ''})`] :
-  via('puzzle3', s => s.boards?.[name] === undefined ? [null, 'checking…'] : s.boards[name] === true ? [true, `ESP32 board answering (${ip})`] :
-    [false, `${name === 'decoy' ? 'decoy' : 'IR beacon'} ESP32 not answering (${ip}), and no phone on /beacon${name === 'decoy' ? '?decoy' : ''}. Switched on? On NexusV?`]);
+const beacon = () => hubUp() && linked('beacon-sim') ? [true, 'a phone stands in (/beacon)'] :
+  via('puzzle3', s => s.boards?.beacon === undefined ? [null, 'checking…'] : s.boards.beacon === true ? [true, 'ESP32 board answering (.51)'] :
+    [false, 'IR beacon ESP32 not answering (.51), and no phone on /beacon. Switched on? On NexusV?']);
 const ring = i => () => via('puzzle4', s => s.rings?.[i] ? [true, 'sending knob readings'] :
   [false, `no readings from the ${i ? 'INNER' : 'OUTER'} ring controller. USB plugged into the P4 laptop? Paired (Ctrl+Alt+P there)? The keys work meanwhile.`]);
 const DEVS = {
@@ -143,8 +143,7 @@ const DEVS = {
     [false, 'bridge running, but the bulb is not answering. Lamp switched on at the wall? On NexusV?']],
   camera: ['CAMERA', () => !S ? [null, "can't tell: the signup server is down"] : !S.camera ? [null, 'checking…'] : S.camera.error ? [false, S.camera.error] :
     S.camera.ip ? [true, 'camera at ' + S.camera.ip] : [false, 'camera not found on the network. Plugged in? On NexusV?']],
-  beacon: ['IR BEACON', board('beacon', 'beacon-sim', '.51')],
-  decoy:  ['DECOY', board('decoy', 'beacon-decoy', '.52')],
+  beacon: ['IR BEACON', beacon],
   ring0:  ['RING OUTER', ring(0)],
   ring1:  ['RING INNER', ring(1)],
 };
@@ -185,7 +184,7 @@ function render() {
     const v = on ? s.stat : null;
     card.querySelector('.live b').textContent = v != null ? v + '%' : '--';
     card.querySelectorAll('.segs i').forEach((el, j) => el.classList.toggle('on', v != null && j < v / 4));
-    card.querySelector('.code').textContent = on && s.code ? `CODE ${s.code}${s.decoy ? ` · decoy ${s.decoy}` : ''}` : '';
+    card.querySelector('.code').textContent = on && s.code ? `CODE ${s.code}` : '';
     card.querySelector('.rv').textContent = `${r.k.toUpperCase()} ${run[r.k] ?? '--'}`;
     if (wasOn[r.id] && !on) { card.classList.add('alarm'); tone(220, .5); }
     if (on) card.classList.remove('alarm');
@@ -291,7 +290,7 @@ function conn() {
     if (m.t === 'run') { run = m; skew = m.now - Date.now(); }
     if (m.t === 'addr') {
       SIGNUP = 'http://' + (m.signup || location.hostname) + ':4000';
-      $('#phones').innerHTML = m.hub.length ? `PHONES OPEN · BEACONS <b>${m.hub[0]}:3000/beacon</b> (+ <b>?decoy</b>)` +
+      $('#phones').innerHTML = m.hub.length ? `PHONES OPEN · BEACON <b>${m.hub[0]}:3000/beacon</b>` +
         (m.hub.length > 1 ? `<br>OTHER NETWORKS ON THIS LAPTOP: ${m.hub.slice(1).join(', ')}` : '') : 'THIS LAPTOP IS NOT ON A NETWORK';
     }
     if (m.t === 'evt' && /^p\ddone$/.test(m.e)) { tone(880, .15); tone(1320, .3, .15); }

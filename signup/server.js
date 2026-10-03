@@ -75,8 +75,9 @@ const routes = {
   // the group inside the booth right now, with photo URLs (for the finale's intruder dossier on the hub)
   'GET /api/current': () => [200, [...sales.values()].filter(s => s.status === 'in').map(pub)[0] || null],
   // b.test (Ctrl+Alt+T-E-S-T on the kiosk): checked like a real sale, then nothing is written
+  // b.bypass (Ctrl+Alt+B-Y-P-A-S-S): only lifts MIN_PARTY. Still paid, counted and recorded like any sale
   'POST /api/sale': b => {
-    const size = +b.size, max = b.assist ? CFG.ASSIST_MAX : CFG.MAX_PARTY, min = b.assist || b.test ? 1 : CFG.MIN_PARTY;
+    const size = +b.size, max = b.assist ? CFG.ASSIST_MAX : CFG.MAX_PARTY, min = b.assist || b.test || b.bypass ? 1 : CFG.MIN_PARTY;
     const team = String(b.team || '').trim().slice(0, 24);
     if (!Number.isInteger(size) || size < min || size > max) return [400, { error: `PARTY MUST BE ${min}-${max}` }];
     if (!team) return [400, { error: 'NO TEAM NAME' }];

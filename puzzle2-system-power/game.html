@@ -346,9 +346,17 @@ async function findHub() {
     await new Promise(r => setTimeout(r, 2000));
   }
 }
+// game 5, the finale, lives on the hub: boss.js sleeps until the hub starts it, then takes over this screen
+function bossLoad() {
+  if (window.BOSS) return;
+  window.BOSS = 1;
+  const s = document.createElement('script');
+  s.src = hubWs.url.replace(/^ws(.*)\/ws$/, 'http$1/boss.js?') + Date.now(); s.dataset.room = 2;
+  document.head.append(s);
+}
 async function hub() {
   const ws = hubWs = new WebSocket('ws://' + await findHub() + ':3000/ws');
-  ws.onopen = () => { ws.send(JSON.stringify({ t: 'hello', id: 'puzzle2', role: 'page' })); hubSend(); lights(light); $('#hubst').textContent = 'connected'; };
+  ws.onopen = () => { ws.send(JSON.stringify({ t: 'hello', id: 'puzzle2', role: 'page' })); hubSend(); bossLoad(); lights(light); $('#hubst').textContent = 'connected'; };
   ws.onclose = () => { $('#hubst').textContent = 'DOWN (Ctrl+Alt+U to unlock by hand)'; setTimeout(hub, 2000); };
   ws.onmessage = e => { const m = JSON.parse(e.data); if (m.t === 'evt' && m.e === CFG.UNLOCK_EVT) unlock(); if (m.t === 'cmd' && m.a === 'key') staffKey(m.v); };
 }

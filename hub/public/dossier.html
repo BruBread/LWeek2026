@@ -190,7 +190,6 @@ function rows(r) {
     ['GRID',       f.grid ? [`${f.grid} ${r.power}%`, f.grid !== 'HELD' ? 'bad' : ''] : none],
     ['WATCHDOGS',  f.grid ? f.grid === 'CAUGHT' ? ['CAUGHT YOU', 'bad'] : ['EVADED', ''] : none],
     ['BEST WORD',  f.best ? [f.best.toUpperCase(), ''] : none],
-    ['DECOY',      f.decoy != null ? f.decoy ? ['TAKEN ✗', 'bad'] : ['IGNORED', ''] : none],
     ['TRACED',     r.trace != null ? [`${r.trace}%${f.time ? ` (${f.time})` : ''}`, r.trace >= 70 ? 'bad' : ''] : none],
     ['CORE SHOTS', f.misses != null ? f.misses ? [`${f.misses} MISSED`, 'bad'] : ['NO MISSES', ''] : none],
     ['NOTE',       f.note ? [f.note, ''] : none],
@@ -200,7 +199,6 @@ function rows(r) {
 function taunts(r) {
   const f = r.facts, [got, of] = (f.breached || '').split('/').map(Number), held = of - got;
   const out = [
-    f.decoy && "You believed my red light. You'll believe me again.",
     f.grid === 'CAUGHT' && 'My watchdog still has your scent.',
     f.grid === 'LOST' && 'You lost the light once. I can take it again.',
     held > 0 && `I held you back ${held === 1 ? 'once' : held + ' times'}.`,
@@ -273,10 +271,10 @@ hub();
 
 // self-check: open dossier?test and look at the console
 if (location.search === '?test') {
-  const clean = { sync: 100, power: 60, trace: 20, facts: { breached: '4/4', p1wrong: 0, grid: 'HELD', decoy: false } };
-  const rough = { sync: 40, power: 0, trace: 85, human: 100, facts: { breached: '2/4', p1wrong: 3, grid: 'CAUGHT', decoy: true, misses: 4 } };
+  const clean = { sync: 100, power: 60, trace: 20, facts: { breached: '4/4', p1wrong: 0, grid: 'HELD' } };
+  const rough = { sync: 40, power: 0, trace: 85, human: 100, facts: { breached: '2/4', p1wrong: 3, grid: 'CAUGHT', misses: 4 } };
   console.assert(taunts(clean)[0] === '...who are you?', 'clean run: no taunt but the question');
-  console.assert(taunts(rough).length === 2 && /red light/.test(taunts(rough)[0]), 'rough run: worst two, decoy first');
+  console.assert(taunts(rough).length === 2 && /watchdog/.test(taunts(rough)[0]), 'rough run: worst two, caught first');
   console.assert(rows({ sync: null, power: null, trace: null, human: null, facts: {} }).every(([, [v]]) => v === 'NO DATA'), 'skipped sectors show NO DATA');
   console.assert(rows(rough)[3][1][0] === 'CAUGHT YOU', 'caught shows under watchdogs');
   console.log('self-check done (no assertion errors above = pass)');

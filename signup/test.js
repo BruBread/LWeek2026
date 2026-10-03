@@ -63,5 +63,8 @@ const start = async () => { srv = spawn(process.execPath, [path.join(__dirname, 
   assert(csv.split('\n').length === 4 && /double|void/.test(csv), 'CSV export');
   assert.strictEqual((await fetch(url('/sales.jsonl'))).status, 403, 'the log is not served');
   assert(/<title>/.test(await (await fetch(url('/queue'))).text()), '/queue serves the page (queue board)');
+  [c, b] = await post('/api/sale', sale({ size: 1, photos: [img], slot: { date: '2026-10-05', time: '11:05' }, bypass: true }));
+  assert(c === 200 && b.amount === 50 && b.code !== 'TEST', 'bypass allows a group below the minimum, paid and recorded');
+  assert.strictEqual((await get('/api/state')).sold, 3, '...and counted in the tickets');
   console.log('OK'); srv.kill(); process.exit(0);
 })().catch(e => { console.error('FAIL:', e.message); srv && srv.kill(); process.exit(1); });
