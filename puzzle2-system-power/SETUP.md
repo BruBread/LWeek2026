@@ -157,10 +157,9 @@ One-time setup (done 2026-10-02 on the dev laptop):
 1. In the Tapo app, add the camera to the **NexusV** Wi-Fi.
 2. In the camera's settings, go to **Advanced Settings → Camera Account** and create a username and password.
 3. Set **Night Vision** to always on, not Auto. Otherwise the picture flips between colour and black-and-white, with a click, every time the bulb changes. Keep **Motion Tracking** and **Patrol** off, or the camera turns away by itself.
-4. Download `go2rtc_win64.zip` from github.com/AlexxIT/go2rtc/releases. Put `go2rtc.exe` in the `signup` folder.
-5. Create `signup/camera.json` with the Camera Account: `{"user": "...", "pass": "..."}`.
+4. Create `signup/camera.json` with the Camera Account: `{"user": "...", "pass": "..."}`.
 
-Git ignores `go2rtc.exe` and `camera.json`. Copy both by hand to whichever laptops run the signup or the camera setup.
+`signup/go2rtc.exe` (v1.9.14, from github.com/AlexxIT/go2rtc/releases) is in the repo. Git ignores `camera.json`: copy it by hand to whichever laptops run the signup or the camera setup.
 
 **Aiming: `hub\camerasetup.bat`** (any laptop on NexusV). It opens the live view in the browser and finds the camera. Keys:
 - **Arrows** move it.

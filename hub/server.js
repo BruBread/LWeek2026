@@ -3,7 +3,7 @@ const http = require('http'), fs = require('fs'), path = require('path'), os = r
 const { WebSocketServer } = require('ws');
 const scenes = require('./scenes');
 
-const PORT = 3000, PUB = path.join(__dirname, 'public');
+const PORT = +process.env.PORT || 3000, PUB = path.join(__dirname, 'public');   // PORT: only the tests change it
 const RUNS = process.env.RUNS || path.join(__dirname, 'runs.jsonl');   // finished teams, one JSON line each
 const RUN = process.env.RUN || path.join(__dirname, 'run.json');        // the team in the booth now, so a hub restart mid-run loses nothing
 const state = {};            // deviceId -> last cmd {a,v}; replayed on reconnect
@@ -25,12 +25,13 @@ const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css
   '.jpg': 'image/jpeg', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.ttf': 'font/ttf', '.woff2': 'font/woff2' };
 
 const send = (ws, o) => ws.readyState === 1 && ws.send(JSON.stringify(o));
-const broadcast = (o, pred = () => true) => wss.clients.forEach(c => pred(c) && send(c, o));
+const broadcast = (o, pred = () => true) => { const s = JSON.stringify(o); wss.clients.forEach(c => pred(c) && c.readyState === 1 && c.send(s)); };
 const toPages = o => broadcast(o, c => c.role === 'page');
 const toFin = o => broadcast(o, c => c.role === 'fin');   // boss.js on the room laptops (game 5)
+const toGM = o => broadcast(o, c => c.role === 'page' && /^gm/.test(c.id));   // only the GM panel reads room statuses
 const ids = role => [...conns].filter(([, w]) => w.role === role).map(([id]) => id);
 const roster = () => ({ t: 'roster', devices: ids('device'), pages: ids('page') });
-const log = (m) => { console.log(m); toPages({ t: 'log', m }); };
+const log = m => console.log(m);   // the hub window only (no page shows a log)
 
 function cmd(to, a, v) {
   if (a === 'scene') {
@@ -74,16 +75,16 @@ const killWin = () => +(FIN.WIN[0] + (FIN.WIN[1] - FIN.WIN[0]) * (run.trace ?? 5
 const finMsg = () => ({ t: 'fin', ...run.fin, win: killWin(), now: Date.now(),
   run: { sync: run.sync, power: run.power, trace: run.trace, human: run.human, facts: run.facts } });
 let presses = {}, judgeT = null;          // the kill switch's current try (not saved: after a hub restart they just press again)
-function fin(ws, m) {
-  const f = run.fin, room = +String(ws.id).replace(/\D/g, ''), now = Date.now();
+function fin(ws, m, room = +String(ws.id).replace(/\D/g, '')) {   // room: fin1..fin4 = room 1..4
+  const f = run.fin, now = Date.now();
   const go = (phase, lead = 0) => { f.phase = phase; f.at = now + lead; log('finale ' + phase); if (FIN.BULB[phase]) cmd('strip', 'solid', FIN.BULB[phase]); };
   const task = f.tasks[m.task];
   switch (m.a) {
-    case 'sync': return send(ws, { t: 'sync', c: m.c, now });   // boss.js measures its clock against the hub's
+    case 'sync': return ws && send(ws, { t: 'sync', c: m.c, now });   // boss.js measures its clock against the hub's
     case 'crash': if (f.phase) return; go('crash'); break;
     case 'takeover': if (f.phase !== 'crash') return; go('takeover', FIN.LEAD); break;
     case 'trace': if (f.phase !== 'takeover') return; go('fight', FIN.SCAN); break;
-    case 'step': if (f.phase !== 'fight' || task?.room !== room || task.clear) return; task.done = Math.max(0, +m.done || 0); break;
+    case 'step': if (f.phase !== 'fight' || task?.room !== room || task.clear) return; task.done = Math.max(0, +m.done || 0); if (m.need) task.need = +m.need; break;   // need: for the GM's progress bars
     case 'clear': {
       if (f.phase !== 'fight' || task?.room !== room || task.clear) return;
       task.clear = true; f.ev = { k: 'clear', task: m.task, room, at: now };
@@ -124,13 +125,22 @@ function judge(forced) {
   finChanged();
   if (f.phase === 'end') toPages(runMsg());   // the GM's run card gets the p5done split
 }
-function finChanged() { run.fin.seq++; save(); toFin(finMsg()); }
+function finChanged() { run.fin.seq++; save(); finOut(); }
+const finOut = () => { const m = finMsg(); toFin(m); toPages(m); };   // boss.js on the room laptops, and the GM panel's game 5 card
+// the GM panel's SKIP: the finale's next step, from whichever room it belongs to, even if that room's laptop is down
+function finSkip(task) {
+  const f = run.fin;
+  if (f.phase === 'fight') { const t = f.tasks[task]; if (t && !t.clear) fin(null, { a: 'clear', task }, t.room); return; }
+  const a = { crash: 'takeover', takeover: 'trace', regroup: 'brief', brief: 'kill', kill: 'force' }[f.phase];
+  if (a) fin(null, { a }, 3);
+}
 let run = fresh();
 try { run = { ...run, ...JSON.parse(fs.readFileSync(RUN, 'utf8')) }; } catch {}
+if (!run.t0 || run.end != null) run.fin = finFresh();   // a saved finale only comes back mid-run (not a staff test's leftover)
 const save = () => { try { fs.writeFileSync(RUN, JSON.stringify(run)); } catch (e) { log('could not save run: ' + e.message); } };
 const clamp = v => Math.max(0, Math.min(100, Math.round(v)));
 const runMsg = () => { const { fin: _, ...r } = run; return { t: 'run', ...r, now: Date.now() }; };   // now: lets the GM clock ignore its own device's clock; fin goes to boss.js only
-function changed(why) { save(); log(`${why} ▸ ` + KEYS.map(k => `${k} ${run[k]}`).join(' ')); toPages(runMsg()); toFin(finMsg()); }
+function changed(why) { save(); log(`${why} ▸ ` + KEYS.map(k => `${k} ${run[k]}`).join(' ')); toPages(runMsg()); finOut(); }
 // the rooms this run already unlocked. Sent to a game page on hello, so a room that reloaded or missed the event
 // (its laptop rebooted, the hub restarted) unlocks again. Only mid-run: after FINISH RUN, reset rooms stay locked.
 const unlocks = () => run.t0 && run.end == null ? Object.keys(run.splits) : [];
@@ -157,16 +167,20 @@ wss.on('connection', (ws, req) => {
       log(`+ ${ws.role} ${ws.id}`);
       if (ws.role === 'device' && state[ws.id]) send(ws, { t: 'cmd', ...state[ws.id] });
       if (ws.role === 'fin') send(ws, finMsg());
-      if (ws.role === 'page') { send(ws, runMsg()); send(ws, historyMsg()); Object.entries(status).forEach(([id, v]) => send(ws, { t: 'status', id, v })); }
+      if (ws.role === 'page') { send(ws, runMsg()); send(ws, finMsg()); send(ws, historyMsg()); if (/^gm/.test(ws.id)) Object.entries(status).forEach(([id, v]) => send(ws, { t: 'status', id, v })); }
       if (/^puzzle\d$/.test(ws.id)) unlocks().forEach(e => send(ws, { t: 'evt', id: 'hub', e }));
       if (ws.id === 'signup') { const a = req.socket.remoteAddress.replace(/^::ffff:/, ''); signupIP = /^(127\.|::1$)/.test(a) ? null : a; toPages(addrMsg()); }
       else if (ws.role === 'page') send(ws, addrMsg());
       toPages(roster());
-    } else if (m.t === 'status' && ws.id) { status[ws.id] = m.v; toPages({ t: 'status', id: ws.id, v: m.v }); }   // every 1 s: no log line
+    } else if (m.t === 'status' && ws.id) { status[ws.id] = m.v; toGM({ t: 'status', id: ws.id, v: m.v }); }   // every 1 s from each room: GM only, no log line
     else if (m.t === 'cmd') cmd(m.to, m.a, m.v);            // from GM/pages
     else if (m.t === 'fin' && ws.role === 'fin') fin(ws, m);
+    else if (m.t === 'finskip') finSkip(m.task);
     else if (m.t === 'result' && KEYS.includes(m.k)) { run[m.k] = clamp(+m.v || 0); Object.assign(run.facts, m.facts); changed(`${m.k} from ${ws.id}`); }
     else if (m.t === 'adj' && KEYS.includes(m.k)) { run[m.k] = clamp((run[m.k] ?? 50) + (+m.d || 0)); changed(`${m.k} ${m.d > 0 ? '+' : ''}${m.d} (${m.why || ws.id})`); }
+    // RESET ALL ROOMS: this run starts over. Mid-run the team keeps its name and its clock restarts from 0; scores,
+    // splits (so no room unlocks itself again) and the finale are wiped. Between teams it just clears everything
+    else if (m.t === 'reset') { clearTimeout(judgeT); presses = {}; run = fresh(run.t0 && run.end == null ? run.team : ''); changed(`reset all rooms${run.team ? ': ' + run.team + ' starts over' : ''}`); }
     else if (m.t === 'newteam') { clearTimeout(judgeT); presses = {}; run = fresh(String(m.team || '').slice(0, 40)); changed(`new team ${run.team}`); }
     else if (m.t === 'finish' && run.t0 && run.end == null) {
       run.end = Date.now() - run.t0;
@@ -190,9 +204,10 @@ wss.on('connection', (ws, req) => {
 });
 
 // heartbeat: app-level ping to devices (their watchdog), TCP-level ping to drop dead sockets
+const PING = JSON.stringify({ t: 'ping' });
 setInterval(() => wss.clients.forEach(c => {
   if (!c.alive) return c.terminate();
-  c.alive = false; c.ping(); send(c, { t: 'ping' });
+  c.alive = false; c.ping(); if (c.readyState === 1) c.send(PING);
 }), 1000);
 
 server.listen(PORT, '0.0.0.0', () => console.log(`NEXUS hub on :${PORT}  (gm: /gm)`));

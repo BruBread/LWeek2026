@@ -24,6 +24,7 @@ const C = {
   TYPE_MS: 40,               // her dialogue: ms per letter (punctuation waits 4×)
   HOLD_MS: 2400,             // a finished line moves on by itself after this long; SPACE moves on sooner...
   SKIP_GUARD: 600,           // ...but not in the first ms of a line, so mashing can't skip the scene
+  CRASH_HOLD_MS: 1500,       // her lines right after game 4 move on by themselves after this long (no SPACE there)
   BIN_GROUPS: [[70, 2], [40, 3], [0, 4]],   // BINARY: SYNC (game 1) at least the first number = that many groups
   WORDS: 5, WORDS_HARD_BELOW: 50,           // WORDS: 5 rounds. POWER (game 2) below 50 = the hardest list
   // CROSSHAIR: catches to win, hit radius and her speed in arena heights, ms on target per catch, +speed per catch,
@@ -281,6 +282,31 @@ html.boss-on { background: #000; }
 @keyframes bshake { 0% { transform: translate(-.3vw,.2vw) } 100% { transform: translate(.3vw,-.2vw) } }
 @keyframes bbreak { 0% { transform: translate(-1.2vw,.5vw) skewX(8deg) } 100% { transform: translate(1vw,-.6vw) skewX(-10deg) } }
 
+/* while she talks, her face hangs big above the box like an Undertale boss: it breathes, bobs while she types, shakes
+   when she's angry, and slices of it tear sideways now and then. Her heartbeat pulses the green glow behind it.
+   Only transform and opacity move (three copies of one image), so the GPU does it all */
+#bstage { position: absolute; z-index: 30; left: 0; right: 0; top: 3vh; height: 62vh; display: none; pointer-events: none; }
+#bstage.on { display: block; animation: bstIn .5s steps(5) both; }
+@keyframes bstIn { 0% { opacity: 0 } 40% { opacity: .9 } 60% { opacity: .15 } 100% { opacity: 1 } }
+#bstage .glow { position: absolute; left: 50%; top: 45%; width: 110vh; height: 110vh; margin: -55vh 0 0 -55vh; border-radius: 50%;
+  background: radial-gradient(circle, rgba(77,255,136,.2) 0, rgba(77,255,136,.07) 30%, transparent 62%); animation: bglow 1.05s ease-out infinite; }
+@keyframes bglow { 0% { opacity: 1; transform: scale(1.05) } 25% { opacity: .5; transform: scale(1) } 100% { opacity: .6; transform: scale(1) } }
+#bstage.dying .glow { animation-duration: 2.4s; }
+#bstage img { position: absolute; left: 50%; top: 0; width: 62vh; height: 62vh; margin-left: -31vh; image-rendering: pixelated; }
+#bstage .f0 { animation: bbreathe 3.2s ease-in-out infinite alternate; }
+@keyframes bbreathe { to { transform: scale(1.025) } }
+#bstage.talk .f0 { animation: bbreathe 3.2s ease-in-out infinite alternate, bbob .18s steps(2) infinite; }
+@keyframes bbob { from { translate: 0 0 } to { translate: 0 -.45vh } }
+#bstage.angry .f0 { animation: bbreathe 3.2s ease-in-out infinite alternate, bmad .09s steps(2) infinite; }
+@keyframes bmad { from { translate: -.7vh .35vh } to { translate: .7vh -.35vh } }
+#bstage .f1, #bstage .f2 { opacity: 0; }
+#bstage .f1 { clip-path: inset(24% 0 64% 0); animation: btear 2.9s steps(1) infinite; }
+#bstage .f2 { clip-path: inset(57% 0 31% 0); animation: btear 4.1s steps(1) 1.3s infinite; }
+#bstage.angry .f1 { animation-duration: .9s; }
+@keyframes btear { 0%, 88% { opacity: 0; transform: none } 90% { opacity: 1; transform: translateX(4vh) }
+  93% { opacity: 1; transform: translateX(-3vh) } 96% { opacity: 1; transform: translateX(1.5vh) } 100% { opacity: 0; transform: none } }
+#bstage.break { animation: bbreak .08s steps(2) infinite; }
+
 /* the map (room 3): the booth from above, laid out like the floor plan */
 #boss .map { position: absolute; left: 15vw; top: 20vh; width: 70vw; height: 37.8vw; }
 #boss #rm4 em { bottom: 3.4vw; }
@@ -351,6 +377,7 @@ function wake() {
   live = true; AX.resume();
   B = document.createElement('div'); B.id = 'boss';
   B.innerHTML = '<canvas id="bx"></canvas><div id="bgrid"></div><div id="bmain"></div>' +
+    '<div id="bstage"><i class="glow"></i><img class="f0" alt="" crossorigin="anonymous"><img class="f1" alt=""><img class="f2" alt=""></div>' +
     '<div id="bdlg"><div class="pf"><img alt=""></div><div class="tx"></div></div>' +
     '<div id="bfocus"><div class="big">CLICK HERE</div><div class="sub">MOVE THE MOUSE OFF THE RIGHT EDGE OF THE LAPTOP, ONTO THIS WALL, AND CLICK</div></div>' +
     '<div id="bflash"></div><div id="bscan"></div><div id="bvig"></div><div id="bflick"></div><div id="bhelp"></div>';
@@ -435,15 +462,20 @@ function stutter() {                          // the frame jerks and the sound s
 
 // ===== Her lines: the Undertale box =====
 let dlgKey = null, dlgCut = false;
-async function talk(lines, o = {}) {
-  const box = $('bdlg'), tx = box.querySelector('.tx'), img = box.querySelector('img');
-  dlgCut = false; box.classList.add('on');
+async function talk(lines, o = {}) {           // o: voice, auto (no SPACE), hold (ms), keep (box stays), rain (0-1 behind her), dying
+  const box = $('bdlg'), tx = box.querySelector('.tx'), img = box.querySelector('img'), stage = $('bstage'), big = [...stage.querySelectorAll('img')];
+  dlgCut = false; box.classList.add('on'); stage.classList.add('on'); stage.classList.toggle('dying', !!o.dying);
+  if (o.rain != null) setRain(o.rain);
   for (const [text, mood] of lines) {
     if (dlgCut || o.cancel?.()) break;
-    img.src = face(mood || 'base'); box.classList.toggle('angry', mood === 'angry');
-    await line(tx, text, VOICES[mood === 'angry' ? 'angry' : o.voice || 'aurora'], o);
+    const src = face(mood || 'base'), angry = mood === 'angry';
+    img.src = src; big.forEach(b => b.src = src);
+    box.classList.toggle('angry', angry); stage.classList.toggle('angry', angry); stage.classList.add('talk');
+    if (angry && o.rain != null) { setRain(.95); flash(.3, 220, '#4dff88'); shake(B, 10, 400); }
+    await line(tx, text, VOICES[angry ? 'angry' : o.voice || 'aurora'], o);
+    if (angry && o.rain != null) setRain(o.rain);
   }
-  if (!o.keep) { box.classList.remove('on', 'angry'); tx.textContent = ''; }
+  if (!o.keep) { box.classList.remove('on', 'angry'); stage.classList.remove('on', 'angry', 'talk', 'dying'); tx.textContent = ''; }
 }
 async function line(tx, text, v, o) {
   const t0 = performance.now();
@@ -456,37 +488,46 @@ async function line(tx, text, v, o) {
     if (/\w/.test(ch) && n++ % v.every === 0) blip(v);
     await wait(/[.,?!]/.test(ch) ? C.TYPE_MS * 4 : C.TYPE_MS);
   }
-  typing = false;
-  const end = performance.now() + C.HOLD_MS;
+  typing = false; $('bstage').classList.remove('talk');
+  const end = performance.now() + (o.hold ?? C.HOLD_MS);
   while (!next && !dlgCut && performance.now() < end && !o.cancel?.()) await wait(40);
   dlgKey = null;
 }
 async function dlgBreak() {                   // the box tears apart and she spills out of it
-  const box = $('bdlg');
-  box.classList.add('break'); for (let i = 0; i < 6; i++) { sfx.glitch(); blip(VOICES.angry); await wait(60); }
-  box.classList.remove('on', 'break', 'angry'); box.querySelector('.tx').textContent = '';
+  const box = $('bdlg'), stage = $('bstage');
+  box.classList.add('break'); stage.classList.add('break'); for (let i = 0; i < 6; i++) { sfx.glitch(); blip(VOICES.angry); await wait(60); }
+  box.classList.remove('on', 'break', 'angry'); stage.classList.remove('on', 'break', 'angry', 'talk'); box.querySelector('.tx').textContent = '';
   flash(.8, 300, '#4dff88');
 }
-async function dissolve() {                   // her face falls apart into green pixels
-  const img = $('bdlg').querySelector('img'), r = img.getBoundingClientRect();
-  if (!r.width) return;
-  const N = 24, c = document.createElement('canvas'); c.width = c.height = N;
+async function dissolve() {                   // her face crumbles into pixels, top to bottom, and blows away
+  const big = $('bstage').querySelector('.f0'), small = $('bdlg').querySelector('img');
+  const img = big.getBoundingClientRect().width ? big : small, r = img.getBoundingClientRect(), N = img === big ? 56 : 24;
+  const hide = () => { $('bdlg').classList.remove('on', 'angry'); $('bstage').classList.remove('on', 'talk', 'angry', 'dying'); };
+  if (!r.width) return hide();
+  const c = document.createElement('canvas'); c.width = c.height = N;
   const x = c.getContext('2d'); x.imageSmoothingEnabled = false;
-  let d; try { x.drawImage(img, 0, 0, N, N); d = x.getImageData(0, 0, N, N).data; } catch { return; }
-  $('bdlg').classList.remove('on');
-  const ps = [], s = r.width / N / C.PIX;
-  for (let i = 0; i < N * N; i++) if (d[i * 4 + 3] > 100) ps.push({ x: r.left / C.PIX + (i % N) * s, y: r.top / C.PIX + (i / N | 0) * s,
-    vx: rand(-4, 22), vy: rand(-26, -4), c: `rgb(${d[i * 4]},${d[i * 4 + 1]},${d[i * 4 + 2]})`, t: rand(0, .9) });
-  const t0 = performance.now();
+  let d; try { x.drawImage(img, 0, 0, N, N); d = x.getImageData(0, 0, N, N).data; } catch { return hide(); }
+  hide(); clearFx();
+  const groups = new Map(), s = r.width / N / C.PIX, q = v => v & 0xf0;   // one fillStyle per colour, not per pixel
+  for (let i = 0; i < N * N; i++) {
+    if (d[i * 4 + 3] < 100) continue;
+    const row = i / N | 0, col = `rgb(${q(d[i * 4])},${q(d[i * 4 + 1])},${q(d[i * 4 + 2])})`;
+    (groups.get(col) || groups.set(col, []).get(col)).push({ x: r.left / C.PIX + (i % N) * s, y: r.top / C.PIX + row * s,
+      vx: rand(-6, 30), vy: rand(-34, -6), t: row / N * 1.3 + rand(0, .3) });
+  }
+  const t0 = performance.now(), w = Math.ceil(s);
   scene = (now, dt) => {
     const k = (now - t0) / 1000; clearFx();
-    for (const p of ps) {
-      if (k > p.t) { p.x += p.vx * dt; p.y += p.vy * dt; p.vy -= 6 * dt; }
-      fx.globalAlpha = clamp(1 - (k - p.t) / 1.6, 0, 1); fx.fillStyle = p.c; fx.fillRect(p.x, p.y, Math.ceil(s), Math.ceil(s));
-    }
+    groups.forEach((ps, col) => {
+      fx.fillStyle = col;
+      for (const p of ps) {
+        if (k > p.t) { p.x += p.vx * dt; p.y += p.vy * dt; p.vy -= 8 * dt; }
+        fx.globalAlpha = clamp(1 - (k - p.t) / 1.5, 0, 1); fx.fillRect(p.x, p.y, w, w);
+      }
+    });
     fx.globalAlpha = 1;
   };
-  await wait(2700); scene = null; clearFx();
+  await wait(3300); scene = null; clearFx();
 }
 
 // ===== Following the hub =====
@@ -503,13 +544,23 @@ function apply(s) {
 function enter(from) {
   const g = ++gen, restore = from == null;   // restore = this laptop (re)loaded mid-finale: no intros
   wake();
-  if (phase !== 'crash') { hidePage(); B.classList.remove('see', 'black'); }
+  if (phase !== 'crash') { hidePage(); B.classList.remove('see', 'black'); hideDlg(); }   // a skipped scene leaves no box behind
   ({ crash: () => crash(restore), takeover: () => takeover(g, restore), fight: () => fight(g, from), regroup: () => regroup(g, restore),
      brief: () => brief(g), kill: () => kill(g), end: () => theEnd(g, restore) })[phase]?.();
 }
 function changed() {
-  if (phase === 'fight') ROOM === 3 ? drawMap() : view === 'clean' && cleanScreen();
+  if (phase === 'fight' && ROOM === 3) drawMap();
+  if (phase === 'fight' && ROOM !== 3) {
+    if (cur && S.tasks[cur.name]?.clear && S.tasks[cur.name].room === ROOM) return purge();   // done from elsewhere (the GM's SKIP)
+    if (view === 'arm' && !mine()) return cleanScreen();
+    if (view === 'clean') cleanScreen();
+  }
   if (phase === 'kill') drawKill();
+}
+function hideDlg() {
+  dlgCut = true; dlgKey = null;               // ends any line still typing
+  $('bdlg').classList.remove('on', 'angry', 'break'); $('bdlg').querySelector('.tx').textContent = '';
+  $('bstage').classList.remove('on', 'talk', 'angry', 'dying', 'break');
 }
 function onEvent(ev) {
   if (ev.k === 'clear') {
@@ -539,7 +590,7 @@ async function crash(restore) {
     await wait(1300);                         // black. silence. then she talks
   } else hidePage();
   if (phase !== 'crash') return;
-  await talk(SAY.crash, { cancel: () => phase !== 'crash', keep: true });
+  await talk(SAY.crash, { cancel: () => phase !== 'crash', keep: true, auto: true, hold: C.CRASH_HOLD_MS, rain: .3 });
   if (phase !== 'crash') return;
   await dlgBreak();
   send({ t: 'fin', a: 'takeover' });
@@ -598,11 +649,12 @@ function arm() {
 function startTask([name, t]) {
   task?.stop(); theme('green'); loop('fight', true);
   view = 'task'; cur = { name, done: t.done, need: need(name) };
+  send({ t: 'fin', a: 'step', task: name, done: cur.done, need: cur.need });   // the GM panel learns how many steps this task has
   task = ({ binary: binaryTask, words: wordsTask, cross: crossTask })[name]();
 }
 function step(done) {
   if (!cur) return;
-  cur.done = done; send({ t: 'fin', a: 'step', task: cur.name, done });
+  cur.done = done; send({ t: 'fin', a: 'step', task: cur.name, done, need: cur.need });
   const p = $('bpips'); if (p) [...p.children].forEach((e, i) => e.classList.toggle('on', i < done));
   if (done >= cur.need) { send({ t: 'fin', a: 'clear', task: cur.name }); purge(); }
 }
@@ -825,7 +877,7 @@ async function brief(g) {
   if (ROOM !== 3) return regroupScreen();
   briefing = true; theme('green'); setRain(.25);
   main(hd('SECTOR 03 ▸ THE MAP'));
-  await talk(SAY.brief, { cancel: () => g !== gen });
+  await talk(SAY.brief, { cancel: () => g !== gen, rain: .25 });
   if (g !== gen) return;
   theme('red'); scene = null; clearFx();
   main(hd('SECTOR 03 ▸ KILL SWITCH') + `<div class="mid"><div class="term bt" id="btm"></div></div>`);
@@ -908,7 +960,7 @@ async function theEnd(g, restore) {
   task?.stop(); task = cur = null; quiet(); scene = null; clearFx(); main(''); B.classList.add('black');
   if (!restore) {
     await wait(1400); if (g !== gen) return;
-    await talk(lastWords(S.run), { voice: 'soft', auto: true, keep: true });
+    await talk(lastWords(S.run), { voice: 'soft', auto: true, keep: true, dying: true });
     await dissolve(); if (g !== gen) return;
   }
   $('bdlg').classList.remove('on');

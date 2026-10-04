@@ -17,7 +17,7 @@ rem All in one block: git may replace this very file, and cmd reads a .bat line 
   pushd hub
   call npm install --no-audit --no-fund
   popd
-  for %%f in (puzzle2-system-power\devices.json signup\camera.json signup\pin.txt signup\go2rtc.exe) do if not exist "%DEST%\%%f" echo MISSING %%f: put it in the flash drive's LWeek2026 folder and run Update.bat again.
+  for %%f in (puzzle2-system-power\devices.json signup\camera.json) do if not exist "%DEST%\%%f" echo MISSING %%f: put it in the flash drive's LWeek2026 folder and run Update.bat again.
   echo Updated: %DEST%
   if not "%~1"=="nopause" pause
   exit /b 0

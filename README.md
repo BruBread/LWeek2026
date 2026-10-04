@@ -75,7 +75,7 @@ signup/                   ticket + queue kiosk (no dependencies)
 
 ## Running it
 
-Requirements: Node.js 18+, Python 3 (static file server for the game pages), Chrome or Edge. On any laptop that may run the hub: `python -m pip install tinytuya websocket-client` (for the Puzzle 2 bulb bridge). For the props: Arduino IDE with the ESP32 core 3.x.
+Requirements: Node.js 18+, Python 3 (static file server for the game pages), Chrome or Edge. On any laptop that may run the hub: `python -m pip install tinytuya websocket-client` (for the Puzzle 2 bulb bridge). For the props: Arduino IDE with the ESP32 core 3.x. On a fresh Windows computer, run [FreshStart.bat](FreshStart.bat) once with internet: it installs all of that (except the Arduino IDE), and the hub's npm packages.
 
 The booth uses one computer per job: four room laptops, the GM laptop (hub + GM panel) and the signup PC. The finale (game 5) runs on the four room laptops.
 

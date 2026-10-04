@@ -6,7 +6,6 @@ __pycache__/
 puzzle2-system-power/devices.json
 signup/pin.txt
 signup/camera.json
-signup/go2rtc.exe
 
 # Event data: sales, player photos, run history
 signup/sales.jsonl

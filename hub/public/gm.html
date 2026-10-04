@@ -4,87 +4,129 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AURORA//GM</title>
 <style>
-/* GM panel. Same language as the games (red HUD = the players, green = Aurora), but calm: no flicker, no glitch loops. */
-:root { --hud: #ff3344; --g: #4dff88; --amb: #ffb020; --dim: #8a9499; }
+/* GM panel. The games' colours (red = the players, green = Aurora), but calm and readable: no scanlines, no flicker.
+   One colour per state everywhere: grey = locked / waiting, white = ready, amber = playing now, green = done, red = needs you */
+:root { --hud: #ff3344; --g: #4dff88; --amb: #ffb020; --dim: #8a9499; --line: rgba(255,51,68,.28); --card: rgba(22,2,6,.92); }
 * { box-sizing: border-box; margin: 0; }
-body { min-height: 100vh; padding: 16px; color: var(--hud); font: 14px/1.45 Consolas, "Cascadia Mono", monospace; letter-spacing: .05em;
-  background: linear-gradient(rgba(255,51,68,.05) 1px, transparent 1px) 0 0 / 40px 40px,
-              linear-gradient(90deg, rgba(255,51,68,.05) 1px, transparent 1px) 0 0 / 40px 40px,
-              radial-gradient(ellipse at center, #1c0508, #000) fixed; }
-body::after { content: ""; position: fixed; inset: 0; pointer-events: none;     /* static scanlines */
-  background: repeating-linear-gradient(to bottom, rgba(0,0,0,.25) 0 1px, transparent 1px 3px); }
-small { color: var(--dim); font-size: 11px; letter-spacing: .25em; }
-.box { border: 1px solid rgba(255,51,68,.45); background: rgba(20,0,4,.85); padding: 14px; }
-button { font: inherit; font-size: 12px; letter-spacing: .12em; color: var(--hud); background: none; border: 1px solid; padding: 7px 10px; cursor: pointer; }
+body { min-height: 100vh; padding: 14px 16px; color: #e6e6e6; font: 14px/1.45 Consolas, "Cascadia Mono", monospace; letter-spacing: .04em;
+  background: #0a0103 linear-gradient(rgba(255,51,68,.035) 1px, transparent 1px) 0 0 / 40px 40px; }
+.lbl { color: var(--dim); font-size: 11px; letter-spacing: .2em; }
+.box { border: 1px solid var(--line); background: var(--card); padding: 12px 14px; }
+button { font: inherit; font-size: 12px; letter-spacing: .1em; color: var(--hud); background: none; border: 1px solid; padding: 7px 10px; cursor: pointer; white-space: nowrap; }
 button:hover { background: var(--hud); color: #000; }
-button.white { color: #fff; } button.white:hover { background: #fff; }
-input { font: inherit; color: #fff; background: #000; border: 1px solid rgba(255,51,68,.6); padding: 7px 8px; width: 200px; }
+button.pri { color: #000; background: var(--hud); border-color: var(--hud); } button.pri:hover { background: #fff; border-color: #fff; }
+button.white { color: #fff; } button.white:hover { background: #fff; color: #000; }
+button.quiet { color: var(--dim); border-color: rgba(138,148,153,.45); } button.quiet:hover { background: var(--dim); color: #000; }
+button:disabled { opacity: .25; pointer-events: none; }
+input { font: inherit; color: #fff; background: #000; border: 1px solid rgba(255,51,68,.6); padding: 7px 8px; width: 190px; }
+.row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 
-#top { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; margin-bottom: 16px; }
-#brand b { display: block; color: #fff; font-size: 22px; letter-spacing: .3em; text-shadow: 0 0 8px var(--hud); }
-#who { color: #fff; font-size: 18px; margin-left: auto; }
-#clock { font-size: 44px; font-weight: 700; line-height: 1; color: var(--dim); }
+/* top: who's playing, the clock, the run buttons */
+#top { display: grid; grid-template-columns: auto 1fr auto auto; gap: 8px 28px; align-items: center; margin-bottom: 12px; }
+#brand b { display: block; color: #fff; font-size: 20px; letter-spacing: .3em; }
+#who { color: #fff; font-size: 26px; font-weight: 700; letter-spacing: .06em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#who.none { color: var(--dim); }
+#clock { font-size: 46px; font-weight: 700; line-height: 1; color: var(--dim); font-variant-numeric: tabular-nums; }
 #clock.ok { color: var(--g); } #clock.warn { color: var(--amb); } #clock.over { color: var(--hud); } #clock.fin { color: #fff; }
+#acts { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
 
-#rooms { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px; }
-@media (max-width: 1100px) { #rooms { grid-template-columns: repeat(2, 1fr); } }
-.room h3 { font-size: 12px; font-weight: 400; letter-spacing: .2em; }
-.room h3 b { color: #fff; }
 /* device lights: green = answering, red = not (click one for what to check), grey = can't tell right now */
-.devs { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 6px; font-size: 11px; letter-spacing: .15em; }
+.devs { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 11px; letter-spacing: .14em; }
 .dev { cursor: pointer; white-space: nowrap; } .dev::before { content: "● "; }
 .dev.ok { color: var(--g); } .dev.down { color: var(--hud); font-weight: 700; } .dev.unk { color: var(--dim); }
-#sys { display: inline-flex; margin-top: 0; }
-.state { font-size: 26px; font-weight: 700; letter-spacing: .15em; margin: 10px 0 2px; color: #fff; }
-.code { color: var(--amb); min-height: 1.5em; margin: 6px 0; }
+
+/* where the team is: one step per game */
+#flow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 12px; }
+.step { display: flex; justify-content: space-between; gap: 8px; padding: 8px 12px; border: 1px solid rgba(138,148,153,.3); color: var(--dim); background: var(--card); }
+.step b { font-weight: 400; letter-spacing: .14em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.step span { font-variant-numeric: tabular-nums; }
+.step.done { color: var(--g); border-color: rgba(77,255,136,.45); }
+.step.now { color: #000; background: var(--amb); border-color: var(--amb); font-weight: 700; }
+
+/* one card per room */
+#rooms { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 12px; }
+.room { border-left: 4px solid rgba(138,148,153,.5); }
+.room h3 { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 400; letter-spacing: .16em; color: var(--hud); }
+.room h3 b { color: #fff; font-weight: 400; }
+.room .devs { margin-top: 4px; }
+.st { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 8px 0 0; }
+.state { font-size: 24px; font-weight: 700; letter-spacing: .12em; color: var(--dim); }
+.tin { color: #fff; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sub { color: var(--dim); font-size: 11px; letter-spacing: .14em; min-height: 1.45em; }
+.room.s-ready { border-left-color: #fff; } .room.s-ready .state { color: #fff; }
+.room.s-playing { border-left-color: var(--amb); } .room.s-playing .state { color: var(--amb); }
+.room.s-clear { border-left-color: var(--g); } .room.s-clear .state { color: var(--g); }
+.room.s-off { border-left-color: var(--hud); } .room.s-off .state { color: var(--hud); }
 .live { display: flex; justify-content: space-between; align-items: baseline; margin-top: 8px; }
-.live b { color: #fff; font-size: 24px; }
-.segs { display: flex; gap: 3px; height: 10px; margin: 4px 0 8px; }
+.live b { color: #fff; font-size: 20px; }
+.segs { display: flex; gap: 3px; height: 8px; margin: 4px 0 6px; color: var(--hud); }
 .segs i { flex: 1; background: currentColor; opacity: .12; } .segs i.on { opacity: 1; }
-.aur { color: var(--g); }   /* TRACE and HUMAN are Aurora's */
-.room.off .live, .room.off .segs { opacity: .35; }
-.res { color: #fff; font-size: 18px; font-weight: 700; display: flex; justify-content: space-between; align-items: center;
-  border-top: 1px solid rgba(255,51,68,.25); padding-top: 10px; }
-.keys { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.room.off .state { color: var(--dim); }
-.room.clear { border-color: var(--g); } .room.clear .state { color: var(--g); }
+.aur, .aur .segs { color: var(--g); }   /* TRACE and HUMAN are Aurora's */
+.room.s-off .live, .room.s-off .segs { opacity: .35; }
+.code { color: var(--amb); min-height: 1.45em; }
+.res { display: flex; justify-content: space-between; align-items: center; gap: 8px; border-top: 1px solid rgba(255,51,68,.2); padding-top: 8px; margin-top: 4px; }
+.res b { color: #fff; }
+.keys { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .room.alarm { animation: alarm 1s steps(1) infinite; }
 @keyframes alarm { 50% { background: #4a0008; } }
 
-#bottom { display: grid; grid-template-columns: 2fr 1fr 2fr; gap: 16px; }
-#line h4 { font-weight: 400; margin: 10px 0 4px; } #line h4:first-child { margin-top: 0; }
+/* bottom: game 5, the line, the history */
+#bottom { display: grid; grid-template-columns: 1.3fr 1.15fr 1.25fr; gap: 12px; }
+@media (max-width: 1150px) { #rooms { grid-template-columns: repeat(2, 1fr); } #flow { grid-template-columns: repeat(3, 1fr); } #bottom { grid-template-columns: 1fr 1fr; } #fin { grid-column: 1 / -1; } }
+#fin { border-left: 4px solid rgba(138,148,153,.5); }
+#fin.on { border-left-color: var(--g); } #fin.done { border-left-color: var(--g); }
+.hd { display: flex; justify-content: space-between; gap: 8px; }
+#fph { font-size: 22px; font-weight: 700; letter-spacing: .1em; color: var(--dim); margin: 6px 0 2px; }
+#fin.on #fph { color: var(--g); } #fin.done #fph { color: var(--g); }
+#fdo { color: #fff; min-height: 2.9em; }
+#ftasks { display: none; grid-template-columns: auto auto 1fr auto auto; gap: 6px 12px; align-items: center; margin-top: 10px; }
+#fin.fight #ftasks { display: grid; }
+.tbar { height: 8px; background: rgba(77,255,136,.15); } .tbar i { display: block; height: 100%; background: var(--g); transform-origin: left; transform: scaleX(0); }
+.tdone { color: var(--g); }
+#fkill { display: none; margin-top: 10px; gap: 8px; align-items: center; flex-wrap: wrap; }
+#fin.kill #fkill { display: flex; }
+#fkill span.k { padding: 4px 12px; border: 1px solid var(--hud); color: var(--hud); }
+#fkill span.k.on { background: #fff; border-color: #fff; color: #000; }
+#fin .row { margin-top: 10px; }
+#line h4 { font-weight: 400; margin: 10px 0 4px; }
 .grp { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding: 4px 0; border-bottom: 1px solid rgba(255,51,68,.15); }
 .grp .t { color: #fff; margin-right: auto; } .grp .cd { color: var(--amb); } .grp .cd.late { color: var(--hud); font-weight: 700; }
 .ph { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
-.ph img { height: 56px; width: 56px; object-fit: cover; border: 1px solid rgba(255,51,68,.5); }
-@media (max-width: 1100px) { #bottom { grid-template-columns: 1fr 1fr; } #line { grid-column: 1 / -1; } }
-.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-td, th { padding: 4px 6px; text-align: left; border-bottom: 1px solid rgba(255,51,68,.15); font-weight: 400; color: #ddd; }
+.ph img { height: 52px; width: 52px; object-fit: cover; border: 1px solid rgba(255,51,68,.5); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px; }
+td, th { padding: 4px 5px; text-align: left; border-bottom: 1px solid rgba(255,51,68,.15); font-weight: 400; color: #ddd; white-space: nowrap; }
+td:first-child { max-width: 9em; overflow: hidden; text-overflow: ellipsis; color: #fff; }
 th { color: var(--dim); font-size: 11px; } td.win { color: var(--g); }
+#phones { margin-top: 10px; display: block; }
+#phones b { color: #fff; font-weight: 400; }
 </style>
 </head>
 <body>
 
 <div id="top">
-  <div id="brand"><b>AURORA//GM</b><small><span id="sys" class="devs"></span> · SOUND <span id="snd">CLICK PAGE TO TURN ON</span></small></div>
-  <input id="tname" placeholder="TEAM NAME" maxlength="40"><button onclick="newTeam()">NEW TEAM</button>
-  <div id="who">NO TEAM</div>
-  <div id="clock">--:--</div>
-  <button onclick="finish()">FINISH RUN</button>
-  <button onclick="resetAll()">RESET ALL ROOMS</button>
+  <div id="brand"><b>AURORA//GM</b><div class="devs" id="sys"></div><span class="lbl">SOUND <span id="snd">CLICK THE PAGE ONCE TO TURN ON</span></span></div>
+  <div><div class="lbl">TEAM</div><div id="who" class="none">NO TEAM</div></div>
+  <div><div class="lbl" id="limit"></div><div id="clock">--:--</div></div>
+  <div id="acts">
+    <div class="row"><input id="tname" placeholder="TEAM NAME" maxlength="40"><button class="pri" onclick="newTeam()">NEW TEAM</button></div>
+    <div class="row"><button onclick="finish()">FINISH RUN</button><button onclick="resetAll()">RESET ALL ROOMS</button><button class="white" onclick="scene('safe')" title="Every light on, now (the hallway bulb goes white)">LIGHTS ON</button></div>
+  </div>
 </div>
 
+<div id="flow"></div>
 <div id="rooms"></div>
 
 <div id="bottom">
-  <div class="box" id="line"></div>
-  <div class="box">
-    <div class="row"><button class="white" onclick="scene('safe')">SAFE · ALL LIGHTS ON</button><button onclick="scene('finale_red')">FINALE RED</button></div>
-    <div class="row"><a href="/dossier" target="_blank"><button>DOSSIER ↗</button></a></div>
-    <small id="phones"></small>
+  <div class="box" id="fin">
+    <div class="hd"><span class="lbl">GAME 5 ▸ THE FINALE</span><span class="lbl" id="fwin"></span></div>
+    <div id="fph"></div>
+    <div id="fdo"></div>
+    <div id="ftasks"></div>
+    <div id="fkill"></div>
+    <div class="row"><button class="white" id="fskip"></button></div>
   </div>
-  <div class="box"><small>RUN HISTORY</small><div id="hist"></div></div>
+  <div class="box" id="line"></div>
+  <div class="box"><span class="lbl">RUN HISTORY</span><div id="hist"></div><span class="lbl" id="phones"></span></div>
 </div>
 
 <script>
@@ -93,9 +135,10 @@ const LIMIT_MIN = 20;        // booth time limit: the clock turns amber at 75%, 
 // when it runs on the hub laptop, this laptop
 let SIGNUP = 'http://' + location.hostname + ':4000';
 // One card per room. keys = that room's Ctrl+Alt staff keys, pressed remotely; a 3rd item asks to confirm first.
+// During game 5 every room's F key skips that room's finale step (the game 5 card has its own SKIP too)
 const ROOMS = [
   { id: 'puzzle1', name: 'BRAIN UPLOAD',  k: 'sync',  stat: 'SYNC',   hint: -5, devs: ['mask'], keys: [['KeyF', 'FORCE CAPTURE', 'Force the mask capture?'], ['KeyR', 'RESET', 'Reset room 1?']] },
-  { id: 'puzzle2', name: 'SYSTEM POWER',  k: 'power', stat: 'ENERGY', hint: -5, devs: ['bulb', 'camera'], keys: [['KeyU', 'UNLOCK'], ['KeyX', 'CAUGHT', 'Team caught? (-15 POWER, they advance)'], ['KeyF', 'SKIP (FINALE)', "Skip room 2's finale step?"], ['KeyR', 'RESET', 'Reset room 2?']] },
+  { id: 'puzzle2', name: 'SYSTEM POWER',  k: 'power', stat: 'ENERGY', hint: -5, devs: ['bulb', 'camera'], keys: [['KeyU', 'UNLOCK'], ['KeyX', 'CAUGHT', 'Team caught? (-15 POWER, they advance)'], ['KeyR', 'RESET', 'Reset room 2?']] },
   { id: 'puzzle3', name: 'HIDDEN SIGNAL', k: 'trace', stat: 'TRACE',  aur: 1, hint: 5,  devs: ['beacon'], keys: [['KeyU', 'UNLOCK'], ['KeyF', 'FORCE WIN', 'Force the win?'], ['KeyR', 'RESET', 'Reset room 3?']] },
   { id: 'puzzle4', name: 'CORE GATE',     k: 'human', stat: 'HUMAN',  aur: 1, hint: 5,  devs: ['ring0', 'ring1'], keys: [['KeyU', 'UNLOCK'], ['KeyF', 'FORCE WIN', 'Force the win?'], ['KeyR', 'RESET', 'Reset room 4?']] },
 ];
@@ -103,13 +146,17 @@ const ROOMS = [
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
 const mmss = ms => ms == null ? '--:--' : `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
-let ws, run = { splits: {} }, skew = 0, rost = { devices: [], pages: [] };
+// the page redraws twice a second: only what changed is written, so the browser repaints only that
+const put = (el, text) => { if (el._t !== text) el.textContent = el._t = text; };
+const cls = (el, name) => { if (el.className !== name) el.className = name; };
+let ws, run = { splits: {} }, skew = 0, rost = { devices: [], pages: [] }, F = null;
 const status = {}, seen = {}, wasOn = {}, wasOk = {};
 const send = o => ws?.readyState === 1 && ws.send(JSON.stringify(o));
 const scene = v => send({ t: 'cmd', a: 'scene', v });
 const key = (id, v) => send({ t: 'cmd', to: id, a: 'key', v });
 const online = id => ws?.readyState === 1 && Date.now() - (seen[id] || 0) < 3000;   // rooms report every second
 const clock = () => run.end ?? (run.t0 ? Date.now() + skew - run.t0 : null);
+$('#limit').textContent = `RUN CLOCK ▸ LIMIT ${LIMIT_MIN}:00`;
 
 // alerts: a low beep when a room goes silent, a chime when a room is cleared
 const AC = new AudioContext();
@@ -135,7 +182,6 @@ const DEVS = {
   signup: ['SIGNUP', () => S ? [true, 'signup server answering'] : [false, 'signup server not responding. Run signup\\start.bat on the signup PC. Until then: type team names + NEW TEAM.']],
   kiosk:  ['KIOSK↔HUB', () => !hubUp() ? [null, 'the hub is down'] : linked('signup') ? [true, 'the kiosk page is linked to the hub'] :
     [S ? false : null, "the kiosk page isn't linked to the hub: no camera pop-up or booth progress on it. Reload it (Ctrl+Alt+R on the signup PC)."]],
-  dossier: ['DOSSIER', () => hubUp() && linked('dossier') ? [true, 'room 5 screen open'] : [null, 'room 5 screen (/dossier) not open']],
   board:  ['TV BOARD', () => hubUp() && linked('queue-board') ? [true, 'queue board (/queue) open'] : [null, 'queue board (/queue) not open (optional)']],
   mask:   ['MASK', () => via('puzzle1', s => s.mask ? [true, 'eyes answering'] : [false, 'mask ESP32 not answering (.50). Switched on? On NexusV? Its red Wi-Fi LED lit?'])],
   bulb:   ['BULB', () => !hubUp() ? [null, 'the hub is down'] : !linked('strip') ? [false, 'bulb bridge not running. hub\\start.bat starts it on the hub laptop.'] :
@@ -147,20 +193,35 @@ const DEVS = {
   ring0:  ['RING OUTER', ring(0)],
   ring1:  ['RING INNER', ring(1)],
 };
-$('#sys').innerHTML = ['hub', 'signup', 'kiosk', 'dossier', 'board'].map(d => `<span class="dev unk" data-dev="${d}">${DEVS[d][0]}</span>`).join('');
+$('#sys').innerHTML = ['hub', 'signup', 'kiosk', 'board'].map(d => `<span class="dev unk" data-dev="${d}">${DEVS[d][0]}</span>`).join('');
 $('#sys').onclick = e => { const d = e.target.closest('.dev'); if (d) alert(d.textContent + ': ' + d.title); };
 
-// cards are built once and only their text changes, so a click never lands on a rebuilt button
+// ===== Where the team is: games 1-4 and the finale =====
+$('#flow').innerHTML = [...ROOMS.map((r, i) => `0${i + 1} ${r.name}`), '05 FINALE'].map(n => `<div class="step"><b>${n}</b><span></span></div>`).join('');
+const steps = [...$('#flow').children];
+function drawFlow() {
+  const going = run.t0 && run.end == null;
+  let now = -1;
+  steps.forEach((el, i) => {
+    const t1 = run.splits[`p${i + 1}done`], t0 = i ? run.splits[`p${i}done`] : 0, done = t1 != null;
+    if (!done && now < 0 && going && (i === 0 || t0 != null)) now = i;
+    cls(el, 'step' + (done ? ' done' : now === i ? ' now' : ''));
+    put(el.lastChild, done ? '✓ ' + mmss(t1 - t0) : now === i ? mmss(clock() - t0) : '');
+  });
+}
+
+// ===== One card per room. Built once and only their text changes, so a click never lands on a rebuilt button =====
 $('#rooms').innerHTML = ROOMS.map((r, i) => `
-  <div class="box room off" id="${r.id}">
-    <h3>SECTOR 0${i + 1} ▸ <b>${r.name}</b></h3>
+  <div class="box room" id="${r.id}">
+    <h3><span>SECTOR 0${i + 1} ▸ <b>${r.name}</b></span></h3>
     <div class="devs">${r.devs.map(d => `<span class="dev unk" data-dev="${d}">${DEVS[d][0]}</span>`).join('')}</div>
-    <div class="state"></div><small class="tin"></small>
-    <div class="live ${r.aur ? 'aur' : ''}"><small>${r.stat}</small><b>--</b></div>
+    <div class="st"><div class="state"></div><div class="tin"></div></div>
+    <div class="sub"></div>
+    <div class="live ${r.aur ? 'aur' : ''}"><span class="lbl">${r.stat} NOW</span><b>--</b></div>
     <div class="segs ${r.aur ? 'aur' : ''}">${'<i></i>'.repeat(25)}</div>
     <div class="code"></div>
-    <div class="res"><span class="rv"></span><button data-hint>${r.hint > 0 ? '+' : ''}${r.hint} HINT</button></div>
-    <div class="keys">${r.keys.map(([c, l]) => `<button data-key="${c}">${l}</button>`).join('')}</div>
+    <div class="res"><span><span class="lbl">TO THE FINALE</span><br><b class="rv"></b></span><button class="quiet" data-hint title="A hint costs the team this much">HINT ${r.hint > 0 ? '+' : ''}${r.hint} ${r.k.toUpperCase()}</button></div>
+    <div class="keys">${r.keys.map(([c, l]) => `<button data-key="${c}" class="${c === 'KeyR' ? 'quiet' : ''}">${l}</button>`).join('')}</div>
   </div>`).join('');
 ROOMS.forEach(r => $('#' + r.id).onclick = e => {
   e.currentTarget.classList.remove('alarm');
@@ -171,35 +232,80 @@ ROOMS.forEach(r => $('#' + r.id).onclick = e => {
   if (!online(r.id)) return alert(r.name + ' is offline. Check its laptop.');
   if (!ask || confirm(ask)) key(r.id, c);
 });
-
-function render() {
+const WORD = { clear: 'CLEARED', off: 'OFFLINE', ready: 'READY', locked: 'LOCKED', playing: 'PLAYING' };
+function drawRooms() {
   ROOMS.forEach((r, i) => {
     const card = $('#' + r.id), s = status[r.id] || {}, on = online(r.id);
     const t0 = i ? run.splits[`p${i}done`] : 0, t1 = run.splits[`p${i + 1}done`];
-    const state = t1 != null ? 'CLEARED' : !on ? 'OFFLINE' : s.mode === 'standby' ? (s.unlocked ? 'READY' : 'LOCKED')
-      : s.mode === 'idle' ? 'READY' : 'PLAYING';
-    card.classList.toggle('off', !on); card.classList.toggle('clear', t1 != null);
-    card.querySelector('.state').textContent = state;
-    card.querySelector('.tin').textContent = !run.t0 ? '' : t1 != null ? `IN ${mmss(t1 - t0)}` : t0 != null ? `IN ROOM ${mmss(clock() - t0)}` : 'NOT REACHED';
+    const st = t1 != null ? 'clear' : !on ? 'off' : s.mode === 'standby' ? (s.unlocked ? 'ready' : 'locked') : s.mode === 'idle' ? 'ready' : 'playing';
+    cls(card, `box room s-${st}${card.classList.contains('alarm') ? ' alarm' : ''}`);
+    put(card.querySelector('.state'), WORD[st]);
+    put(card.querySelector('.tin'), !run.t0 ? '' : st === 'clear' ? 'DONE IN ' + mmss(t1 - t0) : st === 'playing' && t0 != null ? mmss(clock() - t0) : '');
+    put(card.querySelector('.sub'), st === 'off' ? 'NO SIGNAL FROM ITS LAPTOP FOR 3 s' : st === 'locked' ? `WAITS FOR ROOM 0${i}` :
+      st === 'ready' ? (i ? 'UNLOCKED ▸ WAITING FOR THE TEAM' : 'WAITING FOR THE TEAM') : st === 'playing' ? 'TIME IN THIS ROOM' : '');
     const v = on ? s.stat : null;
-    card.querySelector('.live b').textContent = v != null ? v + '%' : '--';
+    put(card.querySelector('.live b'), v != null ? v + '%' : '--');
     card.querySelectorAll('.segs i').forEach((el, j) => el.classList.toggle('on', v != null && j < v / 4));
-    card.querySelector('.code').textContent = on && s.code ? `CODE ${s.code}` : '';
-    card.querySelector('.rv').textContent = `${r.k.toUpperCase()} ${run[r.k] ?? '--'}`;
+    put(card.querySelector('.code'), on && s.code ? `ANSWER ${s.code}` : '');
+    put(card.querySelector('.rv'), `${r.k.toUpperCase()} ${run[r.k] ?? '--'}`);
     if (wasOn[r.id] && !on) { card.classList.add('alarm'); tone(220, .5); }
     if (on) card.classList.remove('alarm');
     wasOn[r.id] = on;
   });
   document.querySelectorAll('[data-dev]').forEach(el => {
     const [ok, why] = DEVS[el.dataset.dev][1]();
-    el.className = 'dev ' + (ok ? 'ok' : ok === false ? 'down' : 'unk'); el.title = why;
+    cls(el, 'dev ' + (ok ? 'ok' : ok === false ? 'down' : 'unk')); if (el.title !== why) el.title = why;
     if (wasOk[el.dataset.dev] && ok === false) { tone(220, .5); el.closest('.room')?.classList.add('alarm'); }
     wasOk[el.dataset.dev] = ok;
   });
+}
+
+// ===== Game 5: what's happening, what staff do, and a SKIP that works even if a room's laptop died =====
+const TASKS = [['binary', 'BINARY'], ['words', 'WORDS'], ['cross', 'KNOBS']];
+const PHASES = {
+  null:     ['WAITING FOR GAME 4', 'Starts by itself when game 4\'s fake win stalls at 97%.', ''],
+  crash:    ['SHE\'S TALKING', 'Her dialogue plays on the room 4 screen. Then the team walks back to room 3.', 'SKIP HER DIALOGUE'],
+  takeover: ['GO TO THE MAP', 'Every screen is green. The team presses SPACE at the map in room 3.', 'SKIP: START HER TASKS'],
+  fight:    ['HER TASKS', 'Split up: rooms 1, 2 and 4, SPACE when there. The first task done makes rooms 1 and 2 swap.', ''],
+  regroup:  ['BACK TO THE MAP', 'Everyone returns to room 3 and presses SPACE there.', 'SKIP: START THE BRIEFING'],
+  brief:    ['BRIEFING', 'The map in room 3 explains the kill switch.', 'SKIP THE BRIEFING'],
+  kill:     ['KILL SWITCH', 'One player each in rooms 1, 2 and 4 presses once to be ready. The rest count down at the map; all press on zero.', 'FORCE THE KILL'],
+  end:      ['SHE\'S DEAD ✓', 'Her last words play on every screen. Then FINISH RUN.', ''],
+};
+$('#ftasks').innerHTML = TASKS.map(([k, n]) => `<b>${n}</b><span class="lbl" id="tr-${k}"></span><span class="tbar"><i id="tb-${k}"></i></span>` +
+  `<span id="tn-${k}"></span><button class="quiet" data-skip="${k}">DONE</button>`).join('');
+$('#ftasks').onclick = e => {
+  const b = e.target.closest('[data-skip]'), t = b && F?.tasks[b.dataset.skip]; if (!t) return;
+  const name = TASKS.find(([k]) => k === b.dataset.skip)[1];
+  if (confirm(`Mark ${name} (room ${t.room}) as done?`)) send({ t: 'finskip', task: b.dataset.skip });
+};
+$('#fskip').onclick = () => { const p = PHASES[F?.phase]; if (p?.[2] && confirm(p[2] + '?')) send({ t: 'finskip' }); };
+function drawFinale() {
+  const ph = F?.phase ?? null, [title, todo, skip] = PHASES[ph] || PHASES.null;
+  cls($('#fin'), `box ${ph === 'end' ? 'done' : ph ? 'on' : ''} ${ph || ''}`);
+  put($('#fph'), title); put($('#fdo'), todo);
+  put($('#fwin'), F && ph ? `KILL WINDOW ${F.win} s ▸ TRACE ${F.run?.trace ?? 50}%` : '');
+  $('#fskip').hidden = !skip; put($('#fskip'), skip);   // no button when there's nothing to skip (the tasks have their own DONE)
+  if (ph === 'fight') TASKS.forEach(([k]) => {
+    const t = F.tasks[k];
+    put($('#tr-' + k), t.clear ? '' : 'ROOM ' + t.room);
+    $('#tb-' + k).style.transform = `scaleX(${t.clear ? 1 : t.need ? t.done / t.need : 0})`;
+    put($('#tn-' + k), t.clear ? '✓ DONE' : t.need ? `${t.done}/${t.need}` : 'NOT STARTED');
+    $('#tn-' + k).className = t.clear ? 'tdone' : '';
+    $(`[data-skip="${k}"]`).disabled = t.clear;
+  });
+  if (ph === 'kill') {
+    const h = [1, 2, 4].map(r => `<span class="k ${F.ready?.[r] ? 'on' : ''}">0${r} ${F.ready?.[r] ? 'READY' : '...'}</span>`).join('') +
+      `<span class="lbl">MISSES ${F.fails}${F.ev?.k === 'fail' ? ` ▸ LAST: ${F.ev.missing?.length ? 'ROOM ' + F.ev.missing.map(r => '0' + r).join(' · ') + ' NEVER PRESSED' : F.ev.spread + ' s APART'}` : ''}</span>`;
+    if ($('#fkill')._h !== h) $('#fkill').innerHTML = $('#fkill')._h = h;
+  }
+}
+
+function render() { drawFlow(); drawRooms(); drawFinale();
   const ms = clock(), lim = LIMIT_MIN * 60000;
-  $('#clock').textContent = mmss(ms);
-  $('#clock').className = ms == null ? '' : run.end != null ? 'fin' : ms > lim ? 'over' : ms > lim * .75 ? 'warn' : 'ok';
-  $('#who').textContent = run.team || 'NO TEAM';
+  put($('#clock'), mmss(ms));
+  cls($('#clock'), ms == null ? '' : run.end != null ? 'fin' : ms > lim ? 'over' : ms > lim * .75 ? 'warn' : 'ok');
+  put($('#who'), run.team || 'NO TEAM'); cls($('#who'), run.team ? '' : 'none');
 }
 
 function newTeam() {
@@ -209,15 +315,17 @@ function newTeam() {
   send({ t: 'newteam', team }); $('#tname').value = '';
 }
 function finish() {
-  if (!run.t0 || run.end != null || !confirm(`Stop the clock for ${run.team} at ${mmss(clock())}?`)) return;
+  if (!run.t0 || run.end != null) return alert('No run going. NEW TEAM (or SEND IN from the line) starts one.');
+  if (!confirm(`Stop the clock for ${run.team} at ${mmss(clock())} and save the run? (This also ends the finale on every screen.)`)) return;
   send({ t: 'finish' });
   const g = S?.sales.find(s => s.status === 'in' && s.team === run.team);
   if (g) setStatus(g.code, 'done');
 }
 function resetAll() {
-  // mid-run, a reset room unlocks itself again (the hub resends this run's unlocks), so warn when FINISH RUN was skipped
-  const open = run.t0 && run.end == null ? `\n\n${run.team} hasn't finished: the rooms they reached will unlock again. Press FINISH RUN first if they're done.` : '';
-  if (confirm('Reset ALL four rooms? Only between teams.' + open)) ROOMS.forEach(r => key(r.id, 'KeyR'));
+  // the hub wipes this run (scores, splits, the finale; mid-run the clock restarts), then every room reloads to its start
+  const open = run.t0 && run.end == null ? `\n\n${run.team} starts over from room 1: clock back to 0:00, scores and the finale wiped.` : '';
+  if (!confirm('Reset ALL rooms?' + open)) return;
+  send({ t: 'reset' }); ROOMS.forEach(r => key(r.id, 'KeyR'));
 }
 
 // ===== The line, from the signup kiosk: who's inside, who's called, who's next =====
@@ -228,7 +336,7 @@ const fmtTime = sl => { const [h, m] = sl.time.split(':').map(Number); return `$
 const bySlot = (a, b) => (a.slot.date + a.slot.time < b.slot.date + b.slot.time ? -1 : 1);
 const calledAt = s => [...s.history].reverse().find(h => h.to === 'called')?.at;
 async function signupPoll() {
-  try { S = await (await fetch(SIGNUP + '/api/state')).json(); S.skew = S.now - Date.now(); } catch { S = null; }
+  try { S = await (await fetch(SIGNUP + '/api/state', { signal: AbortSignal.timeout(1800) })).json(); S.skew = S.now - Date.now(); } catch { S = null; }
   renderLine();
 }
 // a text/plain body keeps this a "simple" cross-origin request with no preflight: the signup server has no OPTIONS route and parses the JSON anyway
@@ -239,15 +347,13 @@ async function setStatus(code, status) {
   } catch { alert('The signup kiosk is not responding.'); return false; }
 }
 async function sendIn(s) {
-  const warn = run.t0 && run.end == null ? `
-
-${run.team} hasn't finished: their run is NOT saved.` : '';
+  const warn = run.t0 && run.end == null ? `\n\n${run.team} hasn't finished: their run is NOT saved.` : '';
   if (!confirm(`Send "${s.team}" (${s.size} players) into the booth? This starts the clock.${warn}`)) return;
   if (await setStatus(s.code, 'in')) send({ t: 'newteam', team: s.team });
 }
 function renderLine() {
   let h;
-  if (!S) h = '<small>SIGNUP KIOSK NOT RESPONDING · TYPE THE TEAM NAME + NEW TEAM</small>';
+  if (!S) h = '<span class="lbl">THE LINE</span><br><span class="lbl">SIGNUP KIOSK NOT RESPONDING ▸ TYPE THE TEAM NAME + NEW TEAM</span>';
   else {
     const today = ymd(new Date(Date.now() + S.skew)), sales = S.sales;
     const inside = sales.find(s => s.status === 'in'), calling = sales.filter(s => s.status === 'called').sort(bySlot);
@@ -255,11 +361,11 @@ function renderLine() {
     const left = sales.filter(s => ['booked', 'called'].includes(s.status) && s.slot.date === today).length;
     const grp = (s, btns) => `<div class="grp"><span>${s.slot.date === today ? '' : s.slot.date.slice(5) + ' '}${fmtTime(s.slot)}</span>` +
       `<span class="t">${esc(s.team)} · ${s.size}</span>${btns.map(([a, l]) => `<button data-act="${a}" data-code="${s.code}">${l}</button>`).join('')}</div>`;
-    h = `<small>SOLD ${S.sold}/${S.cfg.TICKETS} · ${left} GROUP${left === 1 ? '' : 'S'} LEFT TODAY</small>` +
-      `<h4><small>IN BOOTH</small></h4>` + (inside ? `<div class="grp"><span class="t">${esc(inside.team)} · ${inside.size} PLAYERS · ${inside.code}</span></div>` +
-        `<div class="ph">${inside.photos.map(u => `<a href="${SIGNUP + u}" target="_blank"><img src="${SIGNUP + u}" alt=""></a>`).join('')}</div>` : '<small>—</small>') +
-      `<h4><small>CALLING</small></h4>` + (calling.map(s => grp(s, [['in', 'SEND IN'], ['noshow', 'NO-SHOW']]).replace('<span class="t">', `<b class="cd" data-at="${Date.parse(calledAt(s))}"></b><span class="t">`)).join('') || '<small>—</small>') +
-      `<h4><small>UP NEXT</small></h4>` + (next.map(s => grp(s, [['call', 'CALL'], ['in', 'SEND IN']])).join('') || '<small>NOBODY BOOKED</small>');
+    h = `<div class="hd"><span class="lbl">THE LINE</span><span class="lbl">SOLD ${S.sold}/${S.cfg.TICKETS} ▸ ${left} GROUP${left === 1 ? '' : 'S'} LEFT TODAY</span></div>` +
+      `<h4 class="lbl">IN THE BOOTH</h4>` + (inside ? `<div class="grp"><span class="t">${esc(inside.team)} · ${inside.size} PLAYERS · ${inside.code}</span></div>` +
+        `<div class="ph">${inside.photos.map(u => `<a href="${SIGNUP + u}" target="_blank"><img src="${SIGNUP + u}" alt=""></a>`).join('')}</div>` : '<span class="lbl">—</span>') +
+      `<h4 class="lbl">CALLING</h4>` + (calling.map(s => grp(s, [['in', 'SEND IN'], ['noshow', 'NO-SHOW']]).replace('<span class="t">', `<b class="cd" data-at="${Date.parse(calledAt(s))}"></b><span class="t">`)).join('') || '<span class="lbl">—</span>') +
+      `<h4 class="lbl">UP NEXT</h4>` + (next.map(s => grp(s, [['call', 'CALL'], ['in', 'SEND IN']])).join('') || '<span class="lbl">NOBODY BOOKED</span>');
     const codes = calling.map(s => s.code).join();
     if (calls != null && codes && codes !== calls && calling.some(s => !calls.includes(s.code))) { tone(880, .15); tone(1320, .3, .15); }
     calls = codes;
@@ -270,7 +376,7 @@ function renderLine() {
 function tickLine() {        // the called groups' grace countdown
   if (S) document.querySelectorAll('#line .cd').forEach(el => {
     const r = S.cfg.GRACE_MIN * 60000 - (Date.now() + S.skew - +el.dataset.at);
-    el.textContent = r > 0 ? mmss(r) : 'NO-SHOW?'; el.classList.toggle('late', r <= 0);
+    put(el, r > 0 ? mmss(r) : 'NO-SHOW?'); el.classList.toggle('late', r <= 0);
   });
 }
 $('#line').onclick = e => {
@@ -286,17 +392,16 @@ function conn() {
   ws.onclose = () => { rost = { devices: [], pages: [] }; render(); setTimeout(conn, 1000); };
   ws.onmessage = e => {
     const m = JSON.parse(e.data);
-    if (m.t === 'status') { status[m.id] = m.v; seen[m.id] = Date.now(); }
+    if (m.t === 'status') { status[m.id] = m.v; seen[m.id] = Date.now(); return; }   // 5 a second: the 500 ms redraw picks them up
     if (m.t === 'run') { run = m; skew = m.now - Date.now(); }
-    if (m.t === 'addr') {
-      SIGNUP = 'http://' + (m.signup || location.hostname) + ':4000';
-      $('#phones').innerHTML = m.hub.length ? `PHONES OPEN · BEACON <b>${m.hub[0]}:3000/beacon</b>` +
-        (m.hub.length > 1 ? `<br>OTHER NETWORKS ON THIS LAPTOP: ${m.hub.slice(1).join(', ')}` : '') : 'THIS LAPTOP IS NOT ON A NETWORK';
-    }
+    if (m.t === 'fin') F = m;
+    if (m.t === 'addr') put($('#phones'), m.hub.length ? `PHONES OPEN ▸ BEACON ${m.hub[0]}:3000/beacon` +
+      (m.hub.length > 1 ? ` ▸ OTHER NETWORKS ON THIS LAPTOP: ${m.hub.slice(1).join(', ')}` : '') : 'THIS LAPTOP IS NOT ON A NETWORK');
     if (m.t === 'evt' && /^p\ddone$/.test(m.e)) { tone(880, .15); tone(1320, .3, .15); }
     if (m.t === 'roster') rost = m;
-    if (m.t === 'history') $('#hist').innerHTML = `<table><tr><th>TEAM</th><th>TIME</th><th>SYNC</th><th>POWER</th><th>TRACE</th><th>HUMAN</th></tr>` +
+    if (m.t === 'history') $('#hist').innerHTML = `<table><tr><th>TEAM</th><th>TIME</th><th>FINALE</th><th>SYNC</th><th>POWER</th><th>TRACE</th><th>HUMAN</th></tr>` +
       m.runs.slice().reverse().map(x => `<tr><td>${esc(x.team)}</td><td class="${x.end <= LIMIT_MIN * 60000 ? 'win' : ''}">${mmss(x.end)}${x.end <= LIMIT_MIN * 60000 ? ' ✓' : ''}</td>` +
+        `<td class="${x.splits?.p5done != null ? 'win' : ''}">${x.splits?.p5done != null ? '✓' : '-'}</td>` +
         ['sync', 'power', 'trace', 'human'].map(k => `<td>${x[k] ?? '-'}</td>`).join('') + '</tr>').join('') + '</table>';
     render();
   };

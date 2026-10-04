@@ -1,23 +1,23 @@
 // smoke test: device receives finale_red, gets state replayed after reconnect; carried resources store, clamp, merge facts, reset;
 // GM panel protocol (status, staff keys, run clock, finish); unlocks resent on hello; the run surviving a hub restart;
 // game 5's finale state (phases in order, task swap, kill switch judging).
-// Starts its own hub on :3000 with temp run files (stop the real hub first), so test runs never land in runs.jsonl.
+// Starts its own hub on :3999 with temp run files, so it runs next to the real hub and never lands in runs.jsonl.
 const WebSocket = require('ws'), assert = require('assert'), { spawn } = require('child_process'), fs = require('fs'), os = require('os'), path = require('path');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-hub-'));
 let hub;
 const startHub = () => new Promise((ok, bad) => {
-  hub = spawn(process.execPath, [path.join(__dirname, 'server.js')], { env: { ...process.env, RUNS: path.join(tmp, 'runs.jsonl'), RUN: path.join(tmp, 'run.json') } });
+  hub = spawn(process.execPath, [path.join(__dirname, 'server.js')], { env: { ...process.env, PORT: '3999', RUNS: path.join(tmp, 'runs.jsonl'), RUN: path.join(tmp, 'run.json') } });
   hub.stdout.once('data', () => ok());
-  hub.once('exit', c => bad(new Error(`hub exited (${c}). Is another hub already on :3000?`)));
+  hub.once('exit', c => bad(new Error(`hub exited (${c}). Is something already on :3999?`)));
 });
-const open = (id, role) => new Promise(r => { const w = new WebSocket('ws://localhost:3000/ws'); w.msgs = []; w.on('error', () => {}); w.on('message', d => w.msgs.push(JSON.parse(d))); w.on('open', () => { w.send(JSON.stringify({ t: 'hello', id, role })); setTimeout(() => r(w), 100); }); });
+const open = (id, role) => new Promise(r => { const w = new WebSocket('ws://localhost:3999/ws'); w.msgs = []; w.on('error', () => {}); w.on('message', d => w.msgs.push(JSON.parse(d))); w.on('open', () => { w.send(JSON.stringify({ t: 'hello', id, role })); setTimeout(() => r(w), 100); }); });
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const last = w => { const r = w.msgs.filter(m => m.t === 'run').pop(); if (r) delete r.now; return r; };
 const unlocked = (w, e) => w.msgs.some(m => m.t === 'evt' && m.e === e);
 (async () => {
   await startHub();
   let strip = await open('strip', 'device'), gm = await open('gm1', 'page');
-  assert.strictEqual(await (await fetch('http://localhost:3000/ping')).text(), 'nexus-hub', '/ping answers the pages searching for the hub');
+  assert.strictEqual(await (await fetch('http://localhost:3999/ping')).text(), 'nexus-hub', '/ping answers the pages searching for the hub');
   assert(gm.msgs.some(m => m.t === 'addr' && Array.isArray(m.hub) && m.signup === null), 'GM gets the hub IPs on hello');
   await open('signup', 'page'); await wait(100);
   assert.strictEqual(gm.msgs.filter(m => m.t === 'addr').pop().signup, null, 'a signup page on the hub laptop = no separate signup IP');
@@ -54,7 +54,8 @@ const unlocked = (w, e) => w.msgs.some(m => m.t === 'evt' && m.e === e);
   assert(last(gm) && gm.msgs.some(m => m.t === 'roster' && m.pages.includes('puzzle3')), 'roster lists pages');
   p3.send(JSON.stringify({ t: 'status', v: { mode: 'hunt', trace: 12 } })); await wait(100);
   assert(gm.msgs.some(m => m.t === 'status' && m.id === 'puzzle3' && m.v.mode === 'hunt'), 'status relayed');
-  assert(!gm.msgs.some(m => m.t === 'log' && /status/.test(m.m)), 'status is not logged');
+  assert(!gm.msgs.some(m => m.t === 'log'), 'pages get no log lines (console only)');
+  assert(!late.msgs.some(m => m.t === 'status'), "room statuses go to the GM panel only, not to other pages (the 'dossier' page here)");
   const gm2 = await open('gm2', 'page');
   assert(gm2.msgs.some(m => m.t === 'status' && m.id === 'puzzle3'), 'status sent on hello');
   g({ t: 'cmd', to: 'puzzle3', a: 'key', v: 'KeyU' }); await wait(100);
@@ -127,12 +128,39 @@ const unlocked = (w, e) => w.msgs.some(m => m.t === 'evt' && m.e === e);
   gm = await open('gm1', 'page');
   assert.strictEqual(fin(await open('fin3', 'fin')).phase, 'end', 'the finale survives a hub restart');
 
+  // the GM panel sees the finale, and its SKIP moves it on even with every room laptop gone
+  assert(gm.msgs.some(m => m.t === 'fin' && m.phase === 'end'), 'the GM panel gets the finale state');
+  g({ t: 'reset' }); await wait(100);
+  F(await open('fin4', 'fin'), { a: 'crash' }); await wait(100);   // a fresh socket: the hub restarted above
+  const gfin = () => gm.msgs.filter(m => m.t === 'fin').pop();
+  for (const ph of ['takeover', 'fight']) { g({ t: 'finskip' }); await wait(100); assert.strictEqual(gfin().phase, ph, 'SKIP -> ' + ph); }
+  g({ t: 'finskip', task: 'cross' }); await wait(100);
+  s = gfin();
+  assert(s.tasks.cross.clear && s.tasks.binary.room === 2, 'SKIP on a task clears it from the GM (and she still jumps)');
+  g({ t: 'finskip', task: 'binary' }); g({ t: 'finskip', task: 'words' }); await wait(100);
+  assert.strictEqual(gfin().phase, 'regroup', 'all tasks skipped: regroup');
+  for (const ph of ['brief', 'kill', 'end']) { g({ t: 'finskip' }); await wait(100); assert.strictEqual(gfin().phase, ph, 'SKIP -> ' + ph); }
+
+  // RESET ALL ROOMS mid-run: the team starts over (clock restarts, scores, splits and the finale wiped)
+  const tBefore = last(gm).t0; await wait(20);
+  g({ t: 'reset' }); await wait(200);
+  r = last(gm);
+  assert(r.team === 'Team Test' && r.t0 > tBefore && r.sync === null && r.trace === null && !Object.keys(r.splits).length, 'reset mid-run: same team, clock restarted, scores and splits wiped');
+  assert.strictEqual(fin(await open('fin2', 'fin')).phase, null, 'reset puts the finale to sleep');
+  assert(!unlocked(await open('puzzle2', 'page'), 'p1done'), 'after a reset, rooms stay locked');
+  F(await open('fin4', 'fin'), { a: 'crash' }); await wait(100);
   g({ t: 'finish' }); await wait(200);
   assert(last(gm).end >= 0, 'finish stops the clock');
   assert(gm.msgs.filter(m => m.t === 'history').pop().runs.some(x => x.team === 'Team Test'), 'finish adds to history');
   assert(!unlocked(await open('puzzle2', 'page'), 'p1done'), 'after FINISH RUN a reset room stays locked');
   assert.strictEqual(fin(await open('fin1', 'fin')).phase, null, 'FINISH RUN puts the finale to sleep');
   assert(!JSON.parse(fs.readFileSync(path.join(tmp, 'runs.jsonl'), 'utf8').trim().split('\n').pop()).fin, 'the finale state stays out of the run history');
+  g({ t: 'reset' }); await wait(200);
+  assert(last(gm).team === '' && last(gm).t0 === null, 'reset after FINISH RUN clears the team (no ghost clock)');
+  // a finale started with no team running (a staff test) doesn't come back when the hub restarts
+  F(await open('fin4', 'fin'), { a: 'crash' }); await wait(200);
+  hub.kill(); await wait(300); await startHub(); gm = await open('gm1', 'page');
+  assert.strictEqual(fin(await open('fin3', 'fin')).phase, null, "a staff test's finale is dropped on restart");
   g({ t: 'newteam' }); await wait(100);
   console.log('OK'); hub.kill(); process.exit(0);
 })().catch(e => { console.error(e.message); hub?.kill(); process.exit(1); });
