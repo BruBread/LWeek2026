@@ -69,7 +69,7 @@ hub/                      Node WebSocket hub, GM panel, dossier, beacon stand-in
 puzzle1-brain-upload/     projector page, mask_esp32/ sketch, SETUP.md (wiring + booth setup)
 puzzle2-system-power/     typing / power game, SETUP.md (hallway bulb + bridge)
 puzzle3-hidden-signal/    IR hunt game, beacon_esp32/ sketch
-puzzle4-orbit-lock/       ring-and-laser game, pots_esp32/ sketch, laser_bridge.py (Govee strip), SETUP.md
+puzzle4-orbit-lock/       ring-and-laser game, controller_esp32/ sketch (knobs, fire wires, OLED), laser_bridge.py (Govee strip), SETUP.md
 signup/                   ticket + queue kiosk (no dependencies)
 ```
 

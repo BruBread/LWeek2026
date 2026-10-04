@@ -110,7 +110,7 @@ body.game #ctl { display: block; animation: boxIn .7s .15s backwards; }
 .dial.stop path { animation: stopHit .4s ease-out; }
 @keyframes stopHit { from { stroke: #fff; stroke-width: 3; } }
 #chg { width: 5.5em; height: .45vw; background: rgba(255,51,68,.2); }
-#chg i { display: block; height: 100%; background: #fff; box-shadow: 0 0 10px var(--hud); transform-origin: left; transform: scaleX(0); }
+#chg i { display: block; width: 100%; height: 100%; background: #fff; box-shadow: 0 0 10px var(--hud); transform-origin: left; transform: scaleX(0); }
 
 /* hints leak through as glitches (puzzle 3's): the text tears onto the screen for a moment, then it's gone again */
 #ghintWrap { position: absolute; z-index: 3; left: 0; right: 0; top: 12vh; display: none; justify-content: center; pointer-events: none; }
@@ -176,9 +176,9 @@ body.help #help { display: block; }
     <div id="banner" class="txt"><span id="bk"></span><b id="bt"></b><span id="bs"></span></div>
     <div id="bar" class="txt"><div class="row"><span>HUMAN ERROR DETECTED</span><span id="bp">0%</span></div><div id="segs"></div></div>
     <div id="ctl" class="txt">
-      <div><b>A / D</b><span>OUTER RING</span><i class="dial" id="d0"></i><em id="l0">OPEN</em></div>
-      <div><b>◄ / ►</b><span>INNER RING</span><i class="dial" id="d1"></i><em id="l1">OPEN</em></div>
-      <div><b>SPACE</b><span>HOLD TO FIRE</span><div id="chg"><i></i></div></div>
+      <div><b id="k0">A / D</b><span>OUTER RING</span><i class="dial" id="d0"></i><em id="l0">OPEN</em></div>
+      <div><b id="k1">◄ / ►</b><span>INNER RING</span><i class="dial" id="d1"></i><em id="l1">OPEN</em></div>
+      <div><b id="fk">SPACE</b><span id="fh">HOLD TO FIRE</span><div id="chg"><i></i></div></div>
     </div>
   </div>
   <div id="beam"></div>
@@ -196,14 +196,13 @@ body.help #help { display: block; }
 <div id="help">STAFF SHORTCUTS
 hub: <span id="hubst">...</span>   layer <b id="hl">-</b>   misses <b id="hm">0</b>
 laser strip: <span id="lzst">...</span>
-ring controllers: <span id="potst">...</span>
-  outer: <span id="ps0">-</span>   <b id="pm0">-</b> mV, knob <b id="pk0">-</b>
-  inner: <span id="ps1">-</span>   <b id="pm1">-</b> mV, knob <b id="pk1">-</b>
+controller: <span id="ps">-</span>   (<span id="potst">...</span>)
+  outer knob <b id="pm0">-</b> mV (<b id="pk0">-</b>)   inner knob <b id="pm1">-</b> mV (<b id="pk1">-</b>)   wires <b id="pw">-</b>
 
-Players: knobs (or A/D outer ring, ◄/► inner ring), hold SPACE to fire
+Players: knobs + touch the two wires to fire (or A/D outer ring, ◄/► inner ring, hold SPACE)
 
 Ctrl+Alt+H  show / hide this panel
-Ctrl+Alt+P  pair a ring controller (once per controller per laptop: pick its COM port)
+Ctrl+Alt+P  pair the controller's USB backup (once per laptop: pick its COM port). Wi-Fi needs no pairing
 Ctrl+Alt+U  unlock by hand (if puzzle 3's signal never came)
 Ctrl+Alt+S  start now, even if locked
 Ctrl+Alt+K  skip the intro, straight to layer 1
@@ -234,10 +233,11 @@ const CFG = {
   // each ring turns like a potentiometer: it sits where it was left, follows the knob degree for degree, and stops
   // dead at both ends. POT_DEG = how far the knob turns end to end (B100k / WH148-style pots: about 300°. Measure yours)
   POT_DEG: 300,
-  // the two ring controllers (pots_esp32 on USB, see SETUP.md): the mV each knob reads at its [left stop, right stop],
+  // the controller's two knobs (controller_esp32 on USB, see SETUP.md): the mV each knob reads at its [left stop, right stop],
   // outer ring first. Ctrl+Alt+H shows the live mV: turn each knob to both ends and copy the numbers here.
   // A ring that turns the wrong way: swap its two numbers
   POT_MV: [[0, 3150], [0, 3150]],
+  CTRL_IP: '192.168.0.52',   // the controller ESP32 on NexusV (its secrets.h). ?ctrl=<ip> in the URL overrides it
   LASER: 'http://localhost:8013',   // the Govee strip's bridge on this laptop (laser_bridge.py, start.bat starts it)
   TURN: [30, 140, 600],      // keyboard stand-in for the knob: deg/s on a tap, deg/s held down, ms to get from one to the other
   CHARGE_MS: 900,            // hold space this long to fire. Let go early and the charge drains
@@ -268,8 +268,8 @@ const INTRO = [              // the players' side (red terminal)
   'sector 04: the core gate.',
   "aurora's heart sits behind two shield rings.",
   'turn the rings. line both gaps up with the laser.',
-  'outer ring: A / D.   inner ring: ◄ / ►.',
-  'hold SPACE to charge. it fires when full.',
+  '{turn}',                  // {…} = the controller's words, or the keys' when it isn't plugged in (how())
+  '{fire} to charge. it fires when full.',
 ];
 const AUR = {                // Aurora (green): cold, with dry humor. Puzzle 3 ended on "...that's my heart. don't you dare."
   miss: ['Missed.', "Machines don't miss.", 'Your hands are shaking.', 'Wide.', 'Again? Adorable.', 'Aim is a machine thing.'],
@@ -384,44 +384,60 @@ async function hub() {
 }
 // the GM panel presses this page's Ctrl+Alt staff keys remotely, and sees its state once a second
 const staffKey = code => dispatchEvent(new KeyboardEvent('keydown', { code, ctrlKey: true, altKey: true }));
-setInterval(() => hubSend({ t: 'status', v: { mode, unlocked, stat: Math.round(human), rings: [potLive(0), potLive(1)] } }), 1000);
+setInterval(() => hubSend({ t: 'status', v: { mode, unlocked, stat: Math.round(human), ctrl: potLive(), ctrlVia: ctrlVia() } }), 1000);
 
-// ===== The ring controllers: two ESP32s, one knob each, each on its own USB cable (pots_esp32/pots_esp32.ino).
-// Each sends "OUTER 1650" or "INNER 312" (its knob in mV) 50 times a second, read with Web Serial (Edge/Chrome).
-// Pair each one once on this laptop with Ctrl+Alt+P (twice: once per controller). After that they connect by
-// themselves on every start, and again when replugged. A ring follows its controller while that controller talks;
-// after 0.6 s of silence that ring's keys take over, so a pulled cable never stops a game.
+// ===== The controller: ONE ESP32 on a breadboard (controller_esp32/controller_esp32.ino) with both knobs, the two fire
+// wires and a small screen. It's on NexusV at CFG.CTRL_IP (?ctrl=<ip> overrides it) and sends
+// "ORBIT <outer mV> <inner mV> <wires 1/0>" 50 times a second as a stream (http://<ip>:81/, Server-Sent Events). The game
+// tells it FIRE on every shot (http://<ip>/fire) so its screen flashes FIRE. Nothing to pair over Wi-Fi.
+// Backup: plugged into this laptop's USB, it sends the same lines there too (Web Serial: pair once with Ctrl+Alt+P), so a
+// Wi-Fi drop doesn't stop a game. While either one talks, the knobs turn the rings and the wires fire. After 0.6 s of
+// silence from both, the keys take over (A/D, ◄/►, Space).
 const USB_SERIAL = [0x10c4, 0x1a86, 0x0403, 0x303a].map(usbVendorId => ({ usbVendorId }));   // CP210x, CH340/CH9102, FTDI, Espressif
-const RING_NAMES = ['OUTER', 'INNER'], potMv = [null, null], potSeen = [-1e9, -1e9], owner = [null, null], dupAt = [-1e9, -1e9];
+const potMv = [null, null];
+let potSeen = -1e9, wifiSeen = -1e9, wires = false, ctrlOut = null, ctrlES = null;
 const reading = new Set();                    // ports being read right now
-const potLive = i => performance.now() - potSeen[i] < 600;
+const potLive = () => performance.now() - potSeen < 600;
+const ctrlVia = () => !potLive() ? null : performance.now() - wifiSeen < 600 ? 'Wi-Fi' : 'USB';
+const ctrlIp = () => new URLSearchParams(location.search).get('ctrl') || CFG.CTRL_IP;
 // the laser strip behind the screen: laser_bridge.py plays the effect over Bluetooth. Fire and forget: no bridge, no light
 const laser = v => fetch(`${CFG.LASER}/fx?v=${v}`).catch(() => {});
 let charging = false;
 setInterval(() => fetch(CFG.LASER + '/status').then(r => r.json()).then(s => $('#lzst').textContent = s.strip)
   .catch(() => $('#lzst').textContent = 'bridge not running (start.bat starts it)'), 2000);
-function potLine(line, port) {                // "OUTER 1650" -> knobs[0]
-  const m = /^(OUTER|INNER) (-?\d+)/.exec(line.trim());
+function potLine(line, src) {                 // "ORBIT 1650 2210 1" -> knobs[0], knobs[1], the fire wires touching
+  const m = /^ORBIT (-?\d+) (-?\d+) ([01])$/.exec(line.trim());   // src: 'wifi', or the USB port's writer
   if (!m) return;
-  const i = RING_NAMES.indexOf(m[1]), v = +m[2], [a, b] = CFG.POT_MV[i], now = performance.now();
-  if (owner[i] && owner[i] !== port && potLive(i)) dupAt[i] = now;   // two boards flashed as the same ring
-  owner[i] = port; potSeen[i] = now; potMv[i] = v;
-  knobs[i] = clamp((v - a) / (b - a), 0, 1);
+  potSeen = performance.now(); wires = m[3] === '1';
+  if (src === 'wifi') wifiSeen = potSeen; else if (src) ctrlOut = src;
+  [0, 1].forEach(i => { const v = +m[i + 1], [a, b] = CFG.POT_MV[i]; potMv[i] = v; knobs[i] = clamp((v - a) / (b - a), 0, 1); });
 }
+function ctrlFire() {                        // the controller's screen flashes FIRE: over Wi-Fi, and over USB if it's plugged in here
+  fetch(`http://${ctrlIp()}/fire`, { mode: 'no-cors' }).catch(() => {});
+  ctrlOut?.write(new TextEncoder().encode('FIRE\n')).catch(() => {});
+}
+function ctrlWifi() {                         // the Wi-Fi stream. EventSource reconnects by itself (the board asks for 1 s)
+  ctrlES = new EventSource(`http://${ctrlIp()}:81/`);
+  ctrlES.onmessage = ev => potLine(ev.data, 'wifi');
+}
+setInterval(() => { if (ctrlES?.readyState === EventSource.CLOSED) ctrlWifi(); }, 3000);   // ...and if it ever gives up, start over
 async function potOpen(port) {
   if (reading.has(port)) return;
   reading.add(port);
+  let out;
   try {
     await port.open({ baudRate: 115200 });
     await port.setSignals({ dataTerminalReady: false, requestToSend: false });   // these two lines can hold an ESP32 in reset
+    out = port.writable.getWriter();
     const reader = port.readable.pipeThrough(new TextDecoderStream()).getReader();
     for (let buf = ''; ;) {
       const { value, done } = await reader.read();
       if (done) break;
       const lines = (buf + value).split('\n'); buf = lines.pop();
-      lines.forEach(l => potLine(l, port));
+      lines.forEach(l => potLine(l, out));
     }
   } catch {}                                  // unplugged, or the Arduino Serial Monitor has the port
+  if (ctrlOut === out) ctrlOut = null;
   reading.delete(port);
 }
 async function pots() {
@@ -432,14 +448,20 @@ async function pots() {
 async function potPair() {                    // needs a real key press on this laptop (the browser asks which port)
   try { potOpen(await navigator.serial.requestPort({ filters: USB_SERIAL })); } catch {}
 }
-setInterval(() => {                           // the Ctrl+Alt+H panel: status + live numbers for calibrating CFG.POT_MV
-  const now = performance.now();
-  [0, 1].forEach(i => {
-    $('#ps' + i).textContent = now - dupAt[i] < 1500 ? `TWO CONTROLLERS SAY ${RING_NAMES[i]}: set INNER_RING = true on one and reflash` :
-      potLive(i) ? 'OK' : potMv[i] == null ? 'not seen yet' : 'SILENT (its keys work meanwhile; replug it)';
-    $('#pm' + i).textContent = potMv[i] ?? '-'; $('#pk' + i).textContent = knobs[i].toFixed(2);
-  });
-  navigator.serial?.getPorts().then(p => $('#potst').textContent = `${p.length} paired, ${reading.size} plugged in`);
+// what the screen tells players to use: the controller while it talks, the keys otherwise
+const how = () => potLive()
+  ? { k0: 'KNOB', k1: 'KNOB', fk: 'WIRES', fh: 'TOUCH + HOLD', tag: 'TOUCH THE WIRES', turn: 'turn the OUTER and INNER knobs.',
+      fire: 'touch the two wires together and hold', banner: 'TURN THE KNOBS   ·   TOUCH THE TWO WIRES TO FIRE' }
+  : { k0: 'A / D', k1: '◄ / ►', fk: 'SPACE', fh: 'HOLD TO FIRE', tag: 'HOLD SPACE', turn: 'outer ring: A / D.   inner ring: ◄ / ►.',
+      fire: 'hold SPACE', banner: 'OUTER RING  A / D   ·   INNER RING  ◄ / ►   ·   HOLD SPACE' };
+setInterval(() => {                           // the controls legend (bottom right), and the Ctrl+Alt+H panel for calibrating CFG.POT_MV
+  const h = how();
+  ['k0', 'k1', 'fk', 'fh'].forEach(k => setHtml($('#' + k), h[k]));
+  $('#ps').textContent = potLive() ? `OK over ${ctrlVia()}` : `${potSeen < 0 ? 'not seen yet' : 'SILENT'}: the keys work meanwhile. ` +
+    `Board powered? Its red LED lit = it isn't on NexusV (${ctrlIp()})`;
+  [0, 1].forEach(i => { $('#pm' + i).textContent = potMv[i] ?? '-'; $('#pk' + i).textContent = knobs[i].toFixed(2); });
+  $('#pw').textContent = potLive() ? (wires ? 'TOUCHING' : 'apart') : '-';
+  navigator.serial?.getPorts().then(p => $('#potst').textContent = `USB backup: ${p.length} paired, ${reading.size} plugged in`);
 }, 500);
 
 // ===== Sound (synthesized, same set as puzzles 2-3, plus the laser) =====
@@ -754,7 +776,7 @@ function update(dt, now) {
   if (mode === 'play') {
     const R = CFG.ROUNDS[round];
     rings.forEach((g, i) => {
-      const dir = potLive(i) ? 0 : turnInput(i);            // a talking controller sets knobs[i] itself; otherwise the keys turn it
+      const dir = potLive() ? 0 : turnInput(i);             // a talking controller sets knobs[i] itself; otherwise the keys turn it
       g.hold = dir ? g.hold + dt * 1000 : 0;
       const spd = CFG.TURN[0] + (CFG.TURN[1] - CFG.TURN[0]) * Math.min(1, g.hold / CFG.TURN[2]);
       const k = clamp(knobs[i] + dir * spd * dt / CFG.POT_DEG, 0, 1), stop = dir !== 0 && k === (dir > 0 ? 1 : 0);
@@ -772,7 +794,7 @@ function update(dt, now) {
       if (now > d.flip) { if (Math.random() < .5) d.dir = -d.dir; d.flip = now + rand(1500, 4000); }
       d.a += d.w * d.dir * dt;
     });
-    if (held.Space && now > coolUntil && !shot) {
+    if ((held.Space || potLive() && wires) && now > coolUntil && !shot) {   // Space, or the two wires touching
       if (!charging) { charging = true; laser('charge'); }
       charge += dt * 1000 / CFG.CHARGE_MS;
       const [mx, my] = at(e, MUZZLE * U);
@@ -976,7 +998,7 @@ function drawEmitter(now) {
   const tx = x + side * (b + U * .02), ty = y - b - U * .012;
   line(x + side * b, y - b, tx - side * 4, ty + 4);
   const status = !play || !hit ? 'STANDBY' : cool > 0 ? 'VENTING...' : charge > 0 ? `CHARGING ${Math.round(charge * 100)}%`
-    : clear ? '● CLEAR: HOLD SPACE' : `✕ BLOCKED: ${hit.kind === 'dog' ? 'WATCHDOG' : hit.i ? 'INNER RING' : 'OUTER RING'}`;
+    : clear ? '● CLEAR: ' + how().tag : `✕ BLOCKED: ${hit.kind === 'dog' ? 'WATCHDOG' : hit.i ? 'INNER RING' : 'OUTER RING'}`;
   ctx.textAlign = side > 0 ? 'left' : 'right';
   ctx.font = `bold ${Math.round(U * .018)}px Consolas, monospace`; ctx.fillStyle = '#fff'; ctx.fillText('YOUR LASER', tx, ty);
   ctx.font = `${Math.round(U * .014)}px Consolas, monospace`; ctx.fillStyle = clear || charge > 0 ? '#fff' : '#ff8a96';
@@ -1160,7 +1182,7 @@ async function start() {
   await crtOn();
   if (location.hash === '#game') { history.replaceState(null, '', location.pathname + location.search); return startRound(); }
   await wait(600);
-  for (const l of INTRO) { await termLine(l); await wait(T.after); }
+  for (const l of INTRO) { await termLine(l.replace(/\{(\w+)\}/, (_, k) => how()[k])); await wait(T.after); }
   sfx.ok(); await wait(600);
   startRound();
 }
@@ -1175,7 +1197,7 @@ async function startRound() {
   renderHud(); if (round === 0) microGlitch();
   const b = $('#banner'), bt = $('#bt');
   $('#bk').textContent = `LAYER ${round + 1} / ${CFG.ROUNDS.length}`;
-  $('#bs').textContent = round ? 'NEW HANDS ON THE CONTROLS' : 'OUTER RING  A / D   ·   INNER RING  ◄ / ►   ·   HOLD SPACE';
+  $('#bs').textContent = round ? 'NEW HANDS ON THE CONTROLS' : how().banner;
   bt.classList.remove('glitch'); b.classList.add('on'); sfx.stamp(); kick(6);
   await resolveText(bt, R.name, 55);
   bt.dataset.text = R.name; bt.classList.add('glitch'); setTimeout(() => bt.classList.remove('glitch'), 500);
@@ -1194,6 +1216,7 @@ function assist() {
 async function fire() {
   const R = CFG.ROUNDS[round], hit = impact(e, rings, dogs), t0 = performance.now();
   shots++; shot = { t0, e, ...hit, hold: T.hold }; coolUntil = t0 + CFG.COOLDOWN_MS; charging = false;
+  ctrlFire();                                  // the controller's little screen flashes FIRE
   laser(hit.kind !== 'core' ? hit.kind === 'dog' ? 'dog' : 'miss' : round >= CFG.ROUNDS.length - 1 ? 'win' : 'hit');
   fx('fire'); kick(9);
   await wait(T.travel);
@@ -1322,7 +1345,7 @@ addEventListener('keyup', ev => { delete held[ev.code]; });
 addEventListener('blur', () => Object.keys(held).forEach(k => delete held[k]));   // no stuck keys if the window loses focus
 addEventListener('resize', resize);
 
-resize(); renderMeter(); renderHud(); hub(); pots(); laser('idle'); requestAnimationFrame(frame);
+resize(); renderMeter(); renderHud(); hub(); pots(); ctrlWifi(); laser('idle'); requestAnimationFrame(frame);
 if (location.hash === '#game') setTimeout(start, 300);   // skip: start() jumps past the intro
 // staff preview of the ending (Ctrl+Alt+E): the fake win and its crash into game 5, without touching the team's HUMAN
 const preview = location.hash === '#end';
@@ -1360,12 +1383,14 @@ if (location.search.includes('test')) {
     const g = rs[0];
     for (let s = 0; s < 50; s++) { g.off += rad(rand(-40, 40)); keepReachable(g, eTo); console.assert(reachable(g, eTo), "Aurora's drift never pushes the spot past an end stop"); }
   }
-  potLine('OUTER 0'); potLine('INNER 3150'); console.assert(knobs[0] === 0 && knobs[1] === 1, 'each controller drives its own ring: left stop = 0, right stop = 1');
-  potLine('OUTER 9999'); potLine('INNER -50'); console.assert(knobs[0] === 1 && knobs[1] === 0, 'readings past the stops clamp');
-  potLine('garbage 12'); potLine('K 1575 3'); potLine('OUTER'); console.assert(knobs[0] === 1, 'broken lines are ignored');
-  CFG.POT_MV[0] = [3150, 0]; potLine('OUTER 0'); console.assert(knobs[0] === 1, 'swapped numbers = the ring turns the other way');
-  potLine('INNER 100', 'portA'); potLine('INNER 120', 'portB'); console.assert(performance.now() - dupAt[1] < 50, 'two boards flashed as INNER get flagged');
-  CFG.POT_MV[0] = [0, 3150]; potSeen.fill(-1e9); dupAt.fill(-1e9); owner.fill(null); potMv.fill(null);
+  potLine('ORBIT 0 3150 0'); console.assert(knobs[0] === 0 && knobs[1] === 1 && !wires && potLive(), 'each knob drives its own ring: left stop = 0, right stop = 1');
+  potLine('ORBIT 9999 -50 1'); console.assert(knobs[0] === 1 && knobs[1] === 0 && wires, 'readings past the stops clamp; 1 = wires touching');
+  ['garbage 12', 'ORBIT 1575 3', 'ORBIT', 'OUTER 0', 'ORBIT 5 5 2', 'ORBIT 5 5 1 junk'].forEach(l => potLine(l));
+  console.assert(knobs[0] === 1 && wires, 'broken lines are ignored');
+  CFG.POT_MV[0] = [3150, 0]; potLine('ORBIT 0 0 0'); console.assert(knobs[0] === 1 && !wires, 'swapped numbers = the ring turns the other way');
+  console.assert(how().fk === 'WIRES' && /wires/.test(how().fire), 'with the controller talking, the screen says to use the wires');
+  CFG.POT_MV[0] = [0, 3150]; potSeen = -1e9; wires = false; potMv.fill(null);
+  console.assert(how().fk === 'SPACE' && !potLive(), 'without it, the keys');
   rings = []; knobs[0] = knobs[1] = .5; eTo = e = rad(90);
   console.log('self-check done (no assertion errors above = pass)');
 }

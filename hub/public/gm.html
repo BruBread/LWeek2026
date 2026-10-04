@@ -140,7 +140,7 @@ const ROOMS = [
   { id: 'puzzle1', name: 'BRAIN UPLOAD',  k: 'sync',  stat: 'SYNC',   hint: -5, devs: ['mask'], keys: [['KeyF', 'FORCE CAPTURE', 'Force the mask capture?'], ['KeyR', 'RESET', 'Reset room 1?']] },
   { id: 'puzzle2', name: 'SYSTEM POWER',  k: 'power', stat: 'ENERGY', hint: -5, devs: ['bulb', 'camera'], keys: [['KeyU', 'UNLOCK'], ['KeyX', 'CAUGHT', 'Team caught? (-15 POWER, they advance)'], ['KeyR', 'RESET', 'Reset room 2?']] },
   { id: 'puzzle3', name: 'HIDDEN SIGNAL', k: 'trace', stat: 'TRACE',  aur: 1, hint: 5,  devs: ['beacon'], keys: [['KeyU', 'UNLOCK'], ['KeyF', 'FORCE WIN', 'Force the win?'], ['KeyR', 'RESET', 'Reset room 3?']] },
-  { id: 'puzzle4', name: 'CORE GATE',     k: 'human', stat: 'HUMAN',  aur: 1, hint: 5,  devs: ['ring0', 'ring1'], keys: [['KeyU', 'UNLOCK'], ['KeyF', 'FORCE WIN', 'Force the win?'], ['KeyR', 'RESET', 'Reset room 4?']] },
+  { id: 'puzzle4', name: 'CORE GATE',     k: 'human', stat: 'HUMAN',  aur: 1, hint: 5,  devs: ['ctrl'], keys: [['KeyU', 'UNLOCK'], ['KeyF', 'FORCE WIN', 'Force the win?'], ['KeyR', 'RESET', 'Reset room 4?']] },
 ];
 
 const $ = s => document.querySelector(s);
@@ -168,15 +168,27 @@ function tone(f, dur, delay = 0) {
 }
 
 // ===== Device lights. Each answers [ok, what to check]: ok true = green, false = red (beeps once), null = grey (can't tell) =====
-// Whoever already talks to a device reports it: P1 pings the mask, P3 pushes codes to its boards, P4 reads the ring
-// controllers over USB, the bulb bridge probes the bulb, the signup PC looks for the camera; the rest is the hub's roster.
+// Whoever already talks to a device reports it: P1 pings the mask, P3 pushes codes to its boards, the bulb bridge probes
+// the bulb, the signup PC looks for the camera; the rest is the hub's roster. The P4 controller is pinged from this page
+// too, so its light works even while the P4 game is closed.
 const hubUp = () => ws?.readyState === 1, linked = id => rost.pages.includes(id) || rost.devices.includes(id);
 const via = (room, f) => !hubUp() ? [null, 'the hub is down'] : !online(room) ? [null, `can't tell: the ${room} laptop is offline`] : f(status[room]);
 const beacon = () => hubUp() && linked('beacon-sim') ? [true, 'a phone stands in (/beacon)'] :
   via('puzzle3', s => s.boards?.beacon === undefined ? [null, 'checking…'] : s.boards.beacon === true ? [true, 'ESP32 board answering (.51)'] :
     [false, 'IR beacon ESP32 not answering (.51), and no phone on /beacon. Switched on? On NexusV?']);
-const ring = i => () => via('puzzle4', s => s.rings?.[i] ? [true, 'sending knob readings'] :
-  [false, `no readings from the ${i ? 'INNER' : 'OUTER'} ring controller. USB plugged into the P4 laptop? Paired (Ctrl+Alt+P there)? The keys work meanwhile.`]);
+// the P4 controller ESP32 (knobs + fire wires + screen) on NexusV. ?ctrl=<ip> overrides the address, like in game.html
+const CTRL_IP = new URLSearchParams(location.search).get('ctrl') || '192.168.0.52';
+let ctrlUp = null;                            // does the board answer this page? null = not checked yet
+setInterval(() => fetch(`http://${CTRL_IP}/`, { mode: 'no-cors', signal: AbortSignal.timeout(1500) })
+  .then(() => ctrlUp = true, () => ctrlUp = false), 2000);
+const ctrl = () => {
+  const s = online('puzzle4') ? status.puzzle4 : null;           // what the P4 game says, if its laptop is online
+  if (ctrlUp === null) return [null, 'checking…'];
+  if (!ctrlUp) return [false, s?.ctrl ? `not answering on NexusV (${CTRL_IP}): the game is running on its USB backup. Its red LED lit?` :
+    `controller ESP32 not answering (${CTRL_IP}). Switched on? On NexusV? Its red LED lit = not on Wi-Fi. The P4 keys work meanwhile.`];
+  if (s && !s.ctrl) return [false, `on NexusV (${CTRL_IP}), but the P4 game gets no readings from it. Reload the game (RESET on the P4 card).`];
+  return [true, `on NexusV (${CTRL_IP})` + (s?.ctrl ? `, the game reads it over ${s.ctrlVia}` : '')];
+};
 const DEVS = {
   hub:    ['HUB', () => hubUp() ? [true, 'connected'] : [false, 'not responding. Is hub\\start.bat running on the hub laptop?']],
   signup: ['SIGNUP', () => S ? [true, 'signup server answering'] : [false, 'signup server not responding. Run signup\\start.bat on the signup PC. Until then: type team names + NEW TEAM.']],
@@ -190,8 +202,7 @@ const DEVS = {
   camera: ['CAMERA', () => !S ? [null, "can't tell: the signup server is down"] : !S.camera ? [null, 'checking…'] : S.camera.error ? [false, S.camera.error] :
     S.camera.ip ? [true, 'camera at ' + S.camera.ip] : [false, 'camera not found on the network. Plugged in? On NexusV?']],
   beacon: ['IR BEACON', beacon],
-  ring0:  ['RING OUTER', ring(0)],
-  ring1:  ['RING INNER', ring(1)],
+  ctrl:   ['CONTROLLER', ctrl],
 };
 $('#sys').innerHTML = ['hub', 'signup', 'kiosk', 'board'].map(d => `<span class="dev unk" data-dev="${d}">${DEVS[d][0]}</span>`).join('');
 $('#sys').onclick = e => { const d = e.target.closest('.dev'); if (d) alert(d.textContent + ': ' + d.title); };
