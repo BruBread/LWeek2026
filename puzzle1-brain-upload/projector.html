@@ -238,6 +238,7 @@ line the corner brackets up with the projector edges
 <span id="calibInfo"></span>
 
 Ctrl+Alt+F  force capture (if click or mask fails)
+Ctrl+Alt+B  blink the mask eyes (hint)
 Ctrl+Alt+R  reset for next team (new code)
 Ctrl+Alt+P  replay the sequence (timing tests)
 Ctrl+Alt+W  replay only the win / mind upload
@@ -248,6 +249,7 @@ Ctrl+Alt+M  mute / unmute</div>
 const CFG = {
   MASK_IPS: ['192.168.0.50'], // mask ESP32 IP on each Wi-Fi it may join (see NETS in secrets.h); commands go to all
   EYES_DIM: 255, EYES_FULL: 255,   // eyes on hover / on click (0..255)
+  EYES_LOW: 30,              // eyes when Aurora attacks (mashing brightens them back to full) and the dip while she talks
   DUST: 140,                 // particles sucked into the mask after the click; lower if the booth laptop stutters
   RAIN_CELL: 18,             // px per character in the collapse; smaller = more mask detail, bigger = faster
   NODES: 38,                 // network nodes in the finale
@@ -334,6 +336,10 @@ async function eyes(v) {
   eyeBusy = false;
 }
 setInterval(() => { eyeSent = null; eyes(eyeWant); }, 2000);
+async function blink(n = 3, ms = 180) {          // flash the eyes against whatever they're showing, then put them back
+  const b = eyeWant;
+  for (let i = 0; i < n; i++) { eyes(b ? 0 : CFG.EYES_FULL); await wait(ms); eyes(b); await wait(ms); }
+}
 
 // hub connection (SYNC result, then 'p1done' unlocks puzzle 2). Messages sent while the hub is down wait in hubQ
 // and go out on reconnect, so a team that wins during a hub hiccup still unlocks puzzle 2.
@@ -741,12 +747,19 @@ function shake(el, px, ms) {
 }
 let typeTok = 0;
 async function type(el, text, voice) {             // voice: a VOICES entry for Aurora; none = keyboard clicks
-  const me = ++typeTok; let n = 0; el.textContent = '';
+  // while Aurora talks the eyes flicker with her blips, like a mouth; not during code entry, where they stay off
+  const me = ++typeTok, base = eyeWant, mouth = voice && mode !== 'input' && mode !== 'check';
+  let n = 0, open = false; el.textContent = '';
   for (const ch of text) {
     if (me !== typeTok) return;
-    el.textContent += ch; if (/\w/.test(ch)) voice ? (n++ % voice.every || blip(voice)) : sfx.key();
+    el.textContent += ch;
+    if (/\w/.test(ch)) {
+      if (!voice) sfx.key();
+      else if (!(n++ % voice.every)) { blip(voice); if (mouth) eyes((open = !open) ? (base ? CFG.EYES_LOW : CFG.EYES_FULL) : base); }
+    }
     await wait(T.typeChar);
   }
+  if (mouth) eyes(base);
 }
 function log(line) {
   const l = $('#log'), s = line.replace('%', (Math.random() * 0xffff | 0).toString(16).toUpperCase().padStart(4, '0'));
@@ -781,7 +794,10 @@ async function capture() {
               { transform: 'translate(-50%,-50%) scale(.95)', opacity: 1, offset: .6 },
               { transform: 'translate(-50%,-50%) scale(1)', opacity: 1 }], { duration: 260, easing: 'ease-out' });
   sfx.scream(); play('detected'); shake(app, 14, T.fight);
-  await wait(T.fight);
+  for (const end = performance.now() + T.fight; performance.now() < end; ) {   // the eyes glitch while she fights back
+    eyes(Math.random() < .5 ? 0 : CFG.EYES_FULL); await wait(rand(40, 140));
+  }
+  eyes(CFG.EYES_FULL);
   al.hidden = true; $('#upload').hidden = true; rgbAmt = 0; app.classList.remove('rgb');
 
   // ...and the screen collapses into falling characters
@@ -793,7 +809,7 @@ async function capture() {
   await wait(T.silence);
 
   // beat 4: CRT boot
-  mode = 'crt';
+  mode = 'crt'; eyes(0);                          // eyes go dark when the binary comes up and stay off while they decode
   play('crtMusic', true);
   await crtOn([crt], 'crt', '#4dff88');
 
@@ -871,7 +887,7 @@ async function check() {
   type($('#aur'), TAUNTS[taunt++ % TAUNTS.length], VOICES.aurora);
 }
 async function win() {
-  mode = 'done';
+  mode = 'done'; eyes(CFG.EYES_FULL);             // right code: the eyes snap back on and stay on from here
   const aur = $('#aur');
   fade('crtMusic', 0, 900);
   await type(aur, 'No. Wait. You can\'t-', VOICES.aurora);
@@ -960,7 +976,7 @@ async function attack(A, bar) {
   B.classList.add('atk');
   $('#pst').textContent = 'BLOCKED'; $('#pau').textContent = 'ATTACKING';
   $("#atk").classList.remove("prompt"); $('#mashM i').style.width = '0';
-  eyes(CFG.EYES_DIM); hud();
+  eyes(CFG.EYES_LOW); hud();                      // she drains the mask; their mashing powers it back up
   {
     beat.dist = true; fade('finaleMusic', .45, 200); sfx.alarm(); say(A.text);
     // full-screen RGB split is expensive: only a burst on impact, not the whole mash window
@@ -977,12 +993,13 @@ async function attack(A, bar) {
   let left;
   while (mash < T.mashNeed && (left = T.mashTime - (performance.now() - t0)) > 0) {
     $('#mashM i').style.width = mash / T.mashNeed * 100 + '%';
+    eyes(CFG.EYES_LOW + (CFG.EYES_FULL - CFG.EYES_LOW) * mash / T.mashNeed | 0);
     mt.textContent = (left / 1000).toFixed(1) + 's'; mt.classList.toggle('low', left < 1500);
     await wait(30);
   }
   $('#mashM i').style.width = '100%';
   play('mashOut');
-  if (mash >= T.mashNeed) await shatter($('#mash'));   // they broke through: the banner shatters
+  if (mash >= T.mashNeed) { eyes(CFG.EYES_FULL); await shatter($('#mash')); }   // they broke through: full eyes, the banner shatters
   else { missed++; hud(); $('#nStat').animate([{ color: '#fff', textShadow: '0 0 20px #fff' }, {}], 600); }   // too slow: SYNC drops, visibly
 
   B.classList.remove('atk'); rgbAmt = 0; app.classList.remove('rgb');
@@ -1053,7 +1070,7 @@ async function finale() {
   hubSend([...replay ? [] : [{ t: 'result', k: 'sync', v: sync(),   // staff replays don't overwrite a real team's SYNC
     facts: { breached: `${ATTACKS.length - missed}/${ATTACKS.length}`, p1wrong: taunt, note: $('#pnote').textContent } }],
     { t: 'evt', e: 'p1done' }]);                  // unlocks puzzle 2
-  for (let i = 0; i < 3; i++) { eyes(0); await wait(180); eyes(CFG.EYES_FULL); await wait(180); }
+  blink();
 }
 
 // ===== Hotspot (over the physical mask) + calibration =====
@@ -1122,6 +1139,7 @@ addEventListener('keydown', e => {
   if (e.ctrlKey && e.altKey) {
     e.preventDefault();
     if (e.code === 'KeyF') capture();
+    if (e.code === 'KeyB') blink(3, 300);          // staff hint: "look at the mask"
     if (e.code === 'KeyR') { eyes(0); setTimeout(() => location.reload(), 150); }
     if (e.code === 'KeyP') { eyes(0); location.hash = 'replay'; location.reload(); }
     if (e.code === 'KeyW') { eyes(0); location.hash = 'win'; location.reload(); }

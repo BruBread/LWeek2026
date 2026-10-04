@@ -92,7 +92,7 @@ Check it with `python -c "import tinytuya, websocket"`. No output means it's ins
 | 24 | colour | hex string `HHHHSSSSVVVV`: h 0-360, s 0-1000, v 0-1000, 4 hex digits each |
 
 - Send several DPs in **one** command: `b.set_multiple_values({'20': True, '21': 'colour', '24': '000003e803e8'})`. In colour mode, DP 21 must be `'colour'` before DP 24 does anything.
-- **At most 10 commands per second**, or the bulb drops the connection. The bridge stays at 5.
+- **At most 10 commands per second**, or the bulb drops the connection. Even a steady 5 per second (Enter spam) backs it up: it freezes, then plays the queued commands all at once. The bridge stays at 2.5.
 - Wrap every send in try/except and reconnect on failure (`rainbow.py` and `Music.py` in the Lights folder do this).
 - Colour examples: red `000003e803e8`, dim red `000003e80064`, green `007803e803e8`, blue `00f003e803e8`. White: `{'20': True, '21': 'white', '22': 1000}`.
 
@@ -110,7 +110,8 @@ Check it with `python -c "import tinytuya, websocket"`. No output means it's ins
 5. **Fail-safe:** if no message arrives for **3 s** (hub closed, Wi-Fi down), set the bulb to white, brightness 1000. Do the same when the script exits normally. At start-up it sends nothing until the hub or the game says what to show.
 6. **Newest state wins:**
    - A new state cancels whatever effect is running.
-   - Commands are paced to **no more than 5 per second**. When the key is pressed rapidly, the middle states are dropped, not queued.
+   - Commands are paced to **no more than 2.5 per second** (`MIN_GAP` = 0.4 s, the knob to tune). When the key is pressed rapidly, the middle states are dropped, not queued.
+   - A command the bulb already shows is not sent again.
 7. One persistent `BulbDevice`. On a send error, wait 1 s, reconnect and send the current state again.
 
 The light states (`LOOKS` at the top of `bulb_bridge.py`). The values are starting points; tune them in the real hallway.
@@ -118,18 +119,18 @@ The light states (`LOOKS` at the top of `bulb_bridge.py`). The values are starti
 | State | When the game sends it | Bulb |
 |---|---|---|
 | `idle` | locked (puzzle 1 still playing), page load, Ctrl+Alt+R | **off** |
-| `ready` | unlocked: Ctrl+Alt+U or puzzle 1's `p1done` | the dimmest cyan (h 180, v 10) |
+| `ready` | unlocked: Ctrl+Alt+U or puzzle 1's `p1done` | cyan at 75% (h 180, v 750), flickering: it dips to the dimmest cyan (v 10) about once every 5 s, so the team sees where to go. After about 20 min it stays steady |
 | `on` | light key held | **green**, full. A straight switch with no fade: the bulb is already a little slow |
 | `off` | light key not held (also Space / start of the tutorial) | **off**. The hallway goes fully dark, so keep a separate small night light there |
 | `low` | energy warning | red flicker (red / off), about 2 s, then back to the current state |
 | `boost` | rescue word typed | one white flash (about 0.3 s), then back to the previous state |
-| `down` | zero energy / the jumpscare cut | red fading down (about 1 s), then off |
+| `down` | zero energy / the jumpscare cut | red fading down (about 1.6 s), then off |
 | `scare` | LOOK BEHIND YOU | the brightest white (white mode, brightness 1000, coolest). The game sends `off` when it vanishes |
 | `win` | SYSTEM POWERED | green, full |
 | `solid` `#ffffff` | GM SAFE | white, 1000 |
 | `solid` other colour | GM FINALE RED (`#ff0000`) | that colour in colour mode, converted to h/s/v |
 
-During the fake start's "dread", the game flips the light on and off quickly. The 5-per-second pacing turns this into a stutter, which is the intended effect.
+During the fake start's "dread", the game flips the light on and off quickly. The 2.5-per-second pacing turns this into a stutter, which is the intended effect.
 
 **Game side:**
 - `lights()` sends straight to the hub: `hubWs?.readyState === 1 && hubWs.send(JSON.stringify({ t: 'cmd', to: 'strip', a: 'p2', v: state }))`.
@@ -142,7 +143,7 @@ During the fake start's "dread", the game flips the light on and off quickly. Th
 ## Test
 1. Run `hub\start.bat`. A second minimized window, "nexus-bulb", opens. The GM panel shows **● strip** as online. Once the P2 page is open and locked, the bulb is off.
 2. On the GM panel, press **FINALE RED**: the bulb turns red. Press **SAFE**: it turns white.
-3. Run this folder's `start.bat`: the bulb stays off. Press Ctrl+Alt+U: dim cyan. Press Space. Hold the plush key during the tutorial: the bulb goes green. Let go: it goes dim red. The laptop's own Enter does nothing.
+3. Run this folder's `start.bat`: the bulb stays off. Press Ctrl+Alt+U: flickering cyan. Press Space. Hold the plush key during the tutorial: the bulb goes green. Let go: it goes dim red. The laptop's own Enter does nothing.
 4. Close the hub's window. Within 3 s, the bulb goes white.
 5. Switch the lamp off and on: the bulb comes back white (the power-on behaviour from step 5).
 

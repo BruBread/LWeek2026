@@ -32,7 +32,7 @@ All pins used (GND, D25, D27) are on the same side of the ESP32 DevKit. Only the
 |---|---|
 | Red on | Not on Wi-Fi yet (router off, or wrong name/password in `NETS`) |
 | Red off | On Wi-Fi and ready |
-| Blue eyes | On while the cursor hovers the mask area on the projector (and during the click sequence) |
+| Blue eyes | On while the cursor hovers the mask area and through the click sequence (they glitch at 97%); off from the binary screen until the right code; on again after the win. They flicker while Aurora talks (not during code entry). In the finale's attacks they drop to dim, and mashing brightens them back up |
 
 The DevKit's own small blue LED (GPIO 2) is switched off by the sketch. Its red power LED is wired straight to power and can't be turned off in code: cover it with black tape.
 
@@ -51,12 +51,13 @@ The DevKit's own small blue LED (GPIO 2) is switched off by the sketch. Its red 
 |---|---|
 | Ctrl+Alt+H | Control panel: mask box, corner brackets, current code and this list (drag the panel to move it) |
 | Ctrl+Alt+F | Force capture (use if the click or mask fails) |
+| Ctrl+Alt+B | Blink the mask eyes 3 times (hint for a team that hasn't found the mask). Also **BLINK MASK** on the GM panel |
 | Ctrl+Alt+R | Reset for the next team (new code, eyes off) |
 | Ctrl+Alt+P | Replay the sequence (for tuning timings) |
 | Ctrl+Alt+W | Replay only the win / mind-upload finale |
 | Ctrl+Alt+M | Mute / unmute |
 
-During the finale Aurora attacks four times. Tell players to **mash any key** on the laptop to push her back (they have a 5-second timer; each attack clears on its own when it hits zero). Her spoken lines use the built-in Windows voice. Set `CFG.VOICE = false` to turn them off.
+During the finale Aurora attacks four times. Tell players to **mash any key** on the laptop to push her back (they have a 5-second timer; each attack clears on its own when it hits zero). Her lines use Undertale-style text blips (drop `sounds/aurora-voice.mp3` to use your own blip).
 
 Timings, particle count and volume are in `CFG` / `T` at the top of `projector.html`.
 

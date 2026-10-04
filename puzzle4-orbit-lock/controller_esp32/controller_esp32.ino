@@ -1,15 +1,16 @@
-// NEXUS Puzzle 4: the Orbit Lock controller. ONE ESP32 on a breadboard, on the booth Wi-Fi (NexusV) at 192.168.0.52.
+// NEXUS Puzzle 4: the Orbit Lock controller. ONE ESP32 on a breadboard, on the booth Wi-Fi (NexusV) at 192.168.0.52,
+// or on walawifi at 192.168.1.52 when NexusV doesn't connect within 4 s (networks: secrets.h).
 // Everything is on ONE side of the board (the VIN side), so nothing needs the 3V3 pin on the other side:
 //   - two B100k knobs: middle pins on D34 (OUTER ring) and D35 (INNER ring); their + ends get 3.3 V from D32
 //   - two loose fire wires, one from D13 and one from GND. Touch their metal ends together and hold = hold to fire
 //   - a 1.3" OLED screen: VCC from D25, SDA on D26, SCK on D27. A spinning circle while waiting, FIRE when it shoots
 //   - a red LED on D33 (through a 120 Ω resistor): on while the board is not on Wi-Fi, off once it's connected
-//     (same as the mask and the beacon)
+//     (same as the mask and the beacon). On every shot it blinks along with the screen's FIRE
 //   D32 and D25 are switched on as little 3.3 V supplies: the knobs draw almost nothing, the screen ~10-20 mA
 // Every 20 ms it sends  ORBIT <outer knob mV> <inner knob mV> <wires touching 1/0>    e.g.  ORBIT 1650 2210 0
-//   - over Wi-Fi: http://192.168.0.52:81/ is a never-ending stream of those lines (Server-Sent Events) that game.html reads
+//   - over Wi-Fi: http://<ip>:81/ is a never-ending stream of those lines (Server-Sent Events) that game.html reads
 //   - over USB too, so a board plugged into the Puzzle 4 laptop still works if the Wi-Fi drops (Web Serial, Ctrl+Alt+P)
-// The game says FIRE on every shot it really fires (http://192.168.0.52/fire, or the line FIRE over USB): the screen
+// The game says FIRE on every shot it really fires (http://<ip>/fire, or the line FIRE over USB): the screen
 // flashes FIRE. Power: any USB port or charger.
 // Needs the U8g2 library (Arduino IDE: Tools > Manage Libraries > search "U8g2" > Install). Wi-Fi: secrets.h.
 // Wiring and setup: ../SETUP.md. The mV at each knob's end stops goes into CFG.POT_MV in game.html.
@@ -19,13 +20,14 @@
 #include <U8g2lib.h>
 #include <driver/gpio.h>
 
-// Networks in order of preference. If one can't be joined within TRY_MS, the board tries the next.
-// Each ip must be free on that network, sit in its router's subnet, and match CFG.CTRL_IP in game.html.
+// Networks in order of preference. The first (NexusV) gets FIRST_TRY_MS to connect, the others TRY_MS, then the next.
+// Each ip must be free on that network, sit in its router's subnet, and be listed in CFG.CTRL_IPS in game.html.
 struct Net { const char* ssid; const char* pass; IPAddress ip, gateway; };
 #include "secrets.h"   // Net NETS[] = {...}: Wi-Fi names + passwords
 const int NET_COUNT = sizeof(NETS) / sizeof(NETS[0]);
 IPAddress SUBNET(255, 255, 255, 0);
-const unsigned long TRY_MS = 10000;
+const unsigned long FIRST_TRY_MS = 4000;   // no NexusV after 4 s: try walawifi
+const unsigned long TRY_MS = 10000;        // a backup network gets longer: joining can take a few seconds
 
 const int OUTER_PIN = 34, INNER_PIN = 35;  // the knobs' middle pins. Input-only ADC1 pins (they work with Wi-Fi on)
 const int KNOB_POWER = 32;      // both knobs' + pins
@@ -58,6 +60,9 @@ volatile bool touching = false;            // shared with the screen (other core
 volatile unsigned long fireUntil = 0;
 String inbox;
 
+bool firing() { return millis() < fireUntil; }
+bool fireBlink() { return (millis() / 100) % 2; }  // the FIRE beat: the screen's frame and the red LED, on/off every 100 ms
+
 int readMv(int pin) {           // calibrated millivolts, averaged
   long sum = 0;
   for (int i = 0; i < SAMPLES; i++) sum += analogReadMilliVolts(pin);
@@ -77,6 +82,7 @@ void acceptViewer() {
   WiFiClient c = stream.accept();
   if (!c) return;
   c.setTimeout(200);
+  c.setNoDelay(true);           // send each reading at once, don't wait to batch them
   while (c.connected()) { String l = c.readStringUntil('\n'); if (l.length() <= 1) break; }
   c.print("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\n"
           "Access-Control-Allow-Origin: *\r\nConnection: keep-alive\r\n\r\nretry: 1000\n\n");
@@ -89,10 +95,10 @@ void screen(void *) {
   oled.begin();
   for (float a = 0;;) {
     oled.clearBuffer();
-    if (millis() < fireUntil) {                     // FIRE, in a blinking double frame. No all-white flash: the screen
+    if (firing()) {                                 // FIRE, in a blinking double frame. No all-white flash: the screen
       oled.setFont(u8g2_font_logisoso32_tr);        // runs off a pin, so it keeps the lit pixels few
       oled.drawStr((128 - oled.getStrWidth("FIRE")) / 2, 48, "FIRE");
-      if ((millis() / 100) % 2) { oled.drawFrame(0, 0, 128, 64); oled.drawFrame(3, 3, 122, 58); }
+      if (fireBlink()) { oled.drawFrame(0, 0, 128, 64); oled.drawFrame(3, 3, 122, 58); }
     } else {                                        // a spinning circle: a big dot leading, smaller ones trailing
       a = fmod(a + (touching ? 0.45 : 0.12), TWO_PI);   // spins faster while the wires touch (the laser is charging)
       for (int i = 0; i < 12; i++) {
@@ -117,6 +123,7 @@ void setup() {
   xTaskCreatePinnedToCore(screen, "screen", 4096, nullptr, 1, nullptr, 0);
 
   WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);         // Wi-Fi power saving bunches the readings up (the rings stutter): off, the board is on USB power
   join(0);
   server.on("/fire", [] {
     fireUntil = millis() + FIRE_SHOW_MS;
@@ -137,10 +144,11 @@ void loop() {
 
   bool online = WiFi.status() == WL_CONNECTED;
   if (online) tryStart = millis();                                  // stay on this network while it works
-  else if (millis() - tryStart > TRY_MS) join((net + 1) % NET_COUNT);   // offline too long: try the next one
+  else if (millis() - tryStart > (net ? TRY_MS : FIRST_TRY_MS)) join((net + 1) % NET_COUNT);   // offline too long: try the next one
   if (online && !wasOnline) Serial.printf("controller ready on %s at http://%s:81/\n", NETS[net].ssid, WiFi.localIP().toString().c_str());
   wasOnline = online;
-  digitalWrite(RED_PIN, !online);                   // red = not connected (same as the mask and the beacon)
+  // red = not connected (same as the mask and the beacon); during a shot it blinks with the screen's FIRE instead
+  digitalWrite(RED_PIN, firing() ? fireBlink() : !online);
 
   for (Knob &k : knobs) {
     k.level += (readMv(k.pin) - k.level) * SMOOTH;

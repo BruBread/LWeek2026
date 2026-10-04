@@ -8,20 +8,26 @@ import tinytuya, websocket
 HUB = 'ws://localhost:3000/ws'
 NET = os.environ.get('NET', '192.168.0')   # booth.bat sets it
 WATCHDOG = 3      # s with no message from the hub (it pings every 1 s) -> fail-safe white
-MIN_GAP = 0.2     # s between bulb commands: 5 per second; the bulb drops the connection above 10
+MIN_GAP = 0.4     # s between bulb commands. At 0.2 (5 per second), Enter spam backed the bulb up: it froze, then
+                  # played the queued commands all at once. Raise it if that still happens, lower it if the bulb keeps up
 PROBE = 10        # s: while nothing changes, check the bulb still answers (for the GM panel's BULB light)
 
 def colour(h, s, v): return {'20': True, '21': 'colour', '24': f'{h:04x}{s:04x}{v:04x}'}   # h 0-360, s/v 0-1000
 WHITE = {'20': True, '21': 'white', '22': 1000, '23': 1000}   # the brightest: full brightness, coolest white
 OFF = {'20': False}
 GREEN = colour(120, 1000, 1000)
-CYAN = colour(180, 1000, 10)       # the dimmest cyan: puzzle 2 unlocked, waiting for the team
+CYAN = colour(180, 1000, 750)      # puzzle 2 unlocked, waiting for the team: 75% cyan...
+CYAN_DIM = colour(180, 1000, 10)   # ...that keeps dipping to the dimmest cyan, so the team sees where to go
+# one flicker (~5 s, ~1 command per second): steady, a stutter, steady, a dip
+FLICKER = [(CYAN, 2), (CYAN_DIM, .4), (CYAN, .4), (CYAN_DIM, .4), (CYAN, 1.2), (CYAN_DIM, .4)]
 FLASH = colour(0, 1000, 600)
 
 # game state -> steps of (bulb command, seconds to hold it). The last step stays.
 LOOKS = {
     'idle':  [(OFF, 0)],           # locked: puzzle 1 still playing, page load, Ctrl+Alt+R
-    'ready': [(CYAN, 0)],          # unlocked: Ctrl+Alt+U or puzzle 1's p1done
+    # unlocked: Ctrl+Alt+U or puzzle 1's p1done. Flickers until the game sends the next state.
+    # ponytail: 240 flickers = ~20 min, then steady cyan; loop it in bulb_loop if a team ever waits longer
+    'ready': FLICKER * 240 + [(CYAN, 0)],
     'on':   [(GREEN, 0)],
     'off':  [(OFF, 0)],            # every moment the light key isn't held
     'win':  [(GREEN, 0)],
@@ -78,8 +84,9 @@ def send(bulb, dps):
     if r and 'Error' in r: raise IOError(r['Error'])
 
 def bulb_loop():
-    # newest state wins: a new state cancels the running steps, and commands never go faster than MIN_GAP
-    bulb, last = None, 0
+    # newest state wins: a new state cancels the running steps, and commands never go faster than MIN_GAP.
+    # shown = what the bulb last got; a step that matches it isn't sent (spam that ends where it started costs nothing)
+    bulb, last, shown = None, 0, None
     while True:
         if not wake.wait(0 if seen['bulb'] is None else PROBE):
             # quiet: ask the bulb for its state (changes nothing it shows). Also finds it once the lamp is switched on
@@ -90,22 +97,23 @@ def bulb_loop():
                 seen.update(bulb=True, ip=bulb.address)
             except Exception as e:
                 if seen['bulb'] is not False: print('bulb not answering:', e)
-                bulb = None; seen.update(bulb=False, ip=None)
+                bulb = shown = None; seen.update(bulb=False, ip=None)
             last = time.time()
             continue
         wake.clear()
         for dps, hold in want:
-            time.sleep(max(0, last + MIN_GAP - time.time()))
-            if wake.is_set(): break
-            try:
-                bulb = bulb or connect()
-                send(bulb, dps)
-                seen.update(bulb=True, ip=bulb.address)
-            except Exception as e:
-                print('bulb not answering:', e, '- retrying')
-                seen.update(bulb=False, ip=None)
-                bulb = None; time.sleep(1); wake.set(); break   # replays the current state
-            last = time.time()
+            if dps != shown:
+                time.sleep(max(0, last + MIN_GAP - time.time()))
+                if wake.is_set(): break
+                try:
+                    bulb = bulb or connect()
+                    send(bulb, dps)
+                    seen.update(bulb=True, ip=bulb.address)
+                except Exception as e:
+                    print('bulb not answering:', e, '- retrying')
+                    seen.update(bulb=False, ip=None)
+                    bulb = shown = None; time.sleep(1); wake.set(); break   # replays the current state
+                shown, last = dps, time.time()
             if hold and wake.wait(hold): break
 
 def watchdog():

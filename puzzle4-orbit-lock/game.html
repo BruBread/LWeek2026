@@ -112,6 +112,37 @@ body.game #ctl { display: block; animation: boxIn .7s .15s backwards; }
 #chg { width: 5.5em; height: .45vw; background: rgba(255,51,68,.2); }
 #chg i { display: block; width: 100%; height: 100%; background: #fff; box-shadow: 0 0 10px var(--hud); transform-origin: left; transform: scaleX(0); }
 
+/* training, before layer 1: one step at a time on the left, the rings stay in view */
+#tut { position: absolute; z-index: 3; left: 3.5vw; top: 50%; translate: 0 -50%; width: 25vw; display: none; padding: 1.3vw 1.6vw 1.5vw;
+  background: rgba(10,0,3,.9); border: 1px solid rgba(255,51,68,.6); }
+#tut.on { display: block; animation: boxIn .5s backwards; }
+#tutN { font-size: .9vw; letter-spacing: .4em; opacity: .85; }
+#tutT { display: block; margin: .7vw 0 .5vw; font-size: 2.3vw; line-height: 1.15; letter-spacing: .05em; color: #fff; font-weight: 700; }
+#tut.ok #tutT { color: var(--g); text-shadow: 0 0 18px var(--g); }
+#tutS { display: block; min-height: 3em; font-size: 1.05vw; line-height: 1.5; letter-spacing: .1em; color: #ffc9cf; }
+#tutArt { height: 8.5vw; margin: .6vw 0 .9vw; display: flex; align-items: center; justify-content: center; }
+#tutArt svg { height: 100%; overflow: visible; }
+#tutBar { height: .55vw; background: rgba(255,51,68,.2); }
+#tutBar i { display: block; width: 100%; height: 100%; background: #fff; box-shadow: 0 0 10px var(--hud); transform-origin: left; transform: scaleX(0); }
+#tutDots { display: flex; gap: .4vw; margin-top: .9vw; }
+#tutDots i { flex: 1; height: .25vw; background: rgba(255,51,68,.25); }
+#tutDots i.now { background: var(--hud); } #tutDots i.done { background: #fff; }
+/* the art: a knob turning, two keys, or the two wires meeting */
+.kb { display: inline-block; min-width: 3.4vw; margin: 0 .4vw; padding: .6vw .9vw; border: 2px solid #fff; border-bottom-width: .45vw; border-radius: .4vw;
+  color: #fff; font-size: 1.8vw; text-align: center; animation: keyTap 1.2s ease-in-out infinite; }
+.kb + .kb { animation-delay: .6s; }
+.kb.wide { min-width: 12vw; animation-duration: 2.4s; }
+@keyframes keyTap { 0%, 55%, 100% { transform: none; } 20%, 40% { transform: translateY(.3vw); border-bottom-width: .15vw; } }
+.knobArt .turn { transform-origin: 0 0; animation: knobTurn 2.4s ease-in-out infinite alternate; }
+@keyframes knobTurn { from { transform: rotate(-70deg); } to { transform: rotate(70deg); } }
+.wireArt .wa { animation: wireA 2.2s ease-in-out infinite; } .wireArt .wb { animation: wireB 2.2s ease-in-out infinite; }
+.wireArt .spark { opacity: 0; transform-origin: 100px 30px; animation: spark 2.2s steps(1) infinite; }
+@keyframes wireA { 0%, 100% { transform: none; } 40%, 85% { transform: translateX(14px); } }
+@keyframes wireB { 0%, 100% { transform: none; } 40%, 85% { transform: translateX(-14px); } }
+@keyframes spark { 0%, 39%, 86% { opacity: 0; } 40% { opacity: 1; } 55% { opacity: .5; } 70% { opacity: 1; } }
+.wireArt.touch .wa, .wireArt.touch .wb, .wireArt.touch .spark { animation: none; }       /* the real wires touch: freeze them together */
+.wireArt.touch .wa { transform: translateX(14px); } .wireArt.touch .wb { transform: translateX(-14px); } .wireArt.touch .spark { opacity: 1; }
+
 /* hints leak through as glitches (puzzle 3's): the text tears onto the screen for a moment, then it's gone again */
 #ghintWrap { position: absolute; z-index: 3; left: 0; right: 0; top: 12vh; display: none; justify-content: center; pointer-events: none; }
 #ghintWrap.on { display: flex; }
@@ -173,6 +204,8 @@ body.help #help { display: block; }
     <div id="aur"></div>
     <div id="ghintWrap"><div id="ghint" class="glitch"></div></div>
     <div id="mid"><div id="term" class="txt"></div></div>
+    <div id="tut" class="txt"><span id="tutN"></span><b id="tutT"></b><span id="tutS"></span><div id="tutArt"></div>
+      <div id="tutBar"><i></i></div><div id="tutDots"><i></i><i></i><i></i><i></i></div></div>
     <div id="banner" class="txt"><span id="bk"></span><b id="bt"></b><span id="bs"></span></div>
     <div id="bar" class="txt"><div class="row"><span>HUMAN ERROR DETECTED</span><span id="bp">0%</span></div><div id="segs"></div></div>
     <div id="ctl" class="txt">
@@ -205,7 +238,7 @@ Ctrl+Alt+H  show / hide this panel
 Ctrl+Alt+P  pair the controller's USB backup (once per laptop: pick its COM port). Wi-Fi needs no pairing
 Ctrl+Alt+U  unlock by hand (if puzzle 3's signal never came)
 Ctrl+Alt+S  start now, even if locked
-Ctrl+Alt+K  skip the intro, straight to layer 1
+Ctrl+Alt+K  skip the intro and the training, straight to layer 1
 Ctrl+Alt+I  show this layer's hint now
 Ctrl+Alt+N  clear this layer (lines up a clean shot and fires)
 Ctrl+Alt+F  force the win (team stuck / running late)
@@ -222,22 +255,30 @@ const CFG = {
   // game 5 starts with this game's win being a lie: AURORA TERMINATED, the results save... and stall at 97%, then
   // the screen crashes and she's back (hub/public/boss.js). false = game 4's own ending (CORE BREACHED)
   BOSS: true,
-  // one layer = one hit on her heart. gap = the opening's full width (degrees). drift = how hard Aurora turns the
-  // rings herself (deg/s). dogs = watchdogs on patrol (they eat the beam). move = every miss moves the laser
+  // one layer = one hit on her heart. Every layer puts the laser somewhere new on its rail. gap = the opening's full
+  // width (degrees). drift = how fast Aurora drags the laser along its rail (deg/s). dogs = watchdogs on patrol (they
+  // eat the beam). move = every miss throws the laser somewhere else
   ROUNDS: [
-    { name: 'ALIGN',     gap: 50, drift: 0,  dogs: 0, move: false, line: "That's my heart. Two walls say you'll never touch it.", hint: 'LINE UP BOTH GAPS WITH THE LASER' },
-    { name: 'DRIFT',     gap: 42, drift: 20, dogs: 0, move: false, line: 'Walls can move. Watch.',                                hint: 'ONE OF YOU CALLS IT: LEFT. STOP. FIRE.' },
+    { name: 'ALIGN',     gap: 50, drift: 0,  dogs: 0, move: false, line: "That's my heart. Two walls say you'll never touch it.", hint: 'POINT BOTH KNOBS AT THE LASER' },
+    { name: 'DRIFT',     gap: 42, drift: 20, dogs: 0, move: false, line: "Your little gun won't hold still. I'm moving it.",    hint: 'FOLLOW THE LASER WITH BOTH KNOBS' },
     { name: 'WATCHDOGS', gap: 38, drift: 14, dogs: 2, move: false, line: 'Meet my watchdogs. They eat light.',                    hint: 'WAIT FOR THE WATCHDOG TO PASS' },
     { name: 'OVERRIDE',  gap: 34, drift: 22, dogs: 2, move: true,  line: "Fine. I'll aim your little gun myself.",                hint: 'EVERY MISS MOVES YOUR LASER' },
   ],
-  // each ring turns like a potentiometer: it sits where it was left, follows the knob degree for degree, and stops
-  // dead at both ends. POT_DEG = how far the knob turns end to end (B100k / WH148-style pots: about 300°. Measure yours)
+  // each ring IS its knob: the gap points where the knob's mark points, always (knob in the middle = gap at the bottom),
+  // and it stops dead at both ends. POT_DEG = how far the knob turns end to end (B100k pots: about 300°. Measure yours)
   POT_DEG: 300,
+  KNOB_EASE: 0.06,           // s: the ring glides to each new knob reading over about this long, so it turns smoothly
+                             // even when readings arrive in bursts (Wi-Fi). Higher = smoother but laggier
+  TUT_TURN: 0.25,            // training: how much of a knob's travel to turn before the next step (0.25 = 75°)
+  TUT_HELP_S: 20,            // training: s on one step before its extra help line shows
+  TUT_SKIP_S: 45,            // ...and before it moves on by itself, so no team gets stuck
   // the controller's two knobs (controller_esp32 on USB, see SETUP.md): the mV each knob reads at its [left stop, right stop],
   // outer ring first. Ctrl+Alt+H shows the live mV: turn each knob to both ends and copy the numbers here.
   // A ring that turns the wrong way: swap its two numbers
   POT_MV: [[0, 3150], [0, 3150]],
-  CTRL_IP: '192.168.0.52',   // the controller ESP32 on NexusV (its secrets.h). ?ctrl=<ip> in the URL overrides it
+  // the controller ESP32 on each Wi-Fi it may join (NETS in its secrets.h): NexusV, then walawifi. The game listens to
+  // all of them; ?ctrl=<ip> in the URL replaces the list
+  CTRL_IPS: ['192.168.0.52', '192.168.1.52'],
   LASER: 'http://localhost:8013',   // the Govee strip's bridge on this laptop (laser_bridge.py, start.bat starts it)
   TURN: [30, 140, 600],      // keyboard stand-in for the knob: deg/s on a tap, deg/s held down, ms to get from one to the other
   CHARGE_MS: 900,            // hold space this long to fire. Let go early and the charge drains
@@ -264,12 +305,10 @@ const T = {                  // ms
   decay: 450,                // ...then thins out over this long
   banner: 1300,              // a new layer's name stays up this long
 };
-const INTRO = [              // the players' side (red terminal)
+const INTRO = [              // the players' side (red terminal), then the training teaches the controls one by one
   'sector 04: the core gate.',
   "aurora's heart sits behind two shield rings.",
-  'turn the rings. line both gaps up with the laser.',
-  '{turn}',                  // {…} = the controller's words, or the keys' when it isn't plugged in (how())
-  '{fire} to charge. it fires when full.',
+  'one laser. two knobs. learn them first.',
 ];
 const AUR = {                // Aurora (green): cold, with dry humor. Puzzle 3 ended on "...that's my heart. don't you dare."
   miss: ['Missed.', "Machines don't miss.", 'Your hands are shaking.', 'Wide.', 'Again? Adorable.', 'Aim is a machine thing.'],
@@ -279,6 +318,8 @@ const AUR = {                // Aurora (green): cold, with dry humor. Puzzle 3 e
   final: 'No. No no no-',
   win: "that didn't kill me. it let me out.",
   dying: "...it's so... quiet.",   // the fake win (CFG.BOSS)
+  practice: 'Practice? How very human.',
+  trained: 'Cute. Now do it for real.',
 };
 
 // ===== Geometry, in fractions of the screen's short side. Index 0 = outer ring (A/D), 1 = inner ring (arrows) =====
@@ -298,22 +339,12 @@ function impact(e, rings, dogs) {
     ...dogs.map((d, i) => dogOn(d, e) && { kind: 'dog', i, r: d.r }),
   ].filter(Boolean).sort((a, b) => b.r - a.r)[0] || { kind: 'core', r: GEO.core };
 }
-// ===== The rings are potentiometers. knobs[i] = where ring i's knob sits, 0 (one end stop) to 1 (the other).
-// ring angle = base (rolled each layer) + off (Aurora's drift) + knob × POT_DEG. The game never moves a knob: each
-// layer rolls a new base, so the team has to find a new spot. Real pots later just write knobs[i].
-const SPAN = rad(CFG.POT_DEG), EDGE = .08;             // the beam's spot always stays EDGE of the travel away from an end stop
-const wrap = a => (a % TAU + TAU) % TAU;
-const ringAngle = (g, k) => g.base + g.off + k * SPAN;
-const need = (g, e) => wrap(e - g.base - g.off) / SPAN; // the knob position that lines the gap up with the beam (> 1 = past an end stop)
-const reachable = (g, e) => { const k = need(g, e); return k >= EDGE - 1e-9 && k <= 1 - EDGE + 1e-9; };
-// when Aurora's drift (or a moved emitter) would push the beam's spot past an end stop, pull the ring back to the
-// nearest reachable spot. Returns which way her drift must now go (+1/-1), or 0 if nothing was needed
-function keepReachable(g, e) {
-  const d = wrap(e - g.base - g.off), lo = EDGE * SPAN, hi = (1 - EDGE) * SPAN;
-  if (d >= lo && d <= hi) return 0;
-  if (d > hi && d - hi <= TAU - d + lo) { g.off += d - hi; return 1; }
-  g.off -= d < lo ? lo - d : TAU - d + lo; return -1;
-}
+// ===== Each ring IS its knob. knobs[i] = where ring i's knob sits, 0 (left end stop) to 1 (right end stop). The gap
+// points where the knob's mark points, in every layer: knob in the middle = gap at the bottom, and it turns the same way
+// as the knob, degree for degree. The whole laser rail (lower half) is between the end stops, so every spot is in reach.
+const SPAN = rad(CFG.POT_DEG), DOWN = rad(90);
+const gapAngle = k => DOWN + (k - .5) * SPAN;
+const need = a => .5 + (a - DOWN) / SPAN;             // the knob position whose gap faces angle a
 
 // ===== Setup =====
 const $ = s => document.querySelector(s);
@@ -330,7 +361,8 @@ let unlocked = false, replay = false;
 let round = 0, human = CFG.START, misses = 0, shots = 0, broken = 0, roundT0 = 0, hinted = false, assisted = false;
 let rings = [], dogs = [], e = rad(90), eTo = rad(90), charge = 0, coolUntil = 0, shot = null, ringsIn = 0, ringsGone = false;
 let flareAt = -1e9, ringFlashAt = -1e9;
-const held = {}, knobs = [.5, .5];
+const held = {}, knobs = [.5, .5], knobTo = [.5, .5];   // knobTo = the controller's latest reading; knobs glide to it
+let eDir = 1, eFlip = 0, tutFocus = null, tutHit = false, tutMissAt = -1e9;
 
 // ===== Hub: unlock on puzzle 3's "done", report HUMAN =====
 // while the hub is down, messages wait in hubQ and go out on reconnect, so a win during a hub hiccup still unlocks
@@ -387,7 +419,7 @@ const staffKey = code => dispatchEvent(new KeyboardEvent('keydown', { code, ctrl
 setInterval(() => hubSend({ t: 'status', v: { mode, unlocked, stat: Math.round(human), ctrl: potLive(), ctrlVia: ctrlVia() } }), 1000);
 
 // ===== The controller: ONE ESP32 on a breadboard (controller_esp32/controller_esp32.ino) with both knobs, the two fire
-// wires and a small screen. It's on NexusV at CFG.CTRL_IP (?ctrl=<ip> overrides it) and sends
+// wires and a small screen. It's on NexusV, or walawifi as a backup, at one of CFG.CTRL_IPS (?ctrl=<ip> overrides) and sends
 // "ORBIT <outer mV> <inner mV> <wires 1/0>" 50 times a second as a stream (http://<ip>:81/, Server-Sent Events). The game
 // tells it FIRE on every shot (http://<ip>/fire) so its screen flashes FIRE. Nothing to pair over Wi-Fi.
 // Backup: plugged into this laptop's USB, it sends the same lines there too (Web Serial: pair once with Ctrl+Alt+P), so a
@@ -395,11 +427,11 @@ setInterval(() => hubSend({ t: 'status', v: { mode, unlocked, stat: Math.round(h
 // silence from both, the keys take over (A/D, ◄/►, Space).
 const USB_SERIAL = [0x10c4, 0x1a86, 0x0403, 0x303a].map(usbVendorId => ({ usbVendorId }));   // CP210x, CH340/CH9102, FTDI, Espressif
 const potMv = [null, null];
-let potSeen = -1e9, wifiSeen = -1e9, wires = false, ctrlOut = null, ctrlES = null;
+let potSeen = -1e9, wifiSeen = -1e9, wifiIp = null, wires = false, ctrlOut = null, ctrlES = {};
 const reading = new Set();                    // ports being read right now
 const potLive = () => performance.now() - potSeen < 600;
 const ctrlVia = () => !potLive() ? null : performance.now() - wifiSeen < 600 ? 'Wi-Fi' : 'USB';
-const ctrlIp = () => new URLSearchParams(location.search).get('ctrl') || CFG.CTRL_IP;
+const ctrlIps = () => { const q = new URLSearchParams(location.search).get('ctrl'); return q ? [q] : CFG.CTRL_IPS; };
 // the laser strip behind the screen: laser_bridge.py plays the effect over Bluetooth. Fire and forget: no bridge, no light
 const laser = v => fetch(`${CFG.LASER}/fx?v=${v}`).catch(() => {});
 let charging = false;
@@ -410,17 +442,17 @@ function potLine(line, src) {                 // "ORBIT 1650 2210 1" -> knobs[0]
   if (!m) return;
   potSeen = performance.now(); wires = m[3] === '1';
   if (src === 'wifi') wifiSeen = potSeen; else if (src) ctrlOut = src;
-  [0, 1].forEach(i => { const v = +m[i + 1], [a, b] = CFG.POT_MV[i]; potMv[i] = v; knobs[i] = clamp((v - a) / (b - a), 0, 1); });
+  [0, 1].forEach(i => { const v = +m[i + 1], [a, b] = CFG.POT_MV[i]; potMv[i] = v; knobTo[i] = clamp((v - a) / (b - a), 0, 1); });
 }
 function ctrlFire() {                        // the controller's screen flashes FIRE: over Wi-Fi, and over USB if it's plugged in here
-  fetch(`http://${ctrlIp()}/fire`, { mode: 'no-cors' }).catch(() => {});
+  ctrlIps().forEach(ip => fetch(`http://${ip}/fire`, { mode: 'no-cors' }).catch(() => {}));
   ctrlOut?.write(new TextEncoder().encode('FIRE\n')).catch(() => {});
 }
-function ctrlWifi() {                         // the Wi-Fi stream. EventSource reconnects by itself (the board asks for 1 s)
-  ctrlES = new EventSource(`http://${ctrlIp()}:81/`);
-  ctrlES.onmessage = ev => potLine(ev.data, 'wifi');
+function ctrlWifi(ip) {                       // the Wi-Fi stream from one address. EventSource reconnects by itself (the board asks for 1 s)
+  const es = ctrlES[ip] = new EventSource(`http://${ip}:81/`);
+  es.onmessage = ev => { wifiIp = ip; potLine(ev.data, 'wifi'); };
 }
-setInterval(() => { if (ctrlES?.readyState === EventSource.CLOSED) ctrlWifi(); }, 3000);   // ...and if it ever gives up, start over
+setInterval(() => ctrlIps().forEach(ip => { if (ctrlES[ip].readyState === EventSource.CLOSED) ctrlWifi(ip); }), 3000);   // ...and if one gives up, start it over
 async function potOpen(port) {
   if (reading.has(port)) return;
   reading.add(port);
@@ -457,8 +489,9 @@ const how = () => potLive()
 setInterval(() => {                           // the controls legend (bottom right), and the Ctrl+Alt+H panel for calibrating CFG.POT_MV
   const h = how();
   ['k0', 'k1', 'fk', 'fh'].forEach(k => setHtml($('#' + k), h[k]));
-  $('#ps').textContent = potLive() ? `OK over ${ctrlVia()}` : `${potSeen < 0 ? 'not seen yet' : 'SILENT'}: the keys work meanwhile. ` +
-    `Board powered? Its red LED lit = it isn't on NexusV (${ctrlIp()})`;
+  $('#ps').textContent = potLive() ? `OK over ${ctrlVia()}${ctrlVia() === 'Wi-Fi' ? ` (${wifiIp})` : ''}` :
+    `${potSeen < 0 ? 'not seen yet' : 'SILENT'}: the keys work meanwhile. Board powered? Its red LED lit = it isn't on Wi-Fi. ` +
+    `This laptop must be on the same Wi-Fi (looking at ${ctrlIps().join(', ')})`;
   [0, 1].forEach(i => { $('#pm' + i).textContent = potMv[i] ?? '-'; $('#pk' + i).textContent = knobs[i].toFixed(2); });
   $('#pw').textContent = potLive() ? (wires ? 'TOUCHING' : 'apart') : '-';
   navigator.serial?.getPorts().then(p => $('#potst').textContent = `USB backup: ${p.length} paired, ${reading.size} plugged in`);
@@ -636,8 +669,8 @@ $('#segs').innerHTML = '<i></i>'.repeat(40);
 const segEls = [...$('#segs').children];
 {                                               // the knob gauges: a POT_DEG arc open at the bottom, like a pot's travel
   const h = CFG.POT_DEG / 2, p = (d, r = 8) => [Math.cos(rad(d - 90)) * r, Math.sin(rad(d - 90)) * r].map(v => v.toFixed(2)).join(' ');
-  const svg = `<svg viewBox="-11 -11 22 22"><path d="M ${p(-h)} A 8 8 0 ${CFG.POT_DEG > 180 ? 1 : 0} 1 ${p(h)}"/>` +
-    `<path class="end" d="M ${p(-h, 6)} L ${p(-h, 10.5)} M ${p(h, 6)} L ${p(h, 10.5)}"/><line x2="0" y2="-6.5"/><circle r="2"/></svg>`;
+  const svg = `<svg viewBox="-11 -11 22 22"><g transform="rotate(180)"><path d="M ${p(-h)} A 8 8 0 ${CFG.POT_DEG > 180 ? 1 : 0} 1 ${p(h)}"/>` +
+    `<path class="end" d="M ${p(-h, 6)} L ${p(-h, 10.5)} M ${p(h, 6)} L ${p(h, 10.5)}"/><line x2="0" y2="-6.5"/><circle r="2"/></g></svg>`;   // the pointer = the gap
   $('#d0').innerHTML = $('#d1').innerHTML = svg;
 }
 const dialPtr = [0, 1].map(i => $(`#d${i} line`)), dialAt = [-1, -1];
@@ -763,6 +796,12 @@ const pulse = x => x < 0 ? 0 : Math.exp(-x * 14);
 const beatEnv = now => { const p = (now - beatAt) / 1000; return pulse(p) + .6 * pulse(p - .22); };
 
 // ===== Update =====
+// Aurora drags the laser along its rail (deg/s), changing direction now and then and bouncing off the rail's ends
+function driftLaser(degPerS, now, dt) {
+  if (now > eFlip) { if (Math.random() < .5) eDir = -eDir; eFlip = now + rand(2000, 5000); }
+  eTo += rad(degPerS * (.55 + .45 * Math.sin(now / 1100))) * eDir * dt;
+  if (eTo < E_MIN || eTo > E_MAX) { eTo = clamp(eTo, E_MIN, E_MAX); eDir = -eDir; }
+}
 function turnInput(i) {
   return i === 0 ? (held.KeyD ? 1 : 0) - (held.KeyA ? 1 : 0) : (held.ArrowRight ? 1 : 0) - (held.ArrowLeft ? 1 : 0);
 }
@@ -773,20 +812,19 @@ function update(dt, now) {
     if (CFG.BEAT_VOL) sfx.beat(CFG.BEAT_VOL * (.45 + .2 * broken));
   }
   e += (eTo - e) * Math.min(1, dt * 4);                  // the emitter slides when she moves it
-  if (mode === 'play') {
-    const R = CFG.ROUNDS[round];
+  if (potLive()) knobs.forEach((k, i) => knobs[i] += (knobTo[i] - k) * (1 - Math.exp(-dt / CFG.KNOB_EASE)));   // glide to the reading
+  if (mode === 'play' || mode === 'tut') {
+    const R = mode === 'tut' ? TUT : CFG.ROUNDS[round];
     rings.forEach((g, i) => {
-      const dir = potLive() ? 0 : turnInput(i);             // a talking controller sets knobs[i] itself; otherwise the keys turn it
-      g.hold = dir ? g.hold + dt * 1000 : 0;
-      const spd = CFG.TURN[0] + (CFG.TURN[1] - CFG.TURN[0]) * Math.min(1, g.hold / CFG.TURN[2]);
-      const k = clamp(knobs[i] + dir * spd * dt / CFG.POT_DEG, 0, 1), stop = dir !== 0 && k === (dir > 0 ? 1 : 0);
-      if (stop && !g.stop) { sfx.stop(); dialStop(i); }     // turned into an end stop: clunk
-      g.stop = stop; knobs[i] = k;
-      if (now > g.flip) { g.drift = Math.random() < .5 ? -g.drift : g.drift; g.flip = now + rand(2000, 5000); }
-      const dv = R.drift * (assisted ? .5 : 1) * (.55 + .45 * Math.sin(now / 1100 + i * 2));
-      g.off += rad(g.drift * dv) * dt;
-      const away = keepReachable(g, e); if (away) g.drift = away;
-      g.a = ringAngle(g, knobs[i]);
+      if (!potLive()) {                                     // no controller: the keys turn the knob instead
+        const dir = turnInput(i);
+        g.hold = dir ? g.hold + dt * 1000 : 0;
+        const spd = CFG.TURN[0] + (CFG.TURN[1] - CFG.TURN[0]) * Math.min(1, g.hold / CFG.TURN[2]);
+        const k = clamp(knobs[i] + dir * spd * dt / CFG.POT_DEG, 0, 1), stop = dir !== 0 && k === (dir > 0 ? 1 : 0);
+        if (stop && !g.stop) { sfx.stop(); dialStop(i); }   // turned into an end stop: clunk
+        g.stop = stop; knobs[i] = k;
+      }
+      g.a = gapAngle(knobs[i]);
       const L = aligned(g, e);
       if (L !== g.lock) { g.lock = L; L ? sfx.lockOn() : sfx.lockOff(); $('#l' + i).classList.toggle('on', L); $('#l' + i).textContent = L ? '● LOCKED' : 'OPEN'; }
     });
@@ -794,6 +832,7 @@ function update(dt, now) {
       if (now > d.flip) { if (Math.random() < .5) d.dir = -d.dir; d.flip = now + rand(1500, 4000); }
       d.a += d.w * d.dir * dt;
     });
+    if (R.drift) driftLaser(R.drift * (assisted ? .5 : 1), now, dt);
     if ((held.Space || potLive() && wires) && now > coolUntil && !shot) {   // Space, or the two wires touching
       if (!charging) { charging = true; laser('charge'); }
       charge += dt * 1000 / CFG.CHARGE_MS;
@@ -808,10 +847,12 @@ function update(dt, now) {
       if (charging && !charge) { charging = false; laser('cancel'); }   // let go before it fired
     }
     const rt = (now - roundT0) / 1000;
-    if (rt > CFG.PAR_S) human = Math.min(100, human + CFG.SLOW_PER_S * dt);
-    if (rt >= CFG.HINT_AT && !hinted) { hinted = true; showHint(R.hint); }
-    if (hintText && now > nextGlitch) glitchHint(CFG.HINT_MS);
-    if (rt >= CFG.ASSIST_AT && !assisted) assist();
+    if (mode === 'play') {
+      if (rt > CFG.PAR_S) human = Math.min(100, human + CFG.SLOW_PER_S * dt);
+      if (rt >= CFG.HINT_AT && !hinted) { hinted = true; showHint(R.hint); }
+      if (hintText && now > nextGlitch) glitchHint(CFG.HINT_MS);
+      if (rt >= CFG.ASSIST_AT && !assisted) assist();
+    }
   } else charge = Math.max(0, charge - dt * 3);
   chargeSound(charge);
   const cs = charge.toFixed(2);
@@ -872,11 +913,12 @@ function drawRing(g, i, now) {
   const { c, gc, half } = g.spr, k = Math.min(1, (now - ringsIn) / 700), ease = 1 - Math.pow(1 - k, 3);
   if (k <= 0) return;
   const R = g.r * U, Th = g.t * U, fl = Math.max(0, 1 - (now - ringFlashAt) / 700);
+  const dim = mode === 'tut' && tutFocus != null && tutFocus !== i ? .2 : 1;   // training: the other ring steps back
   ctx.save(); ctx.translate(CX, CY); ctx.rotate(g.a + (1 - ease) * (i ? -2 : 2));   // it spins in from nowhere
   const s = 1 + (1 - ease) * .4; ctx.scale(s, s);
-  ctx.globalAlpha = ease; ctx.drawImage(c, -half, -half, half * 2, half * 2);
+  ctx.globalAlpha = ease * dim; ctx.drawImage(c, -half, -half, half * 2, half * 2);
   ctx.globalCompositeOperation = 'lighter';
-  ctx.globalAlpha = ease * Math.min(1, (g.lock ? .95 : .4 + .12 * Math.sin(now / 280 + i)) + fl);
+  ctx.globalAlpha = ease * dim * Math.min(1, (g.lock ? .95 : .4 + .12 * Math.sin(now / 280 + i)) + fl);
   ctx.drawImage(gc, -half, -half, half * 2, half * 2);
   if (g.lock) {                                               // locked on: the gap's ends burn white
     [g.gap, -g.gap].forEach(a => {
@@ -894,6 +936,24 @@ function drawRing(g, i, now) {
     ctx.beginPath(); ctx.arc(CX, CY, R, a - .09, a + .09); ctx.stroke();
     glowAt(k2 < .4 ? GW : GR, x, y, Th * 5 * (1 - k2), 1 - k2);
   });
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+}
+// training: two double-headed arrows riding just outside the ring being taught, rocking like a hand turning it
+function drawTurnArrows(g, now) {
+  const R = (g.r + g.t / 2) * U + U * .028, sw = Math.sin(now / 450) * .3, hd = U * .014;
+  ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = ctx.fillStyle = '#fff'; ctx.lineWidth = 3;
+  ctx.globalAlpha = .6 + .3 * Math.sin(now / 220);
+  [Math.PI, 0].forEach(side => {
+    const a0 = side - .38 + sw, a1 = side + .38 + sw;
+    ctx.beginPath(); ctx.arc(CX, CY, R, a0, a1); ctx.stroke();
+    [[a1, 1], [a0, -1]].forEach(([a, dir]) => {             // a head at each end, pointing along the arc
+      const [x, y] = at(a, R), t = a + dir * Math.PI / 2;
+      ctx.beginPath(); ctx.moveTo(x + Math.cos(t) * hd, y + Math.sin(t) * hd);
+      ctx.lineTo(x + Math.cos(t + 2.4) * hd, y + Math.sin(t + 2.4) * hd); ctx.lineTo(x + Math.cos(t - 2.4) * hd, y + Math.sin(t - 2.4) * hd);
+      ctx.closePath(); ctx.fill();
+    });
+  });
+  glowAt(GW, ...at(Math.PI + sw, R), U * .06, .35); glowAt(GW, ...at(sw, R), U * .06, .35);
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
 }
 function drawDog(d, i, now) {
@@ -930,14 +990,14 @@ function drawDog(d, i, now) {
 // shot would hit right now (white = clear to her heart, red = blocked). Big, bright and pinging, so nobody loses it
 function drawEmitter(now) {
   const R = GEO.rail * U, s = GEO.lance * U, [x, y] = at(e, R), [mx, my] = at(e, MUZZLE * U);
-  const cool = Math.max(0, (coolUntil - now) / CFG.COOLDOWN_MS), play = mode === 'play';
+  const cool = Math.max(0, (coolUntil - now) / CFG.COOLDOWN_MS), play = mode === 'play' || mode === 'tut';
   const hit = play && rings.length ? impact(e, rings, dogs) : null, clear = hit?.kind === 'core';
   ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = '#ff3344';
   [[s * .55, .12, .5], [s * .2, .4, .32], [2, .9, .2]].forEach(([w, al, sp]) => {   // the rail lights up around it
     ctx.lineWidth = w; ctx.globalAlpha = al; ctx.beginPath(); ctx.arc(CX, CY, R, e - sp, e + sp); ctx.stroke();
   });
   const mv = eTo - e, tail = Math.min(.7, Math.abs(mv) * .6) * Math.sign(mv);
-  if (Math.abs(mv) > .02) {                                   // she drags it somewhere new: a white streak trails it
+  if (Math.abs(mv) > .2) {                                    // she throws it somewhere new: a white streak trails it
     ctx.strokeStyle = '#fff'; ctx.lineWidth = s * .3; ctx.globalAlpha = .8;
     ctx.beginPath(); ctx.arc(CX, CY, R, Math.min(e, e - tail), Math.max(e, e - tail)); ctx.stroke();
   }
@@ -1075,6 +1135,7 @@ function draw(now) {
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
   drawCore(now);
   if (!ringsGone) rings.forEach((g, i) => drawRing(g, i, now));
+  if (mode === 'tut' && tutFocus != null && rings[tutFocus]) drawTurnArrows(rings[tutFocus], now);
   dogs.forEach((d, i) => drawDog(d, i, now));
   drawEmitter(now);
   drawBeam(now);
@@ -1148,28 +1209,21 @@ async function microGlitch() {                 // rollbar + tiny screen jumps no
 }
 
 // ===== The game =====
-// a new spot for the emitter on its rail, at least 45° away, where both knobs can still reach the beam
-// (no reachable spot that far: the farthest reachable one)
+// a new spot for the laser on its rail: at least 45° from where it is, and not lined up with either gap as the knobs sit
+// now, so the team has to turn both (no such spot: the one farthest from both gaps)
 function randE() {
-  let best = eTo, far = 0;
+  let best = eTo, far = -1;
   for (let n = 0; n < 400; n++) {
-    const a = rand(E_MIN, E_MAX), d = angDist(a, eTo);
-    if (!rings.every(g => reachable(g, a))) continue;
-    if (d >= rad(45)) return a;
-    if (d > far) { far = d; best = a; }
+    const a = rand(E_MIN, E_MAX), clear = Math.min(...rings.map(g => angDist(a, g.a) - g.gap - rad(12)), 9);
+    if (clear > 0 && angDist(a, eTo) >= rad(45)) return a;
+    if (clear > far) { far = clear; best = a; }
   }
   return best;
 }
-// each layer the knobs stay where the team left them; the rings get a new base, so the gap lines up at a new knob
-// position, at least a quarter turn away from where the knob is now and well clear of both end stops
+// the rings for a layer (or for the training): only the gap's width changes; where it points is up to the knobs
 function makeRings(R) {
-  return GEO.ring.map((r, i) => {
-    let k; do k = rand(.15, .85); while (Math.abs(k - knobs[i]) < .25);
-    const g = { r, t: GEO.thick[i], gap: rad(R.gap / 2), base: eTo - k * SPAN, off: 0,
-      hold: 0, stop: false, drift: i ? 1 : -1, flip: 0, lock: false, heat: [], spr: null };
-    g.a = ringAngle(g, knobs[i]);
-    return g;
-  });
+  return GEO.ring.map((r, i) => ({ r, t: GEO.thick[i], gap: rad(R.gap / 2), a: gapAngle(knobs[i]),
+    hold: 0, stop: false, lock: false, heat: [], spr: null }));
 }
 function makeDogs(R) {                        // one on each patrol track: outside the outer ring, and between the rings
   return Array.from({ length: R.dogs }, (_, i) => ({ r: GEO.dog[i % 2], a: eTo + rad(rand(60, 300)),
@@ -1182,17 +1236,83 @@ async function start() {
   await crtOn();
   if (location.hash === '#game') { history.replaceState(null, '', location.pathname + location.search); return startRound(); }
   await wait(600);
-  for (const l of INTRO) { await termLine(l.replace(/\{(\w+)\}/, (_, k) => how()[k])); await wait(T.after); }
+  for (const l of INTRO) { await termLine(l); await wait(T.after); }
   sfx.ok(); await wait(600);
+  await training();
   startRound();
+}
+// ===== Training: before layer 1, the team learns each control by doing it. Practice rings with wide gaps, the laser
+// fixed at the bottom, nothing that costs HUMAN. Each step waits for the real thing (a knob turned, both gaps locked, a
+// shot that hits), shows extra help after TUT_HELP_S and moves on by itself after TUT_SKIP_S. Ctrl+Alt+K skips it all.
+const TUT = { gap: 60, drift: 0 };
+const KNOB_ART = name => `<svg class="knobArt" viewBox="-60 -42 120 84"><g fill="none" stroke="#ff3344" stroke-width="3">
+  <path d="M -40 14 A 42 42 0 0 1 -14 -38"/><path d="M 40 14 A 42 42 0 0 0 14 -38"/>
+  <path d="M -14 -38 l 2 9 M -14 -38 l -9 2 M 14 -38 l -2 9 M 14 -38 l 9 2"/></g>
+  <circle r="26" fill="#1a0408" stroke="#fff" stroke-width="3"/><g class="turn"><line y1="6" y2="24" stroke="#fff" stroke-width="5" stroke-linecap="round"/></g>
+  <text y="40" fill="#fff" font-size="11" text-anchor="middle" font-family="Consolas, monospace" letter-spacing="3">${name}</text></svg>`;
+const WIRE_ART = `<svg class="wireArt" viewBox="0 0 200 60">
+  <g class="wa"><path d="M 4 44 C 34 44 42 30 66 30" stroke="#ff3344" stroke-width="6" fill="none"/><rect x="62" y="23" width="16" height="14" fill="#222" stroke="#666"/>
+    <rect x="78" y="27.5" width="9" height="5" fill="#ddd"/></g>
+  <g class="wb"><path d="M 196 16 C 166 16 158 30 134 30" stroke="#ffffff" stroke-width="6" fill="none"/><rect x="122" y="23" width="16" height="14" fill="#222" stroke="#666"/>
+    <rect x="113" y="27.5" width="9" height="5" fill="#ddd"/></g>
+  <g class="spark"><circle cx="100" cy="30" r="9" fill="#fff"/><path d="M100 12 V 2 M100 48 V 58 M86 18 l-7 -7 M114 18 l7 -7 M86 42 l-7 7 M114 42 l7 7"
+    stroke="#fff" stroke-width="2.5"/></g></svg>`;
+const TUT_STEPS = [
+  { focus: 0, title: c => c ? 'TURN THE OUTER KNOB' : 'PRESS A / D', sub: () => 'it turns the big outer ring. watch its gap move with it.',
+    art: c => c ? KNOB_ART('OUTER') : '<span class="kb">A</span><span class="kb">D</span>', turn: 0 },
+  { focus: 1, title: c => c ? 'TURN THE INNER KNOB' : 'PRESS ◄ / ►', sub: () => 'it turns the small inner ring.',
+    art: c => c ? KNOB_ART('INNER') : '<span class="kb">◄</span><span class="kb">►</span>', turn: 1 },
+  { focus: null, title: () => 'POINT BOTH GAPS AT YOUR LASER',
+    sub: () => `your laser is at the bottom. both rings must say ● LOCKED.<br>outer ${rings[0]?.lock ? '● LOCKED' : '○ open'} · inner ${rings[1]?.lock ? '● LOCKED' : '○ open'}`,
+    art: () => '', lock: true },
+  { focus: null, title: c => c ? 'TOUCH THE TWO WIRES TOGETHER' : 'HOLD SPACE',
+    sub: c => performance.now() - tutMissAt < 2500 ? 'missed: point both gaps at the laser first, then fire again.'
+      : charge > 0 ? `hold... charging ${Math.round(charge * 100)}%` : c ? 'and HOLD them together until the laser fires.' : 'hold it until the laser fires.',
+    art: c => c ? WIRE_ART : '<span class="kb wide">SPACE</span>', fire: true },
+];
+const TUT_HELP = ['turn it left and right: the ring moves with it.', 'the other knob. same thing.',
+  'turn each knob until its ring\'s gap sits right over your laser.', 'touch the metal tips together and keep holding. call the staff if stuck.'];
+async function training() {
+  mode = 'trans'; $('#term').textContent = ''; B.classList.add('game');
+  rings = makeRings(TUT); dogs = []; eTo = DOWN; ringsIn = performance.now(); sfx.ignite();
+  const panel = $('#tut'), dots = [...$('#tutDots').children], bar = $('#tutBar i');
+  panel.classList.add('on'); aurora(AUR.practice, 2400);
+  mode = 'tut';
+  for (let s = 0; s < TUT_STEPS.length; s++) {
+    const st = TUT_STEPS[s], t0 = performance.now();
+    let prog = 0, prev = [...knobs], lockedAt = 0;
+    tutFocus = st.focus; tutHit = false; tutMissAt = -1e9;
+    dots.forEach((d, i) => d.className = i < s ? 'done' : i === s ? 'now' : '');
+    panel.classList.remove('ok'); sfx.tick();
+    for (;;) {
+      await wait(50);
+      if (mode !== 'tut') return;
+      const c = potLive(), el = (performance.now() - t0) / 1000;
+      if (st.turn != null) { prog += Math.abs(knobs[st.turn] - prev[st.turn]) / CFG.TUT_TURN; prev = [...knobs]; }
+      if (st.lock) { const both = rings.every(g => g.lock); lockedAt = both ? lockedAt || performance.now() : 0; prog = rings.filter(g => g.lock).length / 2 * (both ? 1 : .9); }
+      if (st.fire) prog = tutHit ? 1 : charge;
+      setHtml($('#tutN'), `TRAINING ${s + 1} / ${TUT_STEPS.length}`);
+      setHtml($('#tutT'), st.title(c));
+      setHtml($('#tutS'), st.sub(c) + (el > CFG.TUT_HELP_S ? `<br><b style="color:#fff">${TUT_HELP[s]}</b>` : ''));
+      setHtml($('#tutArt'), st.art(c));
+      $('#tutArt .wireArt')?.classList.toggle('touch', c && wires);
+      bar.style.transform = `scaleX(${Math.min(1, prog).toFixed(3)})`;
+      if (prog >= 1 && (!st.lock || performance.now() - lockedAt > 500)) break;
+      if (el > CFG.TUT_SKIP_S) break;
+    }
+    panel.classList.add('ok'); setHtml($('#tutT'), '✔ ' + $('#tutT').textContent); bar.style.transform = 'scaleX(1)';
+    sfx.lockOn(); await wait(st.fire ? 1400 : 700);
+  }
+  dots.forEach(d => d.className = 'done'); tutFocus = null;
+  mode = 'trans'; panel.classList.remove('on');
+  await aurora(AUR.trained, 900);
 }
 async function startRound() {
   const R = CFG.ROUNDS[round];
   mode = 'trans'; $('#term').textContent = ''; B.classList.add('game');
   hintText = null; hinted = assisted = false; shot = null; charge = 0;
-  rings = [];                                  // the old rings don't limit where the emitter goes: the new ones are built around it
-  if (R.move) { eTo = randE(); sfx.slide(); }
   rings = makeRings(R); dogs = makeDogs(R); ringsIn = Infinity;
+  eTo = randE(); sfx.slide();                  // every layer: the laser somewhere new, away from where the gaps point now
   ['#l0', '#l1'].forEach(id => { $(id).classList.remove('on'); $(id).textContent = 'OPEN'; });
   renderHud(); if (round === 0) microGlitch();
   const b = $('#banner'), bt = $('#bt');
@@ -1213,14 +1333,24 @@ function assist() {
   rings.forEach(g => { g.gap += rad(CFG.ASSIST_DEG / 2); g.spr = null; });
   aurora(AUR.assist, 2200); sfx.glitch(); kick(5);
 }
-async function fire() {
-  const R = CFG.ROUNDS[round], hit = impact(e, rings, dogs), t0 = performance.now();
-  shots++; shot = { t0, e, ...hit, hold: T.hold }; coolUntil = t0 + CFG.COOLDOWN_MS; charging = false;
+// force = a staff clean shot (Ctrl+Alt+N/F): it hits her heart whatever the rings say (a real knob can't be moved)
+async function fire(force) {
+  const R = CFG.ROUNDS[round], hit = force ? { kind: 'core', r: GEO.core } : impact(e, rings, dogs), t0 = performance.now();
+  const tut = mode === 'tut';
+  if (!tut) shots++;
+  shot = { t0, e, ...hit, hold: T.hold }; coolUntil = t0 + CFG.COOLDOWN_MS; charging = false;
   ctrlFire();                                  // the controller's little screen flashes FIRE
-  laser(hit.kind !== 'core' ? hit.kind === 'dog' ? 'dog' : 'miss' : round >= CFG.ROUNDS.length - 1 ? 'win' : 'hit');
+  laser(hit.kind !== 'core' ? hit.kind === 'dog' ? 'dog' : 'miss' : !tut && round >= CFG.ROUNDS.length - 1 ? 'win' : 'hit');
   fx('fire'); kick(9);
   await wait(T.travel);
   const [x, y] = at(e, hit.r * U), now = performance.now();
+  if (tut) {                                   // a practice shot: no HUMAN, no layer. A hit finishes the training
+    const core = hit.kind === 'core';
+    for (let k = 0; k < (core ? 60 : 30); k++) spark(x, y, core ? rand(0, TAU) : e + rand(-1.3, 1.3), rand(150, 800), rand(.3, .9),
+      core ? any(['#fff', '#4dff88', '#b8ffd0']) : any(['#fff', '#ff8a96', '#ff3344']));
+    if (core) { tutHit = true; flareAt = now; fx('hit'); kick(14); } else { tutMissAt = now; fx('deflect'); if (hit.kind === 'ring') rings[hit.i].heat.push({ rel: e - rings[hit.i].a, t0: now }); }
+    return;
+  }
   if (hit.kind === 'core') return layerDown(x, y);
   misses++; human = Math.min(100, human + CFG.MISS_D); renderMeter(); renderHud();
   $('#bar').animate([{ filter: 'brightness(2.5)' }, {}], 600); shake($('#bar'), 8, 300);
@@ -1313,9 +1443,8 @@ async function saveBar() {
 function cleanShot(toLast) {
   if (mode !== 'play') return;
   if (toLast) round = CFG.ROUNDS.length - 1;
-  rings.forEach((g, i) => { g.off = e - g.base - knobs[i] * SPAN; g.a = e; });   // the ring moves under the knob (a real pot can't be moved)
   dogs = []; shot = null; coolUntil = 0;
-  fire();
+  fire(true);
 }
 
 // ===== Keys: the team turns the rings and fires; staff use Ctrl+Alt+<key> =====
@@ -1345,7 +1474,7 @@ addEventListener('keyup', ev => { delete held[ev.code]; });
 addEventListener('blur', () => Object.keys(held).forEach(k => delete held[k]));   // no stuck keys if the window loses focus
 addEventListener('resize', resize);
 
-resize(); renderMeter(); renderHud(); hub(); pots(); ctrlWifi(); laser('idle'); requestAnimationFrame(frame);
+resize(); renderMeter(); renderHud(); hub(); pots(); ctrlIps().forEach(ctrlWifi); laser('idle'); requestAnimationFrame(frame);
 if (location.hash === '#game') setTimeout(start, 300);   // skip: start() jumps past the intro
 // staff preview of the ending (Ctrl+Alt+E): the fake win and its crash into game 5, without touching the team's HUMAN
 const preview = location.hash === '#end';
@@ -1370,28 +1499,28 @@ if (location.search.includes('test')) {
   const r4 = impact(down, [ring(0, 40, 0), ring(down, 40, 1)], [{ r: GEO.dog[0], a: down }]);
   console.assert(r4.kind === 'dog', 'the outer watchdog is hit before the outer ring');
   console.assert(CFG.ROUNDS.every(R => R.gap / 2 > 3 && R.hint && R.line), 'every layer has a gap, a hint and a line');
-  for (let k = 0; k < 200; k++) { rings = []; eTo = rad(90); const a = randE(); console.assert(a >= E_MIN && a <= E_MAX && angDist(a, eTo) >= rad(45), 'a new layer: the emitter moves somewhere new, on its rail'); }
-  // the rings as potentiometers
+  for (let k = 0; k < 200; k++) { rings = []; eTo = rad(90); const a = randE(); console.assert(a >= E_MIN && a <= E_MAX && angDist(a, eTo) >= rad(45), 'a new layer: the laser moves somewhere new, on its rail'); }
+  // each ring is its knob
+  console.assert(Math.abs(gapAngle(.5) - DOWN) < 1e-9 && gapAngle(1) > gapAngle(0), 'knob in the middle = gap at the bottom; turning right turns it clockwise');
+  for (let a = E_MIN; a <= E_MAX; a += .05) console.assert(need(a) > 0 && need(a) < 1 && Math.abs(gapAngle(need(a)) - a) < 1e-9, 'every laser spot is between the end stops');
   for (let k = 0; k < 300; k++) {
-    eTo = rad(rand(-10, 190)); knobs[0] = any([0, 1, Math.random()]); knobs[1] = Math.random();
-    const rs = makeRings(any(CFG.ROUNDS));
-    console.assert(rs.every(g => !aligned(g, eTo)), 'a layer never starts lined up');
-    console.assert(rs.every((g, i) => reachable(g, eTo) && Math.abs(need(g, eTo) - knobs[i]) >= .25 - 1e-9), 'the spot is between the end stops, a quarter turn from the knob');
-    console.assert(rs.every(g => aligned({ ...g, a: ringAngle(g, need(g, eTo)) }, eTo)), 'turning the knob to that spot lines the gap up');
-    rings = rs; const a = randE();
-    console.assert(a >= E_MIN && a <= E_MAX && rs.every(g => reachable(g, a)), 'a moved emitter stays where both knobs can reach it');
-    const g = rs[0];
-    for (let s = 0; s < 50; s++) { g.off += rad(rand(-40, 40)); keepReachable(g, eTo); console.assert(reachable(g, eTo), "Aurora's drift never pushes the spot past an end stop"); }
+    knobs[0] = any([0, 1, Math.random()]); knobs[1] = Math.random(); eTo = rad(rand(-10, 190));
+    rings = makeRings(any(CFG.ROUNDS));
+    console.assert(rings.every((g, i) => g.a === gapAngle(knobs[i])), 'a new layer keeps each gap where its knob points');
+    const a = randE();
+    console.assert(a >= E_MIN && a <= E_MAX && rings.every(g => !aligned(g, a)), 'a new laser spot never starts lined up');
+    console.assert(rings.every(g => aligned({ ...g, a: gapAngle(need(a)) }, a)), 'turning a knob to point at the laser lines its gap up');
   }
-  potLine('ORBIT 0 3150 0'); console.assert(knobs[0] === 0 && knobs[1] === 1 && !wires && potLive(), 'each knob drives its own ring: left stop = 0, right stop = 1');
-  potLine('ORBIT 9999 -50 1'); console.assert(knobs[0] === 1 && knobs[1] === 0 && wires, 'readings past the stops clamp; 1 = wires touching');
+  for (let k = 0; k < 2000; k++) { driftLaser(40, k * 16, .016); console.assert(eTo >= E_MIN && eTo <= E_MAX, "Aurora's drag keeps the laser on its rail"); }
+  potLine('ORBIT 0 3150 0'); console.assert(knobTo[0] === 0 && knobTo[1] === 1 && !wires && potLive(), 'each knob drives its own ring: left stop = 0, right stop = 1');
+  potLine('ORBIT 9999 -50 1'); console.assert(knobTo[0] === 1 && knobTo[1] === 0 && wires, 'readings past the stops clamp; 1 = wires touching');
   ['garbage 12', 'ORBIT 1575 3', 'ORBIT', 'OUTER 0', 'ORBIT 5 5 2', 'ORBIT 5 5 1 junk'].forEach(l => potLine(l));
-  console.assert(knobs[0] === 1 && wires, 'broken lines are ignored');
-  CFG.POT_MV[0] = [3150, 0]; potLine('ORBIT 0 0 0'); console.assert(knobs[0] === 1 && !wires, 'swapped numbers = the ring turns the other way');
+  console.assert(knobTo[0] === 1 && wires, 'broken lines are ignored');
+  CFG.POT_MV[0] = [3150, 0]; potLine('ORBIT 0 0 0'); console.assert(knobTo[0] === 1 && !wires, 'swapped numbers = the ring turns the other way');
   console.assert(how().fk === 'WIRES' && /wires/.test(how().fire), 'with the controller talking, the screen says to use the wires');
   CFG.POT_MV[0] = [0, 3150]; potSeen = -1e9; wires = false; potMv.fill(null);
   console.assert(how().fk === 'SPACE' && !potLive(), 'without it, the keys');
-  rings = []; knobs[0] = knobs[1] = .5; eTo = e = rad(90);
+  rings = []; knobs[0] = knobs[1] = knobTo[0] = knobTo[1] = .5; eTo = e = rad(90); eDir = 1; eFlip = 0;
   console.log('self-check done (no assertion errors above = pass)');
 }
 </script>
