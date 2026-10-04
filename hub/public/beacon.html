@@ -1,40 +1,37 @@
 <!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>NEXUS beacon</title>
 <!-- Stand-in for the puzzle 3 beacon board. Open on a phone/tablet on the booth Wi-Fi:
        http://<hub laptop IP>:3000/beacon         the beacon (3 blue lights)
-     Tap once for fullscreen. Turn the phone's auto-lock off. It gets the current code AND the layer's blink speed from
-     puzzle3/game.html through the hub. A phone screen only redraws every ~17 ms, so layer 3 looks rougher than the real LEDs.
-     Add &debug to show the code on screen (never during a real run). -->
+     Tap once for fullscreen. Turn the phone's auto-lock off. It plays exactly what puzzle3/game.html sends the board,
+     through the hub: the code loop (p3play) and the effects (p3fx). A phone screen only redraws every ~17 ms, so layer 3
+     looks rougher than on the real LEDs. Add ?debug to show the step count on screen (never during a real run). -->
 <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}
 #row{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;gap:6vmin}
 #row div{display:flex;flex-direction:column;align-items:center;gap:3vmin;color:#333;font:5vmin monospace}
-#row i{width:13vmin;height:13vmin;border-radius:50%;background:#000;border:1px solid #111}
+#row i{width:13vmin;height:13vmin;border-radius:50%;background:#3d7bff;box-shadow:0 0 6vmin #3d7bff;opacity:0;border:1px solid #111}
 #s{position:fixed;bottom:6px;left:8px;color:#222;font:11px monospace}</style>
 <div id=row></div><div id=s></div>
 <script>
-// Boot timing = the ESP32's (round 1). After that the game sends each layer's own (ms)
-let T = { on: 300, off: 400, gap: 1200, loop: 3000 };
 const DEBUG = new URLSearchParams(location.search).has('debug');
-const COLOR = '#3d7bff';
-let code = '324', steps, t0, total, online = false;   // default = the ESP32's boot code
 row.innerHTML = [1, 2, 3].map(n => `<div><i></i>${n}</div>`).join('');   // numbered like the stickers on the breadboard
 const dots = [...row.querySelectorAll('i')];
+let online = false;
 
-function build(c, T) {                 // [lit LED 0-2 or -1, ms]: LED 1 blinks digit 1 times, pause, LED 2 ..., long pause
-  const s = [];
-  [...c].forEach((ch, i) => { for (let b = 0; b < +ch; b++) s.push([i, T.on], [-1, b < +ch - 1 ? T.off : T.gap]); });
-  s[s.length - 1][1] = T.loop;
-  return [s.pop(), ...s];              // a new pattern starts with the long dark pause, like the board, so the change shows
-}
-function set(c, t = T) {
-  if (!/^[1-5]{3}$/.test(c) || (c === code && JSON.stringify(t) === JSON.stringify(T) && steps)) return;   // same again: don't restart mid-pattern
-  code = c; T = t; steps = build(c, T); total = steps.reduce((a, x) => a + x[1], 0); t0 = performance.now();
-}
-set(code);
+// the board's format: "900:300,000:400" = a level per light (0-9) and ms. The loop repeats; an fx plays once, then the
+// loop starts over from its first step (same as beacon_esp32.ino)
+const parse = p => (p || '').split(',').map(t => t.split(':')).filter(([l, ms]) => /^\d{3}$/.test(l) && +ms > 0).map(([l, ms]) => [l, +ms]);
+// starts like the board: its power-on sweep, then dark until the game sends a loop
+let loop = [], fx = parse('900:150,090:150,009:150,900:150,090:150,009:150'), i = 0, t0 = performance.now(), src = null;
+function play(p) { if (p === src) return; src = p; loop = parse(p); if (!fx) i = 0, t0 = performance.now(); }
+function once(p) { const s = parse(p); if (s.length) fx = s, i = 0, t0 = performance.now(); }
+
 (function frame() {
-  let t = (performance.now() - t0) % total, lit = -1;
-  for (const [l, d] of steps) { if (t < d) { lit = l; break; } t -= d; }
-  dots.forEach((d, i) => { d.style.background = i === lit ? COLOR : '#000'; d.style.boxShadow = i === lit ? `0 0 6vmin ${COLOR}` : 'none'; });
-  s.textContent = (online ? '.' : 'x') + (DEBUG ? ' ' + code : '');   // tiny link dot, not readable from across the room
+  const now = performance.now();
+  if (now - t0 > 3000) t0 = now;
+  let l = fx || loop;
+  while (l.length && now - t0 >= l[i][1]) { t0 += l[i][1]; if (++i >= l.length) { i = 0; if (fx) { fx = null; l = loop; } } }
+  const v = l.length ? l[i][0] : '000';
+  dots.forEach((d, j) => d.style.opacity = v[j] / 9);
+  s.textContent = (online ? '.' : 'x') + (DEBUG ? ` ${loop.length} steps` : '');   // tiny link dot, not readable from across the room
   requestAnimationFrame(frame);
 })();
 
@@ -44,12 +41,13 @@ function conn() {
                       ws.send(JSON.stringify({ t: 'evt', e: 'p3ask' })); };
   ws.onclose = () => { online = false; setTimeout(conn, 2000); };
   ws.onmessage = e => { const m = JSON.parse(e.data);
-    if (m.t === 'evt' && m.e === 'p3code') { const { code: c, on, off, gap, loop } = m.v; set(c, on ? { on, off, gap, loop } : T); } };
+    if (m.t === 'evt' && m.e === 'p3play') play(m.v.p);
+    if (m.t === 'evt' && m.e === 'p3fx') once(m.v.p); };
 }
 conn();
 document.body.onclick = () => document.documentElement.requestFullscreen?.().catch(() => {});
 
-// self-check: "312" = LED 0 three times, LED 1 once, LED 2 twice. It starts on the long dark pause; the gap after each LED's last blink is gap
-const c = build('312', T);
-console.assert(c.length === 12 && c[0][0] === -1 && c[0][1] === T.loop && c[1][0] === 0 && c[6][1] === T.gap && c[7][0] === 1, 'build() broken');
+// self-check: a bad step is dropped, the rest keep their order
+const c = parse('900:300,x00:5,000:400,09:1');
+console.assert(c.length === 2 && c[0][0] === '900' && c[1][1] === 400, 'parse() broken');
 </script>

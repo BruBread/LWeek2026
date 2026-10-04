@@ -27,8 +27,23 @@ input { font: inherit; color: #fff; background: #000; border: 1px solid rgba(255
 #who { color: #fff; font-size: 26px; font-weight: 700; letter-spacing: .06em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #who.none { color: var(--dim); }
 #clock { font-size: 46px; font-weight: 700; line-height: 1; color: var(--dim); font-variant-numeric: tabular-nums; }
-#clock.ok { color: var(--g); } #clock.warn { color: var(--amb); } #clock.over { color: var(--hud); } #clock.fin { color: #fff; }
+#clock.ok { color: var(--g); } #clock.warn { color: var(--amb); } #clock.over { color: var(--hud); } #clock.fin, #clock.wait { color: #fff; }
+#go { margin-top: 6px; }
 #acts { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+#pics { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+#pics img { height: 64px; width: 85px; object-fit: cover; border: 1px solid rgba(255,51,68,.5); display: block; }
+
+/* room 2's "they're typing power" call: the staff AIs walk into position now */
+#ai { margin-bottom: 12px; padding: 10px 14px; color: #000; background: var(--amb); font-size: 20px; font-weight: 700; letter-spacing: .1em;
+  animation: ai 1s steps(1) infinite; }
+@keyframes ai { 50% { background: #fff; } }
+.room.callai { border-left-color: var(--amb); box-shadow: inset 0 0 0 2px var(--amb); }
+
+/* game 2's hallway camera, any time (hub\start.bat runs a camera viewer on this laptop) */
+#cam { position: relative; align-self: start; }
+#cam .hd { align-items: center; }
+#cam iframe { display: block; width: 100%; aspect-ratio: 16 / 9; margin-top: 8px; border: 0; background: #000; }
+#cam .msg { position: absolute; left: 14px; right: 14px; top: 55%; text-align: center; color: var(--dim); font-size: 12px; pointer-events: none; }
 
 /* device lights: green = answering, red = not (click one for what to check), grey = can't tell right now */
 .devs { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 11px; letter-spacing: .14em; }
@@ -71,8 +86,10 @@ input { font: inherit; color: #fff; background: #000; border: 1px solid rgba(255
 @keyframes alarm { 50% { background: #4a0008; } }
 
 /* bottom: game 5, the line, the history */
-#bottom { display: grid; grid-template-columns: 1.3fr 1.15fr 1.25fr; gap: 12px; }
-@media (max-width: 1150px) { #rooms { grid-template-columns: repeat(2, 1fr); } #flow { grid-template-columns: repeat(3, 1fr); } #bottom { grid-template-columns: 1fr 1fr; } #fin { grid-column: 1 / -1; } }
+#bottom { display: grid; grid-template-columns: 1.3fr 1fr 1.2fr; gap: 12px; align-items: start; }
+#bottom.nocam { grid-template-columns: 1.3fr 1fr; }
+.col { display: flex; flex-direction: column; gap: 12px; }
+@media (max-width: 1150px) { #rooms { grid-template-columns: repeat(2, 1fr); } #flow { grid-template-columns: repeat(3, 1fr); } #bottom, #bottom.nocam { grid-template-columns: 1fr 1fr; } }
 #fin { border-left: 4px solid rgba(138,148,153,.5); }
 #fin.on { border-left-color: var(--g); } #fin.done { border-left-color: var(--g); }
 .hd { display: flex; justify-content: space-between; gap: 8px; }
@@ -91,12 +108,18 @@ input { font: inherit; color: #fff; background: #000; border: 1px solid rgba(255
 #line h4 { font-weight: 400; margin: 10px 0 4px; }
 .grp { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding: 4px 0; border-bottom: 1px solid rgba(255,51,68,.15); }
 .grp .t { color: #fff; margin-right: auto; } .grp .cd { color: var(--amb); } .grp .cd.late { color: var(--hud); font-weight: 700; }
-.ph { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
-.ph img { height: 52px; width: 52px; object-fit: cover; border: 1px solid rgba(255,51,68,.5); }
 table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px; }
 td, th { padding: 4px 5px; text-align: left; border-bottom: 1px solid rgba(255,51,68,.15); font-weight: 400; color: #ddd; white-space: nowrap; }
 td:first-child { max-width: 9em; overflow: hidden; text-overflow: ellipsis; color: #fff; }
 th { color: var(--dim); font-size: 11px; } td.win { color: var(--g); }
+/* sound effect pads: amber while playing; the box lights up while a file is dragged over the page */
+#pads { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 6px; margin-top: 8px; }
+#pads button { color: #fff; text-align: left; overflow: hidden; text-overflow: ellipsis; }
+#pads button b { color: var(--amb); margin-right: 8px; }
+#pads button.on, #pads button.on b { color: #000; background: var(--amb); border-color: var(--amb); }
+#sfx.drag { box-shadow: inset 0 0 0 2px var(--amb); }
+#sfx .row { margin-top: 10px; }
+#sfxvol { width: 100px; padding: 0; border: 0; background: none; accent-color: var(--hud); }
 #phones { margin-top: 10px; display: block; }
 #phones b { color: #fff; font-weight: 400; }
 </style>
@@ -105,18 +128,20 @@ th { color: var(--dim); font-size: 11px; } td.win { color: var(--g); }
 
 <div id="top">
   <div id="brand"><b>AURORA//GM</b><div class="devs" id="sys"></div><span class="lbl">SOUND <span id="snd">CLICK THE PAGE ONCE TO TURN ON</span></span></div>
-  <div><div class="lbl">TEAM</div><div id="who" class="none">NO TEAM</div></div>
-  <div><div class="lbl" id="limit"></div><div id="clock">--:--</div></div>
+  <div><div class="lbl">TEAM</div><div id="who" class="none">NO TEAM</div><div id="pics"></div></div>
+  <div><div class="lbl" id="limit"></div><div id="clock">--:--</div><button id="go" class="white" hidden onclick="startClock()">START CLOCK NOW</button></div>
   <div id="acts">
     <div class="row"><input id="tname" placeholder="TEAM NAME" maxlength="40"><button class="pri" onclick="newTeam()">NEW TEAM</button></div>
-    <div class="row"><button onclick="finish()">FINISH RUN</button><button onclick="resetAll()">RESET ALL ROOMS</button><button class="white" onclick="scene('safe')" title="Every light on, now (the hallway bulb goes white)">LIGHTS ON</button></div>
+    <div class="row"><button onclick="finish()">FINISH RUN</button><button onclick="resetAll()" title="Save this run, mark the group done, every room back to its start, hallway light off, call the next group">RESET ALL ROOMS</button><button class="white" onclick="scene('safe')" title="Every light on, now (the hallway bulb goes white)">LIGHTS ON</button><button class="white" onclick="camShow(!camOn)" title="Game 2's hallway camera">CAMERA</button></div>
   </div>
 </div>
 
+<div id="ai" hidden>ROOM 02 ▸ THEY'RE TYPING "POWER" ▸ AI: MOVE INTO POSITION NOW</div>
 <div id="flow"></div>
 <div id="rooms"></div>
 
 <div id="bottom">
+  <div class="col">
   <div class="box" id="fin">
     <div class="hd"><span class="lbl">GAME 5 ▸ THE FINALE</span><span class="lbl" id="fwin"></span></div>
     <div id="fph"></div>
@@ -125,8 +150,19 @@ th { color: var(--dim); font-size: 11px; } td.win { color: var(--g); }
     <div id="fkill"></div>
     <div class="row"><button class="white" id="fskip"></button></div>
   </div>
+  <div class="box" id="sfx">
+    <span class="lbl">SOUND EFFECTS ▸ CLICK OR PRESS ITS KEY (AGAIN = ANOTHER ON TOP) ▸ DROP AUDIO FILES ON THIS PAGE TO ADD ▸ RIGHT-CLICK DELETES</span>
+    <div id="pads"></div>
+    <div class="row"><input type="range" id="sfxvol" min="0" max="1" step=".05" title="Sound effect volume"><button class="quiet" onclick="sfxStop()">STOP ALL</button>
+      <button onclick="sfxClear()" title="Delete every sound effect on this hub">DELETE ALL</button>
+      <button class="white" onclick="$('#sfxin').click()">+ ADD</button><button onclick="sfxSave()" title="Upload hub\public\sfx to GitHub">SAVE TO GITHUB</button>
+      <input type="file" id="sfxin" accept="audio/*" multiple hidden></div>
+    <span class="lbl" id="sfxmsg"></span>
+  </div>
+  <div class="box"><span class="lbl">RUN HISTORY (POINT AT A ROW FOR ROOM TIMES + HINTS)</span><div id="hist"></div><span class="lbl" id="phones"></span></div>
+  </div>
   <div class="box" id="line"></div>
-  <div class="box"><span class="lbl">RUN HISTORY</span><div id="hist"></div><span class="lbl" id="phones"></span></div>
+  <div class="box" id="cam" hidden><div class="hd"><span class="lbl">HALLWAY CAMERA ▸ ROOM 02</span><button class="quiet" onclick="camShow(false)">HIDE</button></div><iframe title="hallway camera"></iframe><div class="msg"></div></div>
 </div>
 
 <script>
@@ -154,9 +190,15 @@ const status = {}, seen = {}, wasOn = {}, wasOk = {};
 const send = o => ws?.readyState === 1 && ws.send(JSON.stringify(o));
 const scene = v => send({ t: 'cmd', a: 'scene', v });
 const key = (id, v) => send({ t: 'cmd', to: id, a: 'key', v });
-const online = id => ws?.readyState === 1 && Date.now() - (seen[id] || 0) < 3000;   // rooms report every second
-const clock = () => run.end ?? (run.t0 ? Date.now() + skew - run.t0 : null);
-$('#limit').textContent = `RUN CLOCK ▸ LIMIT ${LIMIT_MIN}:00`;
+// a room is online while its connection is up (the hub drops a dead one within 2 s), or it reported in the last 3 s (a
+// reset's reload). Not from the 1 s reports alone: a hidden, silent tab (a finished room) slows its timers to once a minute
+const online = id => hubUp() && (linked(id) || Date.now() - (seen[id] || 0) < 3000);
+// the run clock: from room 1's first click to the kill switch (or FINISH / RESET). waiting = a team is in, no click yet
+const clock = () => run.end ?? run.splits.p5done ?? (run.t0 ? Date.now() + skew - run.t0 : null);
+const waiting = () => run.team && !run.t0 && run.end == null;
+// when the team started room i (0-3, 4 = the finale), in run-clock ms: rooms 2-4 report their start (pNstart),
+// otherwise it's when the room before was cleared
+const since = i => i ? run.splits[`p${i + 1}start`] ?? run.splits[`p${i}done`] : 0;
 
 // alerts: a low beep when a room goes silent, a chime when a room is cleared
 const AC = new AudioContext();
@@ -216,7 +258,7 @@ function drawFlow() {
   const going = run.t0 && run.end == null;
   let now = -1;
   steps.forEach((el, i) => {
-    const t1 = run.splits[`p${i + 1}done`], t0 = i ? run.splits[`p${i}done`] : 0, done = t1 != null;
+    const t1 = run.splits[`p${i + 1}done`], t0 = since(i), done = t1 != null;
     if (!done && now < 0 && going && (i === 0 || t0 != null)) now = i;
     cls(el, 'step' + (done ? ' done' : now === i ? ' now' : ''));
     put(el.lastChild, done ? '✓ ' + mmss(t1 - t0) : now === i ? mmss(clock() - t0) : '');
@@ -249,18 +291,20 @@ const WORD = { clear: 'CLEARED', off: 'OFFLINE', ready: 'READY', locked: 'LOCKED
 function drawRooms() {
   ROOMS.forEach((r, i) => {
     const card = $('#' + r.id), s = status[r.id] || {}, on = online(r.id);
-    const t0 = i ? run.splits[`p${i}done`] : 0, t1 = run.splits[`p${i + 1}done`];
-    const st = t1 != null ? 'clear' : !on ? 'off' : s.mode === 'standby' ? (s.unlocked ? 'ready' : 'locked') : s.mode === 'idle' ? 'ready' : 'playing';
-    cls(card, `box room s-${st}${card.classList.contains('alarm') ? ' alarm' : ''}`);
+    const t0 = since(i), t1 = run.splits[`p${i + 1}done`];
+    // cleared: this run's split, or (no team running, e.g. a staff test) the room's own end screen
+    const st = t1 != null || (on && /^(end|final)$/.test(s.mode)) ? 'clear' : !on ? 'off' : s.mode === 'standby' ? (s.unlocked ? 'ready' : 'locked') : s.mode === 'idle' ? 'ready' : 'playing';
+    cls(card, `box room s-${st}${card.classList.contains('alarm') ? ' alarm' : ''}${r.id === 'puzzle2' && aiCall() ? ' callai' : ''}`);
     put(card.querySelector('.state'), WORD[st]);
-    put(card.querySelector('.tin'), !run.t0 ? '' : st === 'clear' ? 'DONE IN ' + mmss(t1 - t0) : st === 'playing' && t0 != null ? mmss(clock() - t0) : '');
+    put(card.querySelector('.tin'), !run.t0 ? '' : t1 != null ? 'DONE IN ' + mmss(t1 - t0) : st === 'playing' && t0 != null ? mmss(clock() - t0) : '');
     put(card.querySelector('.sub'), st === 'off' ? 'NO SIGNAL FROM ITS LAPTOP FOR 3 s' : st === 'locked' ? `WAITS FOR ROOM 0${i}` :
       st === 'ready' ? (i ? 'UNLOCKED ▸ WAITING FOR THE TEAM' : 'WAITING FOR THE TEAM') : st === 'playing' ? 'TIME IN THIS ROOM' : '');
     const v = on ? s.stat : null;
     put(card.querySelector('.live b'), v != null ? v + '%' : '--');
     card.querySelectorAll('.segs i').forEach((el, j) => el.classList.toggle('on', v != null && j < v / 4));
     put(card.querySelector('.code'), on && s.code ? `ANSWER ${s.code}` : '');
-    put(card.querySelector('.rv'), `${r.k.toUpperCase()} ${run[r.k] ?? '--'}`);
+    const n = run.hints?.[r.k], d = run.adj?.[r.k];   // hints given here, and what they cost (added to the room's result)
+    put(card.querySelector('.rv'), `${r.k.toUpperCase()} ${run[r.k] ?? '--'}${n ? ` · ${n} HINT${n > 1 ? 'S' : ''} (${d > 0 ? '+' : ''}${d})` : ''}`);
     if (wasOn[r.id] && !on) { card.classList.add('alarm'); tone(220, .5); }
     if (on) card.classList.remove('alarm');
     wasOn[r.id] = on;
@@ -314,31 +358,202 @@ function drawFinale() {
   }
 }
 
-function render() { drawFlow(); drawRooms(); drawFinale();
-  const ms = clock(), lim = LIMIT_MIN * 60000;
-  put($('#clock'), mmss(ms));
-  cls($('#clock'), ms == null ? '' : run.end != null ? 'fin' : ms > lim ? 'over' : ms > lim * .75 ? 'warn' : 'ok');
+function render() { drawFlow(); drawRooms(); drawFinale(); drawAI(); drawPics(); musicCheck();
+  const ms = clock(), lim = LIMIT_MIN * 60000, w = waiting();
+  put($('#limit'), w ? "RUN CLOCK ▸ STARTS AT ROOM 1'S FIRST CLICK" : `RUN CLOCK ▸ LIMIT ${LIMIT_MIN}:00`);
+  put($('#clock'), w ? 'READY' : mmss(ms)); $('#go').hidden = !w;
+  cls($('#clock'), w ? 'wait' : ms == null ? '' : run.end != null || run.splits.p5done != null ? 'fin' : ms > lim ? 'over' : ms > lim * .75 ? 'warn' : 'ok');
   put($('#who'), run.team || 'NO TEAM'); cls($('#who'), run.team ? '' : 'none');
 }
 
 function newTeam() {
   const team = $('#tname').value.trim();
   if (!team) return $('#tname').focus();
-  if (run.t0 && run.end == null && !confirm(`${run.team} hasn't finished. Start ${team} anyway? (their run is not saved)`)) return;
+  if (run.team && run.end == null && !confirm(`${run.team} hasn't finished. Start ${team} anyway? (their run is not saved)`)) return;
   send({ t: 'newteam', team }); $('#tname').value = '';
 }
+const startClock = () => confirm(`Start ${run.team}'s clock now? (It starts by itself at their first click in room 1.)`) && send({ t: 'start' });
 function finish() {
   if (!run.t0 || run.end != null) return alert('No run going. NEW TEAM (or SEND IN from the line) starts one.');
   if (!confirm(`Stop the clock for ${run.team} at ${mmss(clock())} and save the run? (This also ends the finale on every screen.)`)) return;
   send({ t: 'finish' });
-  const g = S?.sales.find(s => s.status === 'in' && s.team === run.team);
-  if (g) setStatus(g.code, 'done');
+  const g = group(); if (g?.status === 'in') setStatus(g.code, 'done');
 }
-function resetAll() {
-  // the hub wipes this run (scores, splits, the finale; mid-run the clock restarts), then every room reloads to its start
-  const open = run.t0 && run.end == null ? `\n\n${run.team} starts over from room 1: clock back to 0:00, scores and the finale wiped.` : '';
-  if (!confirm('Reset ALL rooms?' + open)) return;
-  send({ t: 'reset' }); ROOMS.forEach(r => key(r.id, 'KeyR'));
+// after a reset: today's first group that is here now (a walk-in, or its slot has started), the kiosk's "in line" rule
+function hereNext() {
+  if (!S || S.sales.some(s => s.status === 'called')) return null;   // a group is already called
+  const now = Date.now() + S.skew, today = ymd(new Date(now));
+  return S.sales.filter(s => s.status === 'booked' && s.slot.date === today && (s.walkin || Date.parse(s.slot.date + 'T' + s.slot.time) <= now)).sort(bySlot)[0] || null;
+}
+async function resetAll() {
+  // the hub saves the run, clears the team, turns the hallway light off and reloads every room; this page does the kiosk side
+  if (!hubUp()) return alert('The hub is down: nothing can be reset. Is hub\\start.bat running?');
+  const inside = S?.sales.find(s => s.status === 'in'), next = hereNext();
+  const lines = [
+    run.team && run.end == null && (run.t0 ? `${run.team}'s run is saved at ${mmss(clock())}.` : `${run.team} never started the clock: nothing saved.`),
+    inside && `"${inside.team}" is marked done on the kiosk.`,
+    'Every room goes back to its start, the hallway light and the music go off.',
+    !S ? 'The signup kiosk is not responding: call the next group from there.' : next ? `"${next.team}" (${next.size}) gets called.` : 'Nobody in line to call yet.',
+  ].filter(Boolean);
+  if (!confirm('RESET ALL ROOMS for the next group?\n\n' + lines.join('\n'))) return;
+  send({ t: 'reset' }); Object.keys(tracks).forEach(f => music(null, { f, to: 0, ms: 300 }));
+  if (inside) await setStatus(inside.code, 'done');
+  if (next) setStatus(next.code, 'called');
+}
+
+// ===== The players' photos from the signup kiosk: the ticket SEND IN started this run with (or the group IN THE BOOTH by that name) =====
+const group = () => run.team && S ? S.sales.find(s => s.code === run.code) || S.sales.find(s => s.status === 'in' && s.team === run.team) : null;
+function drawPics() {
+  const g = group(), k = g ? g.code + g.photos.length : '';
+  if ($('#pics')._k === k) return;
+  $('#pics')._k = k;
+  $('#pics').innerHTML = g ? g.photos.map(u => `<a href="${SIGNUP + u}" target="_blank"><img src="${SIGNUP + u}" alt=""></a>`).join('') : '';
+}
+
+// ===== Background music: every room's loops play here, on this laptop's speaker. The room pages ask through the hub =====
+const MUSIC_VOL = .7, tracks = {};   // file name -> its <audio>
+function music(room, { f, start, to = 1, ms = 0 }) {
+  if (!/^[\w-]+\.mp3$/.test(f || '')) return;
+  if (start) { tracks[f]?.pause(); tracks[f] = Object.assign(new Audio('sounds/' + f), { loop: true, volume: 0, room, at: Date.now() }); }
+  const a = tracks[f]; if (!a) return;
+  if (to && a.paused) a.play().catch(() => {});   // a missing file just stays quiet
+  const from = a.volume, target = to * MUSIC_VOL, t0 = performance.now();
+  clearInterval(a.fadeT);
+  a.fadeT = setInterval(() => {
+    const k = Math.min(1, (performance.now() - t0) / (ms || 1));
+    a.volume = from + (target - from) * k;
+    if (k === 1) { clearInterval(a.fadeT); if (!to) a.pause(); }
+  }, 30);
+}
+// a room that reloaded (back at its start screen) or the finale taking over: that music stops. 2.5 s grace after a start,
+// so a report sent just before it can't stop it. Not the soundtrack's tracks (no room)
+function musicCheck() {
+  Object.entries(tracks).forEach(([f, a]) => a.room && !a.paused && a.volume && Date.now() - a.at > 2500 &&
+    (F?.phase || /^(idle|standby)$/.test(status[a.room]?.mode)) && music(a.room, { f, to: 0, ms: 400 }));
+  soundtrack();
+}
+
+// ===== The booth soundtrack (hub/public/sounds/): follows the team like the flow bar, from the run's splits and the
+// finale, so it needs a team's run (NEW TEAM / SEND IN). A staff test without one only gets the hum.
+// LEVEL = 0..1 of MUSIC_VOL per file (game4.mp3 is ~3 dB louder than the rest); tune them by ear on the booth speaker
+const SOUNDTRACK = [   // [any of these moments reached, file]: the last row reached plays
+  [['p1done'], 'walk-to-2.mp3'],          // game 1 cleared: the walk to game 2
+  [['p2start'], 'game2.mp3'],             // game 2's SPACE to its end; LOOK BEHIND YOU pauses it for the scream
+  [['p2done', 'p3start'], 'game3.mp3'],   // game 2's end through game 3 (p3start: also when staff skipped room 2)
+  [['p3done', 'p4start'], 'game4.mp3'],   // game 3's end through game 4 (game 4 fades it at her final shot)
+];
+const BOSS = 'bossfight.mp3', HUM = 'hum.mp3', SCREAM = 'scream.mp3', HUM_WAIT = 3000;   // the hum fills any silence longer than this
+const LEVEL = { 'game4.mp3': .7, [HUM]: .45 }, lvl = f => LEVEL[f] ?? 1;
+const wanted = () => !run.t0 || run.end != null ? null
+  : F?.phase ? (/^(crash|end)$/.test(F.phase) ? null : BOSS)   // the boss theme from the takeover to the kill; her talking and her death get silence
+  : SOUNDTRACK.findLast(([at]) => at.some(k => run.splits[k] != null))?.[1] ?? null;
+let bgNow = null, screaming = null, quietAt = 0, humOn = false;
+function soundtrack() {
+  const w = wanted();
+  if (w !== bgNow) {
+    if (bgNow) music(null, { f: bgNow, to: 0, ms: F?.phase ? 300 : 1500 });
+    if (w) music(null, { f: w, start: 1, to: lvl(w), ms: 1500 });
+    bgNow = w;
+  }
+  const loud = screaming || Object.entries(tracks).some(([f, a]) => f !== HUM && !a.paused);
+  if (loud) quietAt = 0; else quietAt ||= Date.now();
+  const on = !loud && Date.now() - quietAt > HUM_WAIT, h = tracks[HUM];   // on but paused: the browser blocked it, or a reset faded it
+  if (on !== humOn || (on && h?.paused)) { humOn = on; music(null, { f: HUM, start: on && !h, to: on ? lvl(HUM) : 0, ms: on ? 4000 : 1500 }); }
+}
+// game 2's LOOK BEHIND YOU ('p2scare'): game 2 already faded its track during the dread. The music stops, the scream
+// plays, then the music fades back in where it stopped
+function scream() {
+  if (bgNow) music(null, { f: bgNow, to: 0, ms: 50 });
+  const a = screaming = new Audio('sounds/' + SCREAM); a.volume = MUSIC_VOL;
+  a.onended = a.onerror = () => { screaming = null; if (bgNow) music(null, { f: bgNow, to: lvl(bgNow), ms: 2500 }); };
+  a.play().catch(a.onerror);
+}
+// sound turns on at the first click: a track that wanted to play before it (the browser said no) starts now
+addEventListener('pointerdown', () => { if (tracks[bgNow]?.paused) bgNow = null; }, { once: true });
+
+// ===== Sound effect pads: the audio files in hub/public/sfx/ (dropped on this page, or copied into that folder).
+// They play on this laptop, over the music. SAVE TO GITHUB uploads the folder, so any laptop running the hub gets them =====
+const PADKEYS = '1234567890qwertyuiopasdfghjklzxcvbnm';
+let pads = [], sfxVol = (() => { try { return +(localStorage.getItem('gm-sfxvol') ?? 1); } catch { return 1; } })();
+const playing = {};   // file -> the Set of its <audio>s still playing (each press plays another copy on top)
+$('#sfxvol').value = sfxVol;
+$('#sfxvol').oninput = e => { sfxVol = +e.target.value; try { localStorage.setItem('gm-sfxvol', sfxVol); } catch {} Object.values(playing).forEach(s => s.forEach(a => a.volume = sfxVol)); };
+const padEl = f => $(`#pads [data-f="${f}"]`);   // file names are only letters, digits, . _ - (the hub renames them)
+function drawPads(list) {
+  pads = list;
+  $('#pads').innerHTML = list.map((f, i) => `<button data-f="${f}" title="${f}" class="${playing[f] ? 'on' : ''}"><b>${(PADKEYS[i] || '').toUpperCase()}</b>${f.replace(/\.\w+$/, '')}</button>`).join('') ||
+    '<span class="lbl">NO SOUNDS YET</span>';
+}
+async function sfxApi(q = '', o) { const r = await fetch('sfx' + q, o), b = await r.json(); if (!r.ok) throw b.msg; return b; }
+const loadPads = () => sfxApi().then(drawPads, () => {});
+function pad(f) {
+  const a = new Audio('sfx/' + f); a.volume = sfxVol;
+  (playing[f] ||= new Set()).add(a);
+  a.onended = a.onerror = () => { playing[f]?.delete(a); if (!playing[f]?.size) sfxStop(f); };
+  a.play().catch(a.onerror); padEl(f)?.classList.add('on');
+}
+function sfxStop(f) {
+  (f ? [f] : Object.keys(playing)).forEach(f => { playing[f]?.forEach(a => a.pause()); delete playing[f]; padEl(f)?.classList.remove('on'); });
+}
+async function sfxClear() {
+  if (!pads.length || !confirm(`Delete all ${pads.length} sounds? (SAVE TO GITHUB afterwards removes them there too.)`)) return;
+  sfxStop();
+  for (const f of [...pads]) await sfxApi('?f=' + f, { method: 'DELETE' }).then(drawPads, msg => alert(msg));
+}
+$('#pads').onclick = e => { const b = e.target.closest('[data-f]'); if (b) pad(b.dataset.f); };
+$('#pads').oncontextmenu = e => {
+  const f = e.target.closest('[data-f]')?.dataset.f; if (!f) return;
+  e.preventDefault();
+  if (confirm(`Delete ${f}? (SAVE TO GITHUB afterwards removes it there too.)`)) { sfxStop(f); sfxApi('?f=' + f, { method: 'DELETE' }).then(drawPads, msg => alert(msg)); }
+};
+addEventListener('keydown', e => {
+  if (e.ctrlKey || e.altKey || e.metaKey || e.repeat || e.key.length !== 1 || e.target.matches('input:not([type=range]), textarea')) return;
+  const f = pads[PADKEYS.indexOf(e.key.toLowerCase())]; if (f) pad(f);
+});
+// a file dropped anywhere on the page is added (instead of the browser leaving the panel to open it)
+addEventListener('dragover', e => { e.preventDefault(); $('#sfx').classList.add('drag'); });
+addEventListener('dragleave', e => e.relatedTarget || $('#sfx').classList.remove('drag'));
+addEventListener('drop', e => { e.preventDefault(); $('#sfx').classList.remove('drag'); upload(e.dataTransfer.files); });
+$('#sfxin').onchange = e => { upload([...e.target.files]); e.target.value = ''; };
+async function upload(files) {
+  for (const file of files) {
+    put($('#sfxmsg'), 'ADDING ' + file.name + '…');
+    try { drawPads(await sfxApi('?f=' + encodeURIComponent(file.name), { method: 'POST', body: file })); put($('#sfxmsg'), 'ADDED ' + file.name); }
+    catch (msg) { put($('#sfxmsg'), ''); alert(msg); }
+  }
+}
+async function sfxSave() {
+  if (!confirm('Upload the sound effects to GitHub (the public LWeek2026 repo)?\n\nThe hub laptop needs internet. NexusV has none: join another Wi-Fi first.')) return;
+  put($('#sfxmsg'), 'SAVING TO GITHUB…');
+  try { put($('#sfxmsg'), (await sfxApi('/push', { method: 'POST' })).msg.toUpperCase()); } catch (msg) { put($('#sfxmsg'), ''); alert('Not saved: ' + msg); }
+}
+addEventListener('focus', loadPads);   // files copied into the folder show up when you come back to this window
+loadPads();
+
+// ===== Room 2: the moment they start typing "power" in its training, the staff AIs get into position =====
+const aiCall = () => { const s = status.puzzle2; return online('puzzle2') && !!s?.pos && (s.mode === 'tut' || s.mode === 'fake'); };
+let aiWas = false;
+function drawAI() {
+  const on = aiCall();
+  $('#ai').hidden = !on;
+  if (on && !aiWas) [0, .2, .4, .8, 1, 1.2].forEach(d => tone(1175, .14, d));
+  aiWas = on;
+}
+
+// ===== Game 2's hallway camera, any time. hub\start.bat runs a go2rtc on this laptop (like the kiosk's: this laptop only) =====
+const CAM = 'http://127.0.0.1:1984';
+let camOn = (() => { try { return localStorage.getItem('gm-cam') !== '0'; } catch { return true; } })(), camT;
+function camShow(on) {
+  camOn = on; try { localStorage.setItem('gm-cam', on ? '1' : '0'); } catch {}
+  $('#cam').hidden = !on; $('#bottom').classList.toggle('nocam', !on); clearTimeout(camT);
+  const fr = $('#cam iframe'), msg = $('#cam .msg');
+  if (!on) return fr.src = 'about:blank';
+  if (fr.src.startsWith(CAM)) return;
+  msg.textContent = 'CONNECTING…';
+  fetch(CAM + '/api', { mode: 'no-cors', signal: AbortSignal.timeout(3000) })
+    .then(() => { if (camOn) { fr.src = CAM + '/stream.html?src=hallway&mode=mse'; msg.textContent = ''; } })
+    .catch(() => { msg.textContent = 'NO CAMERA VIEWER ON THIS LAPTOP. RESTART hub\\start.bat (IT NEEDS signup\\go2rtc.exe + camera.json). RETRYING…';
+      camT = setTimeout(() => camOn && camShow(true), 5000); });
 }
 
 // ===== The line, from the signup kiosk: who's inside, who's called, who's next =====
@@ -360,9 +575,9 @@ async function setStatus(code, status) {
   } catch { alert('The signup kiosk is not responding.'); return false; }
 }
 async function sendIn(s) {
-  const warn = run.t0 && run.end == null ? `\n\n${run.team} hasn't finished: their run is NOT saved.` : '';
-  if (!confirm(`Send "${s.team}" (${s.size} players) into the booth? This starts the clock.${warn}`)) return;
-  if (await setStatus(s.code, 'in')) send({ t: 'newteam', team: s.team });
+  const warn = run.team && run.end == null ? `\n\n${run.team} hasn't finished: their run is NOT saved (RESET ALL ROOMS saves it).` : '';
+  if (!confirm(`Send "${s.team}" (${s.size} players) into the booth? The clock starts at their first click in room 1.${warn}`)) return;
+  if (await setStatus(s.code, 'in')) send({ t: 'newteam', team: s.team, code: s.code });
 }
 function renderLine() {
   let h;
@@ -372,11 +587,12 @@ function renderLine() {
     const inside = sales.find(s => s.status === 'in'), calling = sales.filter(s => s.status === 'called').sort(bySlot);
     const next = sales.filter(s => s.status === 'booked' && s.slot.date >= today).sort(bySlot).slice(0, 3);
     const left = sales.filter(s => ['booked', 'called'].includes(s.status) && s.slot.date === today).length;
+    const played = sales.filter(s => s.status === 'done' && s.slot.date === today), ppl = played.reduce((n, s) => n + s.size, 0);
     const grp = (s, btns) => `<div class="grp"><span>${s.slot.date === today ? '' : s.slot.date.slice(5) + ' '}${fmtTime(s.slot)}</span>` +
       `<span class="t">${esc(s.team)} · ${s.size}</span>${btns.map(([a, l]) => `<button data-act="${a}" data-code="${s.code}">${l}</button>`).join('')}</div>`;
     h = `<div class="hd"><span class="lbl">THE LINE</span><span class="lbl">SOLD ${S.sold}/${S.cfg.TICKETS} ▸ ${left} GROUP${left === 1 ? '' : 'S'} LEFT TODAY</span></div>` +
-      `<h4 class="lbl">IN THE BOOTH</h4>` + (inside ? `<div class="grp"><span class="t">${esc(inside.team)} · ${inside.size} PLAYERS · ${inside.code}</span></div>` +
-        `<div class="ph">${inside.photos.map(u => `<a href="${SIGNUP + u}" target="_blank"><img src="${SIGNUP + u}" alt=""></a>`).join('')}</div>` : '<span class="lbl">—</span>') +
+      `<span class="lbl">PLAYED TODAY ▸ ${played.length} GROUP${played.length === 1 ? '' : 'S'} · ${ppl} PLAYERS</span>` +
+      `<h4 class="lbl">IN THE BOOTH</h4>` + (inside ? `<div class="grp"><span class="t">${esc(inside.team)} · ${inside.size} PLAYERS · ${inside.code}</span></div>` : '<span class="lbl">—</span>') +
       `<h4 class="lbl">CALLING</h4>` + (calling.map(s => grp(s, [['in', 'SEND IN'], ['noshow', 'NO-SHOW']]).replace('<span class="t">', `<b class="cd" data-at="${Date.parse(calledAt(s))}"></b><span class="t">`)).join('') || '<span class="lbl">—</span>') +
       `<h4 class="lbl">UP NEXT</h4>` + (next.map(s => grp(s, [['call', 'CALL'], ['in', 'SEND IN']])).join('') || '<span class="lbl">NOBODY BOOKED</span>');
     const codes = calling.map(s => s.code).join();
@@ -408,20 +624,31 @@ function conn() {
     if (m.t === 'status') { status[m.id] = m.v; seen[m.id] = Date.now(); return; }   // 5 a second: the 500 ms redraw picks them up
     if (m.t === 'run') { run = m; skew = m.now - Date.now(); }
     if (m.t === 'fin') F = m;
+    if (m.t === 'addr') SIGNUP = 'http://' + (m.signup || location.hostname) + ':4000';   // signup null = the kiosk runs on the hub laptop
     if (m.t === 'addr') put($('#phones'), m.hub.length ? `PHONES OPEN ▸ BEACON ${m.hub[0]}:3000/beacon` +
       (m.hub.length > 1 ? ` ▸ OTHER NETWORKS ON THIS LAPTOP: ${m.hub.slice(1).join(', ')}` : '') : 'THIS LAPTOP IS NOT ON A NETWORK');
     if (m.t === 'evt' && /^p\ddone$/.test(m.e)) { tone(880, .15); tone(1320, .3, .15); }
+    if (m.t === 'evt' && m.e === 'music') return music(m.id, m.v || {});
+    if (m.t === 'evt' && m.e === 'p2scare') scream();
     if (m.t === 'roster') rost = m;
     if (m.t === 'history') $('#hist').innerHTML = `<table><tr><th>TEAM</th><th>TIME</th><th>FINALE</th><th>SYNC</th><th>POWER</th><th>TRACE</th><th>HUMAN</th></tr>` +
-      m.runs.slice().reverse().map(x => `<tr><td>${esc(x.team)}</td><td class="${x.end <= LIMIT_MIN * 60000 ? 'win' : ''}">${mmss(x.end)}${x.end <= LIMIT_MIN * 60000 ? ' ✓' : ''}</td>` +
+      m.runs.slice().reverse().map(x => `<tr title="${esc(runInfo(x))}"><td>${esc(x.team)}</td><td class="${x.end <= LIMIT_MIN * 60000 ? 'win' : ''}">${mmss(x.end)}${x.end <= LIMIT_MIN * 60000 ? ' ✓' : ''}</td>` +
         `<td class="${x.splits?.p5done != null ? 'win' : ''}">${x.splits?.p5done != null ? '✓' : '-'}</td>` +
         ['sync', 'power', 'trace', 'human'].map(k => `<td>${x[k] ?? '-'}</td>`).join('') + '</tr>').join('') + '</table>';
     render();
   };
 }
+// a history row's details (the row's tooltip): time in each room, and the hints given
+function runInfo(x) {
+  const sp = x.splits || {}, sv = i => i ? sp[`p${i + 1}start`] ?? sp[`p${i}done`] : 0;
+  const rooms = [0, 1, 2, 3, 4].map(i => `${i < 4 ? 'ROOM 0' + (i + 1) : 'FINALE'} ${sp[`p${i + 1}done`] != null && sv(i) != null ? mmss(sp[`p${i + 1}done`] - sv(i)) : '-'}`);
+  const hints = Object.entries(x.hints || {}).map(([k, n]) => `${n} ${k.toUpperCase()} (${x.adj[k] > 0 ? '+' : ''}${x.adj[k]})`);
+  return rooms.join('   ') + '\nHINTS ' + (hints.join(', ') || 'none') + (x.code ? '   TICKET ' + x.code : '');
+}
+
 setInterval(() => { render(); tickLine(); }, 500);
 setInterval(signupPoll, 2000);
-conn(); signupPoll();
+conn(); signupPoll(); camShow(camOn);
 </script>
 </body>
 </html>

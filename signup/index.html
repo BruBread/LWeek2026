@@ -348,11 +348,13 @@ async function findHub() {
     await new Promise(r => setTimeout(r, 2000));
   }
 }
-let run = null, hist = [], hubOff = 0, hubUp = false;
+let run = null, hist = [], hubOff = 0, hubUp = false, voiceOn = false;
 async function hub() {
   let ws; try { ws = new WebSocket('ws://' + await findHub() + ':3000/ws'); } catch { setTimeout(hub, 3000); return; }
   // id 'signup' = the kiosk itself: the hub reads this PC's IP from it, for the GM panel's LINE box
-  ws.onopen = () => { hubUp = true; ws.send(JSON.stringify({ t: 'hello', id: mode === 'board' ? 'queue-board' : 'signup', role: 'page' })); };
+  ws.onopen = () => { hubUp = true; ws.send(JSON.stringify({ t: 'hello', id: mode === 'board' ? 'queue-board' : 'signup', role: 'page' }));
+    // Aurora's recorded lines come from the hub too (no hub = she blips instead)
+    if (!voiceOn) { voiceOn = true; document.head.append(Object.assign(document.createElement('script'), { src: ws.url.replace(/^ws(.*)\/ws$/, 'http$1/voice.js') })); } };
   ws.onclose = () => { hubUp = false; setTimeout(hub, 3000); };
   ws.onmessage = e => { const m = JSON.parse(e.data);
     if (m.t === 'run') { run = m; hubOff = m.now - Date.now(); }
@@ -455,9 +457,10 @@ function blip(v) {
   s.buffer = voiceBuf; s.playbackRate.value = k * v.f / 440; g.gain.value = v.vol * 8;
   s.connect(g).connect(master); s.start();
 }
-async function type(el, text, ms, voice) {
+async function type(el, text, ms, voice, spoken = text) {   // spoken: her recorded line, when the text adds to it
+  const sec = voice && window.auroraVoice?.(spoken, master);   // her recorded line: no blips, the text keeps pace with it
   let n = 0; el.textContent = '';
-  for (const ch of text) { if (!el.isConnected) return; el.textContent += ch; if (/\w/.test(ch)) voice ? (n++ % voice.every || blip(voice)) : sfx.key(); await wait(ms); }
+  for (const ch of text) { if (!el.isConnected) return; el.textContent += ch; if (/\w/.test(ch)) voice ? (sec || n++ % voice.every || blip(voice)) : sfx.key(); await wait(sec ? sec * 1000 / text.length : ms); }
 }
 function shake(el, px, ms) {
   const kf = Array.from({ length: 10 }, () => ({ transform: `translate(${rand(-px, px)}px,${rand(-px, px) / 2}px)` }));
@@ -632,8 +635,9 @@ function renderLine() {
   const at = now(), L = line(S, at), inside = S.sales.find(s => s.status === 'in');
   const p = progress(run, hist, Date.now() + hubOff);
   const calling = S.sales.filter(s => s.status === 'called');
-  let booth = !hubUp ? 'BOOTH LINK DOWN' : !p ? 'READY FOR THE NEXT GROUP' : p.done ? 'FINISHING UP' : `ROOM ${p.room}/5 · ~${Math.ceil(p.left / 60000)} MIN LEFT`;
-  if (inside && p && !p.done) booth = esc(inside.team) + ' · ' + booth;
+  // !p with a group inside: they're in, but the clock waits for their first click in room 1
+  let booth = !hubUp ? 'BOOTH LINK DOWN' : !p ? (inside ? 'ROOM 1/5 · STARTING' : 'READY FOR THE NEXT GROUP') : p.done ? 'FINISHING UP' : `ROOM ${p.room}/5 · ~${Math.ceil(p.left / 60000)} MIN LEFT`;
+  if (inside && hubUp && !p?.done) booth = esc(inside.team) + ' · ' + booth;
   const call = calling.map(s => { const r = S.cfg.GRACE_MIN * 60000 - (Date.now() - Date.parse(calledAt(s)));
     return `${esc(s.team)} ${r > 0 ? `${r / 60000 | 0}:${pad((r % 60000) / 1000 | 0)}` : 'LAST CALL'}`; }).join(' · ');
   const nx = nowSlot(S, at);
@@ -977,7 +981,7 @@ async function receipt(s) {
     '[SPACE] DONE');
   sfx.stamp(); shake(box, 8, 300);
   await wait(900);
-  type($('.aur.m'), `AURORA > I'll be waiting, ${s.team}.`, 45, VOICES.aurora);
+  type($('.aur.m'), `AURORA > I'll be waiting, ${s.team}.`, 45, VOICES.aurora, "I'll be waiting.");
   for (;;) { const e = await nextKey(90000); if (e === TIMEOUT || go(e)) return; }
 }
 async function signup() {

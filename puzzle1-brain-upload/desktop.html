@@ -192,6 +192,7 @@ function openWin() {
   win.style.left = (innerWidth - win.offsetWidth) / 2 + 'px';
   win.style.top = Math.max(0, (innerHeight - 48 - win.offsetHeight) / 2) + 'px';
   appBtn.classList.add('open'); front(true); sfx.open();
+  hubWs?.readyState === 1 && hubWs.send(JSON.stringify({ t: 'evt', e: 'p1start' }));   // the run clock starts at the team's first click (this, or the mask)
   win.animate([{ transform: 'scale(.9)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 200, easing: 'cubic-bezier(.1,.9,.2,1)' });
   reveal();
 }
@@ -246,8 +247,9 @@ async function findHub() {
     await wait(2000);
   }
 }
+let hubWs;
 async function hub() {
-  const ws = new WebSocket('ws://' + await findHub() + ':3000/ws');
+  const ws = hubWs = new WebSocket('ws://' + await findHub() + ':3000/ws');
   ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', id: 'desk1', role: 'page' }));
   ws.onclose = () => setTimeout(hub, 2000);
   ws.onmessage = e => { const m = JSON.parse(e.data); if (m.t === 'cmd' && m.a === 'key' && m.v === 'KeyR') location.reload(); };

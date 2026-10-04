@@ -59,7 +59,7 @@ The keyboard types into whichever screen was clicked last. When the projector ne
 | Ctrl+Alt+W | Replay only the win / mind-upload finale |
 | Ctrl+Alt+M | Mute / unmute |
 
-During the finale Aurora attacks four times. Tell players to **mash any key** on the laptop to push her back (they have a 5-second timer; each attack clears on its own when it hits zero). Her lines use Undertale-style text blips (drop `sounds/aurora-voice.mp3` to use your own blip).
+During the finale Aurora attacks four times. Tell players to **mash any key** on the laptop to push her back (they have a 5-second timer; each attack clears on its own when it hits zero). Her lines are recorded clips from the hub (`hub/public/voice/`, see `aurora-voice/cut.py`); with the hub down she falls back to Undertale-style text blips (drop `sounds/aurora-voice.mp3` to use your own blip).
 
 Timings, particle count and volume are in `CFG` / `T` at the top of `projector.html`.
 
@@ -77,9 +77,11 @@ Drop these into `sounds/` (mp3). Any file that's missing is skipped, so the page
 |---|---|
 | `upload1.mp3` | First brain upload: from the mask click until the screen collapses (fades out) |
 | `detected.mp3` | One-shot the moment "UNAUTHORIZED CONSCIOUSNESS DETECTED" appears (~7–8 s after the click) |
-| `crt-music.mp3` | Loops from the green CRT boot until the players crack the code (fades out) |
-| `finale-music.mp3` | Loops from the instant the red CRT line appears. Ducks during Aurora's attacks, then fades out over 2.5 s when Aurora says "fine, come in then." Replaces the built-in synth beat. |
+| `crt-music.mp3` | **In `hub/public/sounds/`, plays on the hub laptop.** Loops from the green CRT boot until the players crack the code (fades out) |
+| `finale-music.mp3` | **In `hub/public/sounds/`, plays on the hub laptop.** Loops from the instant the red CRT line appears. Ducks during Aurora's attacks, then fades out over 2.5 s when Aurora says "fine, come in then." The built-in synth beat only plays while the hub is down. |
 | `mash-in.mp3` | One-shot when the MASH ANY KEY banner appears (each attack) |
 | `mash-out.mp3` | One-shot when the banner goes away, whether it shatters or the timer runs out |
 
 To use other names or formats, edit `SOUNDS` near the top of the script in `projector.html`.
+
+Background music (every loop, in every room) plays on the hub laptop: the GM panel plays it, so plug the booth speaker into that laptop and click the GM panel once after opening it (browsers block sound until a click).

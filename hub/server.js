@@ -1,5 +1,6 @@
 // NEXUS hub: static pages + WebSocket relay. Run: node server.js
 const http = require('http'), fs = require('fs'), path = require('path'), os = require('os');
+const { execFile } = require('child_process'), { promisify } = require('util');
 const { WebSocketServer } = require('ws');
 const scenes = require('./scenes');
 
@@ -14,6 +15,7 @@ const server = http.createServer((req, res) => {
   let p = req.url.split('?')[0];
   // the room pages search the network for this answer to find the hub (findHub() in each page)
   if (p === '/ping') return res.writeHead(200, { 'Access-Control-Allow-Origin': '*' }).end('nexus-hub');
+  if (p === '/sfx' || p === '/sfx/push') return sfx(req, res, p);
   p = p === '/'? '/gm.html' : /\.\w+$/.test(p) ? p : p + '.html';
   const f = path.join(PUB, path.normalize(p));
   if (!f.startsWith(PUB)) return res.writeHead(403).end();
@@ -22,7 +24,55 @@ const server = http.createServer((req, res) => {
     'Content-Type': MIME[path.extname(f).toLowerCase()] || 'application/octet-stream' }).end(d));
 });
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.gif': 'image/gif',
-  '.jpg': 'image/jpeg', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.ttf': 'font/ttf', '.woff2': 'font/woff2' };
+  '.jpg': 'image/jpeg', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.m4a': 'audio/mp4', '.ttf': 'font/ttf', '.woff2': 'font/woff2' };
+
+// ===== The GM panel's sound effect pads: audio files in public/sfx/. GET lists them, POST ?f=name uploads one (the body
+// is the file), DELETE ?f=name removes one, POST /sfx/push saves the folder to GitHub =====
+const SFX = process.env.SFX || path.join(PUB, 'sfx'), SFX_MAX = 25e6;   // SFX: only the tests change it. 25 MB a file keeps the repo small
+fs.mkdirSync(SFX, { recursive: true });
+const sfxName = q => { const f = path.basename(String(q || '')).replace(/[^\w.-]+/g, '-'); return /\.(mp3|wav|ogg|m4a)$/i.test(f) ? f : null; };
+const sfxList = () => fs.readdirSync(SFX).filter(sfxName).sort((a, b) => a.localeCompare(b));
+const json = (res, code, o) => res.writeHead(code, { 'Content-Type': 'application/json' }).end(JSON.stringify(o));
+let pushing = false;
+function sfx(req, res, p) {
+  const f = sfxName(new URL(req.url, 'http://x').searchParams.get('f'));
+  if (p === '/sfx/push') {
+    if (req.method !== 'POST') return res.writeHead(405).end();
+    if (pushing) return json(res, 409, { msg: 'Already saving to GitHub.' });
+    pushing = true;
+    return sfxPush().then(msg => json(res, 200, { msg }), e => json(res, 500, { msg: String(e.stderr?.trim().split('\n').pop() || e.message || e) }))
+      .finally(() => pushing = false);
+  }
+  if (req.method === 'GET') return json(res, 200, sfxList());
+  if (!f) return json(res, 400, { msg: 'Only .mp3, .wav, .ogg or .m4a files.' });
+  if (req.method === 'DELETE') return fs.rm(path.join(SFX, f), { force: true }, () => { log('sfx deleted ' + f); json(res, 200, sfxList()); });
+  if (req.method !== 'POST') return res.writeHead(405).end();
+  if (!(+req.headers['content-length'] <= SFX_MAX)) return json(res, 413, { msg: `${f} is over ${SFX_MAX / 1e6} MB.` });
+  req.pipe(fs.createWriteStream(path.join(SFX, f))).on('finish', () => { log('sfx added ' + f); json(res, 200, sfxList()); })
+    .on('error', e => json(res, 500, { msg: e.message }));
+}
+// Commits only public/sfx on top of GitHub's newest main and pushes it. A temporary index, so nothing else on this laptop
+// (other edits, half-done work) goes up. The booth router NexusV has no internet: the hub laptop must be on another Wi-Fi
+const sh = (cmd, args, env) => promisify(execFile)(cmd, args, { cwd: __dirname, timeout: 180000, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...env } })
+  .then(r => r.stdout.trim());
+async function sfxPush() {
+  const wifi = await sh('netsh', ['wlan', 'show', 'interfaces']).catch(() => '');
+  if (/^\s*SSID\s*:\s*NexusV\s*$/mi.test(wifi)) throw 'This laptop is on NexusV, which has no internet. Join a Wi-Fi with internet, then try again.';
+  await fetch('https://github.com', { method: 'HEAD', signal: AbortSignal.timeout(8000) }).catch(() => { throw 'No internet on this laptop.'; });
+  const idx = path.join(os.tmpdir(), 'nexus-sfx-index'), git = (...a) => sh('git', a, { GIT_INDEX_FILE: idx });
+  await git('fetch', 'origin', 'main');
+  const base = await git('rev-parse', 'origin/main');
+  await git('read-tree', base); await git('add', '-A', '--', 'public/sfx');
+  const tree = await git('write-tree'); fs.rm(idx, { force: true }, () => {});
+  if (tree === await git('rev-parse', base + '^{tree}')) return 'GitHub already has these sounds.';
+  const who = await git('config', 'user.email').catch(() => '') ? [] : ['-c', 'user.name=NEXUS GM', '-c', 'user.email=nexus-gm@users.noreply.github.com'];
+  const c = await git(...who, 'commit-tree', tree, '-p', base, '-m', 'Update the GM sound effects');
+  await git('push', 'origin', c + ':refs/heads/main');
+  // this laptop was on GitHub's newest: move it onto the new commit too, or its next pull trips over the (untracked) sounds
+  if (await sh('git', ['rev-parse', 'HEAD']) === base) { await sh('git', ['reset', '--soft', c]); await sh('git', ['reset', '-q', '--', 'public/sfx']); }
+  log(`sfx saved to GitHub (${c.slice(0, 7)})`);
+  return `Saved to GitHub (${sfxList().length} sounds).`;
+}
 
 const send = (ws, o) => ws.readyState === 1 && ws.send(JSON.stringify(o));
 const broadcast = (o, pred = () => true) => { const s = JSON.stringify(o); wss.clients.forEach(c => pred(c) && c.readyState === 1 && c.send(s)); };
@@ -48,10 +98,13 @@ function cmd(to, a, v) {
 // sync = P1 upload depth, power = P2 reserve, trace = how far P3's trace got, human = P4's human error (missed shots, slow layers)
 // (trace and human: lower is better). null = not played.
 // facts = details for the finale's intruder dossier (caught, wrong codes, ...).
-// team/t0 = set by NEW TEAM; splits = ms from t0 to each pNdone; end = ms from t0 at FINISH.
+// adj = the GM's HINT costs per resource, hints = how many. A hint before the room's result is kept and added to it.
+// team/code = set by NEW TEAM or SEND IN (code = the signup ticket, for the photos). t0 = the clock's start: room 1's
+// first click (p1start) or the GM's START, not SEND IN. splits = ms from t0 to each pNstart (rooms 2-4: the team pressed
+// start) and pNdone; end = ms from t0 when the run closes (FINISH RUN or RESET ALL ROOMS; the kill switch's time if they got there).
 const KEYS = ['sync', 'power', 'trace', 'human'];
-const fresh = (team = '') => ({ sync: null, power: null, trace: null, human: null, facts: {},
-  team, t0: team ? Date.now() : null, splits: {}, end: null, fin: finFresh() });
+const fresh = (team = '', code = '') => ({ sync: null, power: null, trace: null, human: null, facts: {}, adj: {}, hints: {},
+  team, code, t0: null, splits: {}, end: null, fin: finFresh() });
 
 // ===== Game 5, the finale: hub/public/boss.js on every room laptop. The hub owns its state, so the 4 screens agree,
 // a reloaded laptop rejoins, and the synced moments (takeover, blackout) land at one hub time on every screen.
@@ -143,7 +196,21 @@ const runMsg = () => { const { fin: _, ...r } = run; return { t: 'run', ...r, no
 function changed(why) { save(); log(`${why} ▸ ` + KEYS.map(k => `${k} ${run[k]}`).join(' ')); toPages(runMsg()); finOut(); }
 // the rooms this run already unlocked. Sent to a game page on hello, so a room that reloaded or missed the event
 // (its laptop rebooted, the hub restarted) unlocks again. Only mid-run: after FINISH RUN, reset rooms stay locked.
-const unlocks = () => run.t0 && run.end == null ? Object.keys(run.splits) : [];
+const unlocks = () => run.t0 && run.end == null ? Object.keys(run.splits).filter(k => k.endsWith('done')) : [];
+function startClock(why) {   // the team is in room 1 and touched something: the run clock starts now
+  if (!run.team || run.t0 || run.end != null) return;
+  run.t0 = Date.now(); changed(`clock starts (${why}) for ${run.team}`);
+}
+function closeRun() {        // stop the clock and add the run to the history, once (FINISH RUN, or RESET ALL ROOMS mid-run)
+  clearTimeout(judgeT); presses = {};
+  if (!run.t0 || run.end != null) return;
+  run.end = run.splits.p5done ?? Date.now() - run.t0;   // a team that killed her: her death time, not when staff got to the button
+  const { fin: _, ...done } = run, line = { ...done, at: new Date().toISOString() };
+  fs.appendFile(RUNS, JSON.stringify(line) + '\n', e => e && log('could not save run: ' + e.message));
+  history = [...history, line].slice(-30);
+  toPages(historyMsg());
+}
+const ROOM_PAGES = ['puzzle1', 'puzzle2', 'puzzle3', 'puzzle4', 'desk1'];
 
 let history = [];
 try { history = fs.readFileSync(RUNS, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)).slice(-30); } catch {}
@@ -176,23 +243,28 @@ wss.on('connection', (ws, req) => {
     else if (m.t === 'cmd') cmd(m.to, m.a, m.v);            // from GM/pages
     else if (m.t === 'fin' && ws.role === 'fin') fin(ws, m);
     else if (m.t === 'finskip') finSkip(m.task);
-    else if (m.t === 'result' && KEYS.includes(m.k)) { run[m.k] = clamp(+m.v || 0); Object.assign(run.facts, m.facts); changed(`${m.k} from ${ws.id}`); }
-    else if (m.t === 'adj' && KEYS.includes(m.k)) { run[m.k] = clamp((run[m.k] ?? 50) + (+m.d || 0)); changed(`${m.k} ${m.d > 0 ? '+' : ''}${m.d} (${m.why || ws.id})`); }
-    // RESET ALL ROOMS: this run starts over. Mid-run the team keeps its name and its clock restarts from 0; scores,
-    // splits (so no room unlocks itself again) and the finale are wiped. Between teams it just clears everything
-    else if (m.t === 'reset') { clearTimeout(judgeT); presses = {}; run = fresh(run.t0 && run.end == null ? run.team : ''); changed(`reset all rooms${run.team ? ': ' + run.team + ' starts over' : ''}`); }
-    else if (m.t === 'newteam') { clearTimeout(judgeT); presses = {}; run = fresh(String(m.team || '').slice(0, 40)); changed(`new team ${run.team}`); }
-    else if (m.t === 'finish' && run.t0 && run.end == null) {
-      run.end = Date.now() - run.t0;
-      const { fin: _, ...done } = run, line = { ...done, at: new Date().toISOString() };
-      run.fin = finFresh(); clearTimeout(judgeT); presses = {};   // the finale screens go back to their own games
-      fs.appendFile(RUNS, JSON.stringify(line) + '\n', e => e && log('could not save run: ' + e.message));
-      history = [...history, line].slice(-30);
-      changed(`finish ${run.team}`); toPages(historyMsg());
+    else if (m.t === 'result' && KEYS.includes(m.k)) { run[m.k] = clamp((+m.v || 0) + (run.adj[m.k] || 0)); Object.assign(run.facts, m.facts); changed(`${m.k} from ${ws.id}`); }
+    else if (m.t === 'adj' && KEYS.includes(m.k)) {
+      const d = +m.d || 0;
+      run.adj[m.k] = (run.adj[m.k] || 0) + d; run.hints[m.k] = (run.hints[m.k] || 0) + 1;
+      if (run[m.k] != null) run[m.k] = clamp(run[m.k] + d);   // not played yet: the room's result picks it up
+      changed(`${m.k} ${d > 0 ? '+' : ''}${d} (${m.why || ws.id})`);
     }
+    // RESET ALL ROOMS = ready for the next group: the run so far is saved, the team cleared, every room back to its start,
+    // the hallway light off. (The GM panel also marks the group done on the kiosk and calls the next one.)
+    else if (m.t === 'reset') {
+      closeRun(); const was = run.team; run = fresh();
+      cmd(null, 'scene', 'dark'); ROOM_PAGES.forEach(id => cmd(id, 'key', 'KeyR'));
+      changed(`reset all rooms${was ? ' after ' + was : ''}`);
+    }
+    else if (m.t === 'newteam') { clearTimeout(judgeT); presses = {}; run = fresh(String(m.team || '').slice(0, 40), String(m.code || '').slice(0, 8)); changed(`new team ${run.team}`); }
+    else if (m.t === 'start') startClock('GM');
+    else if (m.t === 'finish' && run.t0 && run.end == null) { closeRun(); run.fin = finFresh(); changed(`finish ${run.team}`); }   // the finale screens go back to their own games
     else if (m.t === 'evt') {
-      if (/^p\ddone$/.test(m.e) && run.t0 && run.end == null && run.splits[m.e] == null) { run.splits[m.e] = Date.now() - run.t0; save(); toPages(runMsg()); }
-      log(`evt ${ws.id}: ${m.e}`); toPages({ t: 'evt', id: ws.id, e: m.e, v: m.v });
+      if (m.e === 'p1start') startClock(ws.id);
+      if (/^p\d(start|done)$/.test(m.e) && run.t0 && run.end == null && run.splits[m.e] == null) { run.splits[m.e] = Date.now() - run.t0; save(); toPages(runMsg()); }
+      if (m.e !== 'music') log(`evt ${ws.id}: ${m.e}`);   // music: room pages asking the GM laptop to play their background loops
+      toPages({ t: 'evt', id: ws.id, e: m.e, v: m.v });
     }
   });
   ws.on('close', () => {

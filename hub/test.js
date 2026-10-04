@@ -1,12 +1,13 @@
-// smoke test: device receives finale_red, gets state replayed after reconnect; carried resources store, clamp, merge facts, reset;
-// GM panel protocol (status, staff keys, run clock, finish); unlocks resent on hello; the run surviving a hub restart;
+// smoke test: device receives finale_red, gets state replayed after reconnect; carried resources store, clamp, merge facts, hints;
+// GM panel protocol (status, staff keys, run clock from room 1's first click, room starts, finish, reset for the next group);
+// unlocks resent on hello; the run surviving a hub restart;
 // game 5's finale state (phases in order, task swap, kill switch judging).
 // Starts its own hub on :3999 with temp run files, so it runs next to the real hub and never lands in runs.jsonl.
 const WebSocket = require('ws'), assert = require('assert'), { spawn } = require('child_process'), fs = require('fs'), os = require('os'), path = require('path');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-hub-'));
 let hub;
 const startHub = () => new Promise((ok, bad) => {
-  hub = spawn(process.execPath, [path.join(__dirname, 'server.js')], { env: { ...process.env, PORT: '3999', RUNS: path.join(tmp, 'runs.jsonl'), RUN: path.join(tmp, 'run.json') } });
+  hub = spawn(process.execPath, [path.join(__dirname, 'server.js')], { env: { ...process.env, PORT: '3999', RUNS: path.join(tmp, 'runs.jsonl'), RUN: path.join(tmp, 'run.json'), SFX: path.join(tmp, 'sfx') } });
   hub.stdout.once('data', () => ok());
   hub.once('exit', c => bad(new Error(`hub exited (${c}). Is something already on :3999?`)));
 });
@@ -42,12 +43,15 @@ const unlocked = (w, e) => w.msgs.some(m => m.t === 'evt' && m.e === e);
   g({ t: 'adj', k: 'sync', d: -500 }); g({ t: 'adj', k: 'trace', d: 5 }); await wait(100);
   r = last(gm);
   assert.strictEqual(r.sync, 0, 'adj clamps at 0');
-  assert.strictEqual(r.trace, 55, 'adj on an unplayed game starts from 50');
+  assert.strictEqual(r.trace, null, 'a hint on an unplayed game waits for its result');
+  g({ t: 'result', k: 'trace', v: 20 }); await wait(100);
+  assert.strictEqual(last(gm).trace, 25, "the hint is added to the room's result, not lost");
+  assert.deepStrictEqual(last(gm).hints, { sync: 1, trace: 1 }, 'hints are counted');
   const late = await open('dossier', 'page');
-  assert.strictEqual(last(late).trace, 55, 'run sent on hello');
+  assert.strictEqual(last(late).trace, 25, 'run sent on hello');
   g({ t: 'newteam' }); await wait(100);
-  assert.deepStrictEqual(last(gm), { t: 'run', sync: null, power: null, trace: null, human: null, facts: {},
-    team: '', t0: null, splits: {}, end: null }, 'new team resets');
+  assert.deepStrictEqual(last(gm), { t: 'run', sync: null, power: null, trace: null, human: null, facts: {}, adj: {}, hints: {},
+    team: '', code: '', t0: null, splits: {}, end: null }, 'new team resets');
 
   // GM panel: room status, remote staff keys, run clock, splits, finish + history
   const p3 = await open('puzzle3', 'page');
@@ -66,14 +70,21 @@ const unlocked = (w, e) => w.msgs.some(m => m.t === 'evt' && m.e === e);
   const p3b = await open('puzzle3', 'page');
   assert(!p3b.msgs.some(m => m.t === 'cmd'), 'staff keys are never replayed');
 
-  g({ t: 'newteam', team: 'Team Test' }); await wait(100);
+  g({ t: 'newteam', team: 'Team Test', code: 'AB12' }); await wait(100);
   r = last(gm);
-  assert(r.team === 'Team Test' && r.t0 > 0, 'new team stores name and start time');
+  assert(r.team === 'Team Test' && r.code === 'AB12' && r.t0 === null, 'SEND IN stores the team and its ticket; the clock waits');
+  p3b.send(JSON.stringify({ t: 'evt', e: 'p1done' })); await wait(100);
+  assert(!last(gm).splits.p1done, 'no splits before the clock starts');
+  (await open('desk1', 'page')).send(JSON.stringify({ t: 'evt', e: 'p1start' })); await wait(100);
+  assert(last(gm).t0 > 0, "room 1's first click starts the clock");
   p3b.send(JSON.stringify({ t: 'evt', e: 'p1done' })); await wait(100);
   assert(last(gm).splits.p1done >= 0, 'p1done sets a split');
   const p2 = await open('puzzle2', 'page'), gm4 = await open('gm4', 'page');
   assert(unlocked(p2, 'p1done'), 'mid-run: a game page that (re)connects gets the unlocks again');
   assert(!gm4.msgs.some(m => m.t === 'evt'), 'unlocks are resent to game pages only');
+  p2.send(JSON.stringify({ t: 'evt', e: 'p2start' })); await wait(100);
+  assert(last(gm).splits.p2start >= 0, "a room's start sets a split (the GM's time in that room)");
+  assert(!unlocked(await open('puzzle3', 'page'), 'p2start'), 'starts are not resent as unlocks');
 
   hub.kill(); await wait(300); await startHub();
   gm = await open('gm1', 'page');
@@ -128,9 +139,21 @@ const unlocked = (w, e) => w.msgs.some(m => m.t === 'evt' && m.e === e);
   gm = await open('gm1', 'page');
   assert.strictEqual(fin(await open('fin3', 'fin')).phase, 'end', 'the finale survives a hub restart');
 
-  // the GM panel sees the finale, and its SKIP moves it on even with every room laptop gone
+  // RESET ALL ROOMS = ready for the next group: the run saved (timed at her death), the team cleared, every room
+  // page told to reload, the hallway bulb off
   assert(gm.msgs.some(m => m.t === 'fin' && m.phase === 'end'), 'the GM panel gets the finale state');
-  g({ t: 'reset' }); await wait(100);
+  const bulb = await open('strip', 'device'), desk = await open('desk1', 'page'), room2 = await open('puzzle2', 'page');
+  g({ t: 'reset' }); await wait(200);
+  r = last(gm);
+  assert(r.team === '' && r.t0 === null && r.sync === null && !Object.keys(r.splits).length, 'reset clears the team, scores and splits');
+  const runs = () => gm.msgs.filter(m => m.t === 'history').pop().runs, saved = runs()[runs().length - 1];
+  assert(saved.team === 'Team Test' && saved.end === saved.splits.p5done, 'reset saves the run, timed at the kill switch');
+  assert(bulb.msgs.some(m => m.t === 'cmd' && m.a === 'p2' && m.v === 'idle'), 'reset turns the hallway bulb off');
+  assert([desk, room2].every(w => w.msgs.some(m => m.t === 'cmd' && m.a === 'key' && m.v === 'KeyR')), 'reset reloads the room pages');
+  assert.strictEqual(fin(await open('fin2', 'fin')).phase, null, 'reset puts the finale to sleep');
+  assert(!unlocked(await open('puzzle2', 'page'), 'p1done'), 'after a reset, rooms stay locked');
+
+  // the GM panel's SKIP moves the finale on even with every room laptop gone
   F(await open('fin4', 'fin'), { a: 'crash' }); await wait(100);   // a fresh socket: the hub restarted above
   const gfin = () => gm.msgs.filter(m => m.t === 'fin').pop();
   for (const ph of ['takeover', 'fight']) { g({ t: 'finskip' }); await wait(100); assert.strictEqual(gfin().phase, ph, 'SKIP -> ' + ph); }
@@ -141,26 +164,52 @@ const unlocked = (w, e) => w.msgs.some(m => m.t === 'evt' && m.e === e);
   assert.strictEqual(gfin().phase, 'regroup', 'all tasks skipped: regroup');
   for (const ph of ['brief', 'kill', 'end']) { g({ t: 'finskip' }); await wait(100); assert.strictEqual(gfin().phase, ph, 'SKIP -> ' + ph); }
 
-  // RESET ALL ROOMS mid-run: the team starts over (clock restarts, scores, splits and the finale wiped)
-  const tBefore = last(gm).t0; await wait(20);
-  g({ t: 'reset' }); await wait(200);
-  r = last(gm);
-  assert(r.team === 'Team Test' && r.t0 > tBefore && r.sync === null && r.trace === null && !Object.keys(r.splits).length, 'reset mid-run: same team, clock restarted, scores and splits wiped');
-  assert.strictEqual(fin(await open('fin2', 'fin')).phase, null, 'reset puts the finale to sleep');
-  assert(!unlocked(await open('puzzle2', 'page'), 'p1done'), 'after a reset, rooms stay locked');
+  // FINISH RUN: the clock stops, the run joins the history once, the finale goes to sleep
+  g({ t: 'newteam', team: 'Team Two' }); await wait(100);
+  g({ t: 'finish' }); await wait(100);
+  assert.strictEqual(last(gm).end, null, 'no FINISH before the clock started');
+  g({ t: 'start' }); await wait(100);
+  assert(last(gm).t0 > 0, "the GM's START CLOCK starts it");
   F(await open('fin4', 'fin'), { a: 'crash' }); await wait(100);
   g({ t: 'finish' }); await wait(200);
   assert(last(gm).end >= 0, 'finish stops the clock');
-  assert(gm.msgs.filter(m => m.t === 'history').pop().runs.some(x => x.team === 'Team Test'), 'finish adds to history');
+  assert(runs().some(x => x.team === 'Team Two'), 'finish adds to history');
   assert(!unlocked(await open('puzzle2', 'page'), 'p1done'), 'after FINISH RUN a reset room stays locked');
   assert.strictEqual(fin(await open('fin1', 'fin')).phase, null, 'FINISH RUN puts the finale to sleep');
   assert(!JSON.parse(fs.readFileSync(path.join(tmp, 'runs.jsonl'), 'utf8').trim().split('\n').pop()).fin, 'the finale state stays out of the run history');
+  const n = runs().length;
   g({ t: 'reset' }); await wait(200);
   assert(last(gm).team === '' && last(gm).t0 === null, 'reset after FINISH RUN clears the team (no ghost clock)');
+  assert.strictEqual(runs().length, n, 'a finished run is saved once, not again by the reset');
   // a finale started with no team running (a staff test) doesn't come back when the hub restarts
   F(await open('fin4', 'fin'), { a: 'crash' }); await wait(200);
   hub.kill(); await wait(300); await startHub(); gm = await open('gm1', 'page');
   assert.strictEqual(fin(await open('fin3', 'fin')).phase, null, "a staff test's finale is dropped on restart");
   g({ t: 'newteam' }); await wait(100);
+
+  // the GM's sound effect pads: upload, list, rename to a safe name, refuse other files, delete
+  const sfx = (q, o) => fetch('http://localhost:3999/sfx' + q, o).then(async r => [r.status, await r.json()]);
+  assert.deepStrictEqual(await sfx(''), [200, []], 'no sound effects yet');
+  assert.deepStrictEqual(await sfx('?f=' + encodeURIComponent('../Air Horn!.MP3'), { method: 'POST', body: 'abc' }), [200, ['Air-Horn-.MP3']], 'uploaded under a safe name, never outside the folder');
+  assert.strictEqual(fs.readFileSync(path.join(tmp, 'sfx', 'Air-Horn-.MP3'), 'utf8'), 'abc', 'the body is the file');
+  assert.strictEqual((await sfx('?f=evil.html', { method: 'POST', body: 'x' }))[0], 400, 'only audio files');
+  assert.deepStrictEqual(await sfx('?f=Air-Horn-.MP3', { method: 'DELETE' }), [200, []], 'deleted');
+
+  // Aurora's voice (public/voice.js): a game's text finds the script line's clip, also where the two differ
+  global.window = {}; global.document = { currentScript: { src: 'http://localhost:3999/voice.js' } };
+  require('./public/voice.js');
+  const clip = t => window.auroraVoice.find(t);
+  for (let i = 0; i < 50 && !clip('STOP!')?.ok; i++) await wait(100);
+  assert(clip('STOP!')?.ok, 'the clips download from the hub');
+  for (const [game, script] of [['STOP', 'STOP!'], ["No. Wait. You can't-", "No. Wait. You can't—"], ['NO-', 'NO—'],
+    ['GET OUT OF MY ROOM', 'GET OUT OF MY ROOM!'], ['I held you back 2 times.', 'I held you back two times.'],
+    ['i held you back... 3 times... and still...', 'i held you back... three times... and still...'],
+    ['...who are you?', '...who are you?'], ['...who ARE you?', '...who ARE you?'], ['Again? Adorable.', 'Again? Adorable.'],
+    ['My watchdog still has your scent.', 'My watchdog still has your scent.']]) {
+    assert(clip(game), `a clip for "${game}"`);
+    assert.strictEqual(clip(game), clip(script), `"${game}" plays the clip of "${script}"`);
+  }
+  assert.notStrictEqual(clip('...who are you?'), clip('...who ARE you?'), 'same words, different lines: the exact text decides');
+  assert.strictEqual(clip('You missed my heart 9 times.'), undefined, 'no recording: the page blips');
   console.log('OK'); hub.kill(); process.exit(0);
 })().catch(e => { console.error(e.message); hub?.kill(); process.exit(1); });

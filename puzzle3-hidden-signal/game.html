@@ -4,8 +4,9 @@
 <meta charset="utf-8">
 <title>AURORA</title>
 <style>
-/* same visual language as puzzles 1-2: red HUD = the players, green = Aurora */
-:root { --g: #4dff88; --aur: #dfe8ee; --red: #ff2a4a; --hud: #ff3344; }
+/* same visual language as puzzles 1-2: red HUD = the players, green = Aurora. Blue = her transmitter's lights, the only
+   blue on screen, so the lenses here look like the real LEDs in the room */
+:root { --g: #4dff88; --aur: #dfe8ee; --red: #ff2a4a; --hud: #ff3344; --blu: #3d7bff; --blt: #a9c4ff; }
 * { box-sizing: border-box; margin: 0; }
 html, body { height: 100%; background: #000; overflow: hidden; cursor: none; user-select: none;
   font-family: Consolas, "Cascadia Mono", "Lucida Console", monospace; }
@@ -32,24 +33,31 @@ body.started #standby { display: none; }
   box-shadow: 0 0 10px 3px var(--bc), 0 0 50px 14px var(--bc); }
 #screen { position: fixed; inset: 0; z-index: 20; display: none; overflow: hidden; color: var(--hud);
   border-radius: 3vw / 4vw; font-size: 1vw; letter-spacing: .12em;
-  background: radial-gradient(ellipse at center, #1c0508 0%, #0a0103 65%, #000 100%);
-  animation: flick .11s steps(2) infinite; }
+  background: radial-gradient(ellipse at center, #1c0508 0%, #0a0103 65%, #000 100%); }
 body.crt #screen { display: block; }
+/* the CRT flicker is a thin black veil (blinking the whole screen's opacity costs the GPU a full recomposite: game 4's lesson) */
+#flick { position: absolute; inset: 0; z-index: 5; background: #000; pointer-events: none; animation: veil .11s steps(2) infinite; }
+@keyframes veil { 0% { opacity: .04 } 100% { opacity: 0 } }
 #screen::before { content: ""; position: absolute; inset: 0; z-index: 5; pointer-events: none;
   background: repeating-linear-gradient(to bottom, rgba(0,0,0,.3) 0 1px, transparent 1px 3px); }
 #screen::after { content: ""; position: absolute; inset: 0; z-index: 5; pointer-events: none; border-radius: inherit;
   box-shadow: inset 0 0 12vw rgba(0,0,0,.9); }
 @keyframes flick { 0% { opacity: .96 } 100% { opacity: 1 } }
 @keyframes blink { 50% { opacity: 0 } }
-#grain { position: absolute; inset: 0; z-index: 4; pointer-events: none; opacity: .12;
+/* the static grain slides with transform (done by the GPU), never background-position (repaints the whole screen) */
+#grain { position: absolute; inset: -128px 0 0 -128px; z-index: 4; pointer-events: none; opacity: .12;
   background: var(--noise); animation: static .25s steps(5) infinite; }
-@keyframes static { to { background-position: 128px 77px; } }
+@keyframes static { to { transform: translate(128px, 77px); } }
 .rollbar { position: absolute; left: 0; right: 0; height: 18%; top: -20%; z-index: 4; pointer-events: none;
   background: linear-gradient(transparent, rgba(255,120,140,.07), transparent); }
 
-.corner { position: absolute; width: 4vw; height: 4vw; border: 0 solid currentColor; animation: cornerIn .5s both; }
-.tl { top: 2vw; left: 2vw; border-width: 2px 0 0 2px; }   .tr { top: 2vw; right: 2vw; border-width: 2px 2px 0 0; }
-.bl { bottom: 2vw; left: 2vw; border-width: 0 0 2px 2px; } .br { bottom: 2vw; right: 2vw; border-width: 0 2px 2px 0; }
+/* the 4 corner brackets close in on the team as Aurora's trace grows (--close 0..1, set by renderTrace) */
+.corner { position: absolute; width: 4vw; height: 4vw; border: 0 solid currentColor; animation: cornerIn .5s both; transition: translate .8s; }
+.tl { top: 2vw; left: 2vw; border-width: 2px 0 0 2px; translate: calc(var(--close, 0) * 6vw) calc(var(--close, 0) * 4vw); }
+.tr { top: 2vw; right: 2vw; border-width: 2px 2px 0 0; translate: calc(var(--close, 0) * -6vw) calc(var(--close, 0) * 4vw); }
+.bl { bottom: 2vw; left: 2vw; border-width: 0 0 2px 2px; translate: calc(var(--close, 0) * 6vw) calc(var(--close, 0) * -4vw); }
+.br { bottom: 2vw; right: 2vw; border-width: 0 2px 2px 0; translate: calc(var(--close, 0) * -6vw) calc(var(--close, 0) * -4vw); }
+body.traced .corner { color: #fff; animation: blink .5s steps(1) infinite; }
 @keyframes cornerIn { from { transform: scale(2.5); opacity: 0 } }
 @keyframes boxIn { from { clip-path: inset(0 100% 0 0) } to { clip-path: inset(0 0 0 0) } }
 #title { position: absolute; top: 3vw; left: 3.5vw; line-height: 1.6; animation: boxIn .5s .2s backwards; }
@@ -60,7 +68,8 @@ body.crt #screen { display: block; }
 #stats .mv { color: var(--hud); animation: blink .5s steps(1) infinite; }
 #stats .yes { color: var(--g); }
 
-#mid { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4vh; }
+#mid { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2vh; padding-top: 9vh; }
+body.tut #mid { padding-left: 26vw; }   /* the training panel sits on the left: center the rest in the space beside it */
 
 /* the intro terminal, centered */
 #term { min-width: 44vw; padding: 1.4vw 2vw; font-size: 1.6vw; line-height: 1.7; white-space: pre;
@@ -69,41 +78,114 @@ body.crt #screen { display: block; }
 #term .ok { color: #fff; }
 #term div:last-child::after { content: "\258C"; animation: blink .6s steps(1) infinite; }
 
-/* the carrier: a live trace of Aurora's signal. Flat noise while hidden, her heartbeat once intercepted */
-#scope { display: none; position: relative; width: 64vw; padding: .6vw 1vw 1vw; border: 1px solid currentColor; background: rgba(8,0,2,.75); }
+/* the carrier: a pulse train that speeds up every layer. Her heartbeat once intercepted */
+#scope { display: none; position: relative; width: 56vw; padding: .6vw 1vw 1vw; border: 1px solid currentColor; background: rgba(8,0,2,.75); }
 body.hunt #scope, body.won #scope { display: block; animation: boxIn .6s backwards; }
-#scope .row { display: flex; justify-content: space-between; font-size: 1vw; letter-spacing: .3em; margin-bottom: .4vw; }
+#scope .row { display: flex; justify-content: space-between; font-size: .9vw; letter-spacing: .3em; margin-bottom: .4vw; }
 #scope .row span:last-child { color: #fff; }
-#wave { display: block; width: 100%; height: 16vh; }
+#wave { display: block; width: 100%; height: 8.5vh; }
 
-#entry { display: none; flex-direction: column; align-items: center; gap: 1.6vh; }
-body.hunt #entry, body.won #entry { display: flex; animation: boxIn .6s .2s backwards; }
-#entry .lbl { font-size: 1.1vw; letter-spacing: .5em; opacity: .8; }
-#cells { display: flex; gap: 1.5vw; }
-.cell { width: 6vw; height: 8vw; display: flex; align-items: center; justify-content: center; font-size: 5vw; color: #fff;
-  border: 2px solid rgba(255,51,68,.45); background: rgba(8,0,2,.8);
-  box-shadow: inset 0 0 20px rgba(255,51,68,.12), 0 0 12px rgba(255,51,68,.2); }
-.cell.cur { border-color: var(--hud); animation: blink 1s steps(1) infinite; }
-#cells.bad .cell { color: var(--red); border-color: var(--red); box-shadow: 0 0 24px rgba(255,42,74,.6); }
-#cells.lock .cell { opacity: .35; }
-#cells.ok .cell { color: var(--g); border-color: var(--g); box-shadow: 0 0 30px rgba(77,255,136,.6), inset 0 0 20px rgba(77,255,136,.2); }
+/* blink rate: where this layer sits against what a human eye can count. Layer 3 lands past the line */
+#rate { display: none; width: 56vw; }
+body.hunt #rate, body.won #rate, body.tutgoal #rate { display: block; animation: boxIn .6s .1s backwards; }
+#rate .row { display: flex; justify-content: space-between; font-size: .9vw; letter-spacing: .3em; margin-bottom: 1.3vw; }
+#rate .row b { color: #fff; font-weight: 400; }
+#track { position: relative; height: 1.1vw; border: 1px solid rgba(255,51,68,.55);
+  background: repeating-linear-gradient(90deg, rgba(255,51,68,.2) 0 1px, transparent 1px 1.4vw); }
+#fill { position: absolute; inset: 0; transform-origin: left; transform: scaleX(0); transition: transform 1.4s cubic-bezier(.2,.8,.2,1);
+  background: linear-gradient(90deg, rgba(61,123,255,.08), rgba(61,123,255,.55)); }
+#zone { position: absolute; top: 0; bottom: 0; right: 0; left: var(--eye); display: flex; align-items: center; justify-content: center;
+  background: repeating-linear-gradient(-45deg, rgba(255,42,74,.3) 0 .35vw, transparent .35vw .7vw);
+  font-size: .62vw; letter-spacing: .25em; color: #fff; font-style: normal; white-space: nowrap; }
+body.fast #zone { background-color: rgba(255,42,74,.25); animation: blink .7s steps(1) infinite; }
+#limit { position: absolute; top: -.7vw; bottom: -.7vw; left: var(--eye); width: 2px; margin-left: -1px; background: #fff; box-shadow: 0 0 8px #fff; }
+#limit span { position: absolute; bottom: 100%; left: 50%; translate: -50% -.3vw; white-space: nowrap; font-size: .7vw; letter-spacing: .25em; color: #fff; }
+#needle { position: absolute; top: -.45vw; bottom: -.45vw; left: 0; width: .4vw; margin-left: -.2vw; background: var(--blt);
+  box-shadow: 0 0 10px var(--blu), 0 0 22px var(--blu); transition: left 1.4s cubic-bezier(.2,.8,.2,1); }
+#ticks { position: relative; height: 1vw; margin-top: .3vw; font-size: .7vw; opacity: .7; }
+#ticks span { position: absolute; translate: -50% 0; }
+
+#entry { display: none; flex-direction: column; align-items: center; gap: 1.1vh; }
+body.hunt #entry, body.won #entry, body.tut #entry { display: flex; animation: boxIn .6s .2s backwards; }
+#entry .lbl { font-size: 1vw; letter-spacing: .5em; opacity: .8; }
+#entry .lbl:empty { display: none; }
 /* one pip per layer: cracked = lit, the current one blinks */
 #lay { display: flex; gap: 1vw; }
+#lay:empty { display: none; }
 #lay i { width: 5vw; height: .6vw; background: currentColor; opacity: .25; }
 #lay i.on { opacity: 1; box-shadow: 0 0 10px currentColor; }
 #lay i.cur { opacity: 1; animation: blink 1s steps(1) infinite; }
+
+/* the decoder: one column per light, numbered like the stickers on the board. Each lens copies what the real light does
+   (but never its code), and blinks back the number you type under it */
+#dec { display: flex; gap: 2vw; }
+.col { display: flex; flex-direction: column; align-items: center; gap: .9vh; }
+.num { font-size: .9vw; letter-spacing: .3em; color: var(--blt); opacity: .75; }
+.lens { position: relative; width: 3.8vw; height: 3.8vw; border-radius: 50%; border: 2px solid rgba(90,140,255,.45);
+  background: radial-gradient(circle at 38% 32%, #1b2a4d, #060a16 70%); box-shadow: inset 0 0 1vw #000; }
+.lens b { position: absolute; inset: -2px; border-radius: 50%; opacity: 0; will-change: opacity;
+  background: radial-gradient(circle, #fff 0 16%, #8fb4ff 38%, #2a5cff 70%, #1238c4 100%);
+  box-shadow: 0 0 1.6vw .3vw var(--blu), 0 0 5vw 1vw rgba(61,123,255,.55); }
+#dec.ok .lens b { background: radial-gradient(circle, #fff 0 16%, #a6ffc4 38%, #2bd46a 75%); box-shadow: 0 0 1.6vw .3vw var(--g), 0 0 5vw 1vw rgba(77,255,136,.5); }
+#dec.bad .lens b { background: radial-gradient(circle, #fff 0 12%, #ff8c9a 38%, #ff2a4a 75%); box-shadow: 0 0 1.6vw .3vw var(--red), 0 0 5vw 1vw rgba(255,42,74,.5); }
+#dec.ok .lens { border-color: var(--g); } #dec.bad .lens { border-color: var(--red); }
+.cnt { height: 1vw; font-size: 1.1vw; line-height: 1; letter-spacing: .1em; color: var(--blt); text-shadow: 0 0 8px var(--blu); }
+.cell { width: 5.6vw; height: 6vw; display: flex; align-items: center; justify-content: center; font-size: 3.8vw; color: #fff;
+  border: 2px solid rgba(255,51,68,.45); background: rgba(8,0,2,.8);
+  box-shadow: inset 0 0 20px rgba(255,51,68,.12), 0 0 12px rgba(255,51,68,.2); }
+.cell.cur { border-color: var(--hud); animation: blink 1s steps(1) infinite; }
+.cell.tally { color: var(--blt); border-color: rgba(90,140,255,.6); }
+#dec.bad .cell { color: var(--red); border-color: var(--red); box-shadow: 0 0 24px rgba(255,42,74,.6); }
+#dec.lock .cell { opacity: .35; }
+#dec.ok .cell { color: var(--g); border-color: var(--g); box-shadow: 0 0 30px rgba(77,255,136,.6), inset 0 0 20px rgba(77,255,136,.2); }
+
+/* a new layer: a ctOS-style notification strip slides open across the middle (same as game 4) */
+#banner { position: absolute; z-index: 3; left: 0; right: 0; top: 50%; translate: 0 -50%; display: none; padding: 2.2vh 0 2.6vh;
+  text-align: center; background: linear-gradient(90deg, transparent, rgba(12,0,3,.92) 20%, rgba(12,0,3,.92) 80%, transparent);
+  border-block: 1px solid rgba(255,51,68,.6); }
+#banner.on { display: block; animation: stripIn .35s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes stripIn { from { clip-path: inset(49% 0 49% 0) } to { clip-path: inset(0 0 0 0) } }
+#bk { display: block; font-size: 1.1vw; letter-spacing: .6em; opacity: .85; }
+#bt { position: relative; display: inline-block; font-size: 6vw; font-weight: 700; letter-spacing: .14em; color: #fff; line-height: 1.15;
+  text-shadow: -2px 0 rgba(255,40,80,.6), 2px 0 rgba(40,200,255,.6), 0 0 30px var(--hud); }
+#bs { display: block; font-size: 1.2vw; letter-spacing: .35em; color: #fff; opacity: .85; }
+
+/* training (same panel as games 2 and 4): one step at a time on the left, the decoder shows it in the middle */
+#tut { position: absolute; z-index: 3; left: 3.5vw; top: 50%; translate: 0 -50%; width: 25vw; display: none; padding: 1.3vw 1.6vw 1.5vw;
+  border: 1px solid currentColor; background: rgba(8,0,2,.9); }
+#tut.on { display: block; animation: boxIn .5s backwards; }
+#tutN { font-size: .9vw; letter-spacing: .4em; opacity: .85; }
+#tutT { display: block; margin: .7vw 0 .5vw; font-size: 2.1vw; line-height: 1.15; letter-spacing: .05em; color: #fff; font-weight: 700; }
+#tut.ok #tutT { color: var(--g); text-shadow: 0 0 18px var(--g); }
+#tutS { display: block; min-height: 3em; font-size: 1.05vw; line-height: 1.5; letter-spacing: .1em; color: #ffc9cf; }
+#tutArt { height: 7vw; margin: .6vw 0 .9vw; display: flex; align-items: center; justify-content: center; gap: .5vw; }
+#tutBar { height: .55vw; background: rgba(255,51,68,.2); }
+#tutBar i { display: block; width: 100%; height: 100%; background: #fff; box-shadow: 0 0 10px var(--hud); transform-origin: left; transform: scaleX(0); }
+#tutDots { display: flex; gap: .4vw; margin-top: .9vw; }
+#tutDots i { flex: 1; height: .25vw; background: rgba(255,51,68,.25); }
+#tutDots i.now { background: var(--hud); } #tutDots i.done { background: #fff; }
+/* training art: little copies of the lights. b3 = three blinks then a pause; .sp = a steady blink at --d */
+.mini { display: inline-block; width: 2.8vw; height: 2.8vw; border-radius: 50%; border: 2px solid rgba(90,140,255,.5); background: #0a1226; }
+.mini.b3 { animation: b3 2.6s steps(1) infinite; }
+@keyframes b3 { 0%, 12%, 24% { background: #9cc0ff; box-shadow: 0 0 1.4vw var(--blu); } 6%, 18%, 30%, 100% { background: #0a1226; box-shadow: none; } }
+.mini.sp { animation: sp var(--d) steps(1) infinite; }
+@keyframes sp { 0% { background: #9cc0ff; box-shadow: 0 0 1.4vw var(--blu); } 50% { background: #0a1226; box-shadow: none; } }
+.eq { display: flex; align-items: center; gap: 1.1vw; font-size: 3vw; color: #fff; }
+.eq b { color: var(--blt); text-shadow: 0 0 14px var(--blu); }
+.spd { display: flex; gap: 1.8vw; align-items: flex-end; }
+.spd div { display: flex; flex-direction: column; align-items: center; gap: .5vw; font-size: .8vw; letter-spacing: .2em; color: #fff; }
 
 /* hints leak through as glitches: the text tears onto the screen for a moment, then it's gone again */
 #ghintWrap { position: absolute; inset: 0; z-index: 4; display: none; align-items: center; justify-content: center; pointer-events: none; }
 #ghintWrap.on { display: flex; }
 #ghint { position: relative; font-size: 3vw;   /* 3vw fits the longest hint on one line */ font-weight: 700; letter-spacing: .08em; color: #fff; white-space: nowrap;
   text-shadow: -4px 0 rgba(0,255,255,.7), 4px 0 rgba(255,0,255,.7); }
-/* the whole screen darkens during the hunt so its glow doesn't wash out the beacon's lights (or a phone's slow-mo).
+/* the screen darkens a little during the hunt so its glow doesn't wash out the beacon's lights.
    A plain black layer, not a filter: cheap on the booth laptop */
 #dim { position: fixed; inset: 0; z-index: 65; background: #000; opacity: 0; pointer-events: none; transition: opacity 2s; }
 body.dark #dim { opacity: var(--dim); }
 
-#aur { position: absolute; left: 0; right: 0; top: 13vh; text-align: center; min-height: 1.4em; font-size: 2.4vw;
+#aur { position: absolute; left: 0; right: 0; top: 19.5vh; text-align: center; min-height: 1.4em; font-size: 1.9vw;
   color: #fff; letter-spacing: .06em; text-shadow: 0 0 18px var(--g), 0 0 40px rgba(77,255,136,.5); }
 #aur:empty { display: none; }
 .glitch::before, .glitch::after { content: attr(data-text); position: absolute; inset: 0; }
@@ -116,7 +198,7 @@ body.dark #dim { opacity: var(--dim); }
                 50% { clip-path: inset(5% 0 80% 0); transform: translate(-5px,-1px) }
                 100% { clip-path: inset(30% 0 50% 0); transform: translate(4px,0) } }
 
-/* Aurora's trace on the team: pure pressure, it fills over the par time and unlocks hints on the way */
+/* Aurora's trace on the team: pure pressure, it fills over the par time */
 #bar { position: absolute; left: 3.5vw; right: 3.5vw; bottom: 3.5vw; display: none; }
 body.hunt #bar, body.won #bar { display: block; animation: boxIn .7s .5s backwards; }
 #bar .row { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: .8vw; }
@@ -160,16 +242,22 @@ body.help #help { display: block; }
 <div id="app">
   <div id="standby">CARRIER OFFLINE ▸ AWAITING UPLINK</div>
   <div id="screen">
-    <div id="grain"></div><div class="rollbar"></div>
+    <div id="grain"></div><div class="rollbar"></div><div id="flick"></div>
     <div id="ghintWrap"><div id="ghint" class="glitch"></div></div>
     <div class="hud"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i></div>
     <div id="title" class="txt"><b>AURORA//CORE</b>SECTOR 03 ▸ CARRIER SIGNAL<br><span id="hex"></span></div>
     <div id="stats" class="txt"></div>
     <div id="aur"></div>
+    <div id="tut" class="txt"><span id="tutN"></span><b id="tutT"></b><span id="tutS"></span><div id="tutArt"></div>
+      <div id="tutBar"><i></i></div><div id="tutDots"><i></i><i></i></div></div>
+    <div id="banner" class="txt"><span id="bk"></span><b id="bt"></b><span id="bs"></span></div>
     <div id="mid">
       <div id="term" class="txt"></div>
       <div id="scope" class="txt"><div class="row"><span>CARRIER ▸ LIVE</span><span id="freq">-- Hz</span></div><canvas id="wave"></canvas></div>
-      <div id="entry"><div class="lbl txt">ENTER CARRIER CODE</div><div id="lay" class="txt"></div><div id="cells" class="txt"></div></div>
+      <div id="rate" class="txt"><div class="row"><span>BLINK RATE</span><b id="hz"></b></div>
+        <div id="track"><i id="fill"></i><i id="zone">BEYOND HUMAN SIGHT</i><i id="limit"><span>HUMAN EYE LIMIT</span></i><i id="needle"></i></div>
+        <div id="ticks"></div></div>
+      <div id="entry"><div class="lbl txt"></div><div id="lay" class="txt"></div><div id="dec"></div></div>
     </div>
     <div id="bar" class="txt"><div class="row"><span>AURORA TRACING YOU ▸ <b id="tl">5:00</b> LEFT</span><span id="bp">0%</span></div><div id="segs"></div></div>
   </div>
@@ -193,7 +281,8 @@ board: <span id="hbeacon">...</span>   hub: <span id="hubst">...</span>
 Ctrl+Alt+H  show / hide this panel
 Ctrl+Alt+U  unlock by hand (if puzzle 2's signal never came)
 Ctrl+Alt+S  start now, even if locked
-Ctrl+Alt+K  skip the intro, straight to the hunt
+Ctrl+Alt+K  skip the intro and the training, straight to the hunt
+Ctrl+Alt+N  skip to the next layer (testing the speeds / team stuck)
 Ctrl+Alt+I  show the next hint now (it glitches onto the screen)
 Ctrl+Alt+F  force the win, all layers (beacon dead / team stuck)
 Ctrl+Alt+R  reset for next team (new codes, locks again)
@@ -205,19 +294,19 @@ Ctrl+Alt+M  mute / unmute</div>
 const CFG = {
   UNLOCK_EVT: 'p2done',      // puzzle 2 sends this when SYSTEM POWERED finishes
   DONE_EVT: 'p3done',        // sent to the hub when this puzzle is won (for puzzle 4)
-  BEACON_IPS: ['192.168.0.51', '192.168.1.51'],   // the hidden blue-LED board on NexusV, or on walawifi as a backup (see NETS in secrets.h). The phone stand-ins get the codes through the hub instead
-  PUSH_MS: 3000,             // resend the code to the board this often
-  DIM: 0.65,                 // how much darker the screen gets during the hunt (0 = normal, 1 = black). Staff panel (Ctrl+Alt+H) stays bright
-  // 3 rounds ("layers"), each a new code blinked faster. The game sends these with every code and the board and the phone
-  // stand-in follow them, so tune here: no reflash. ms: on = one blink, off = between blinks of the same light,
-  // gap = before the next light, loop = the dark pause before it all repeats.
+  BEACON_IPS: ['192.168.0.51', '192.168.1.51'],   // the hidden blue-LED board on NexusV, or on walawifi as a backup (see NETS in secrets.h). The phone stand-ins get the lights through the hub instead
+  PUSH_MS: 3000,             // resend the loop to the board this often
+  DIM: 0.3,                  // how much darker the screen gets during the hunt (0 = normal, 1 = black). Staff panel (Ctrl+Alt+H) stays bright
+  // 3 rounds ("layers"), each a new code blinked faster. This page turns them into the board's steps, so tune here:
+  // no reflash. ms: on = one blink, off = between blinks of the same light, gap = before the next light,
+  // loop = the dark pause before it all repeats. Blinks of 80 ms or more fade in and out; faster ones stay crisp.
   // The last round must look like ONE flash per light to the eye and still split into separate blinks in slow motion
   ROUNDS: [
-    { on: 300, off: 400, gap: 1200, loop: 3000 },   // easy to count: they learn the pattern
-    { on: 100, off: 120, gap: 1000, loop: 2500 },   // fast: countable if they focus
-    { on: 25,  off: 30,  gap: 1000, loop: 2500 },   // too fast for eyes: 240 fps slow-mo shows each blink ~6 frames
+    { on: 300, off: 400, gap: 1200, loop: 3000, name: 'CARRIER',      sub: 'FIND HER TRANSMITTER IN THIS ROOM' },   // easy to count
+    { on: 100, off: 120, gap: 1000, loop: 2500, name: 'OVERCLOCK',    sub: 'SHE SPED UP' },                          // countable if they focus
+    { on: 25,  off: 30,  gap: 1000, loop: 2500, name: 'BEYOND SIGHT', sub: 'TOO FAST FOR HUMAN EYES' },              // 240 fps slow-mo shows each blink ~6 frames
   ],
-  ROUND_MS: 2600,            // pause after a cracked layer before the next one takes input
+  EYE_HZ: 10,                // the blink-rate gauge's HUMAN EYE LIMIT line (display only)
   // TRACE, carried to the finale = the trace bar when they crack it (lower is better). Mistakes push the bar forward:
   WRONG_TRACE: 5,            // % per wrong code
   LOCK_MS: 2500,             // input locked this long after a wrong code
@@ -226,12 +315,13 @@ const CFG = {
   // Typing 111 there (what it looks like to the eye) brings the first one at once.
   // After it first appears, the latest hint glitches back every HINT_EVERY ms so nobody misses it
   HINTS: [
-    { at: 45, text: 'TOO FAST FOR HUMAN EYES' },
-    { at: 90, text: 'FILM IT IN SLOW-MO' },
+    { at: 40, text: "YOUR PHONE SEES WHAT YOU CAN'T" },
+    { at: 80, text: 'FILM IT IN SLOW-MO' },
   ],
   HINT_EVERY: [8000, 13000],   // random gap between repeat glitches (ms)
   HINT_FIRST_MS: 2600,         // how long the first glitch of a new hint lasts...
   HINT_MS: 1100,               // ...and each repeat
+  TUT_SPEED: { on: 350, off: 350, gap: 1100, loop: 1600 },   // training: the lenses' demo codes blink at this speed
   VOLUME: 0.8,
   MUSIC_VOLUME: 0.7,
 };
@@ -239,17 +329,16 @@ const T = {                  // ms
   dot: 380, line: 460, open: 750, ghost: 1300,   // CRT boot, same as puzzles 1-2
   termChar: 32,              // intro terminal typing speed
   typeChar: 45,              // Aurora's typing speed
-  after: 1400,               // pause after each intro line
+  after: 1200,               // pause after each intro line
   auroraHold: 4000,          // how long Aurora's taunts stay up during the hunt
+  tutOk: 900,                // the ✔ pause after each training step
+  goal: 5200,                // training: the last card stays up this long
+  banner: 1300,              // a new layer's name stays up this long
 };
-const INTRO = [              // the players' side (red terminal)
-  'sector 03: aurora\'s control signal.',
-  'she is broadcasting from inside this room.',
-  'find the transmitter: 3 lights, numbered 1 to 3.',
-  'each light blinks its digit, one after another.',
-  '3 blinks = 3. 5 blinks = 5.',
-  'her signal has 3 layers. each one blinks faster.',
-  'crack all 3 codes in 5 minutes, before she traces you.',
+const INTRO = [              // the players' side (red terminal). The training shows the rest
+  'sector 03: aurora\'s carrier signal.',
+  'she is hiding a transmitter in this room.',
+  'learn to read it first.',
 ];
 const AUR = {                // Aurora (green)
   intro: "You'll never see it. Human eyes are so... limited.",
@@ -263,8 +352,8 @@ const AUR = {                // Aurora (green)
 };
 
 // ===== Setup =====
-const $ = s => document.querySelector(s);
-const app = $('#app'), scr = $('#screen'), beam = $('#beam');
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const B = document.body, app = $('#app'), scr = $('#screen'), beam = $('#beam');
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const rand = (a, b) => a + Math.random() * (b - a);
 const any = a => a[Math.random() * a.length | 0];
@@ -277,23 +366,111 @@ const LIGHTS = 3;            // digits in the code = lights on the beacon (must 
 const LAST = CFG.ROUNDS.length - 1, TRAP = '1'.repeat(LIGHTS);
 const roll = () => Array.from({ length: LIGHTS }, () => 2 + (Math.random() * 4 | 0)).join('');
 let round = 0, CODE = roll();
+const DEMO = '243';           // the training's demo code
 
-let mode = 'standby';        // standby | intro | hunt | check | won | end
+let mode = 'standby';        // standby | intro | tut | trans | hunt | check | won | lost | end
 let unlocked = false, entry = '', huntT0 = 0, lastT0 = 0, hintN = 0, traced = false;
 let tracePen = 0, trace = 0, wrong = 0, huntS = 0, replay = false;   // trace = bar %, frozen on the win
+let counts = null, countCells = false;   // training: blinks counted under each lens (and in the cells too, in step 1)
 
-// ===== Hub: unlock on puzzle 2's "done", hand the code to the phone stand-in, report TRACE =====
+// ===== The lights. One format for the real board, the phone stand-in and the lenses on this screen =====
+// a step = [a level per light (0 = off .. 9 = full), ms]. The loop plays forever (the code); an fx plays once, then the
+// loop starts over from its first step (its dark pause). This page decides everything; the board only plays it
+const lv = (i, v = 9) => Array.from({ length: LIGHTS }, (_, j) => j === i ? v : 0).join('');
+const all = v => String(v).repeat(LIGHTS), DARK = all(0);
+const anyLight = () => Math.random() * LIGHTS | 0;
+const enc = steps => steps.map(([l, ms]) => `${l}:${Math.max(1, Math.round(ms))}`).join(',');
+// slow blinks fade in and out (they look alive); fast ones stay a crisp full-on, so slow-mo counts them cleanly
+const blinkSteps = (i, on) => on < 80 ? [[lv(i), on]] : [[lv(i, 4), on / 5], [lv(i), on * 3 / 5], [lv(i, 4), on / 5]];
+function pattern(code, R) {  // the dark pause first (so a new code shows), then light 1 blinks digit 1 times, gap, light 2...
+  const s = [[DARK, R.loop]];
+  [...code].forEach((d, i) => { for (let b = 0; b < +d; b++) s.push(...blinkSteps(i, R.on), [DARK, b < +d - 1 ? R.off : R.gap]); });
+  s.pop();                   // no gap after the last light: the dark pause comes straight after
+  return s;
+}
+const FX = {
+  // her transmitter powers on: random flickers like an old tube, a sweep, a flash
+  boot: () => [...Array.from({ length: 14 }, () => [[lv(anyLight(), 2 + rand(0, 8) | 0), rand(15, 60)], [DARK, rand(20, 140)]]).flat(),
+    ...[0, 1, 2, 0, 1, 2].map(i => [lv(i), 90]), [all(9), 250], [all(4), 120], [DARK, 500]],
+  wrong: () => [...Array.from({ length: 10 }, () => [[lv(anyLight()), 25], [DARK, rand(10, 50)]]).flat(), [DARK, 350]],   // a stutter
+  layer: () => [...[0, 1, 2, 1, 0, 1, 2, 1, 0, 1, 2].map((i, k) => [lv(i), 130 - k * 9]),          // a sweep that speeds up...
+    [all(9), 220], [all(6), 120], [all(3), 120], [all(1), 150], [DARK, 600]],                        // ...a flash, a fade
+  // her heartbeat, in step with the screen's 5 beats (lub-dub every 900, 780, 660... ms), then a last glow fading out
+  win: () => [0, 1, 2, 3, 4].flatMap(i => [[all(9), 110], [all(2), 130], [all(7), 100], [DARK, 900 - i * 120 - 340]])
+    .concat([[all(9), 400], [all(5), 250], [all(2), 300], [DARK, 200]]),
+  timeUp: () => [...Array.from({ length: 12 }, () => [[all(9), 40], [DARK, 40]]).flat(), [all(9), 900], [all(4), 200], [DARK, 100]],
+  type: (i, d) => Array.from({ length: d }, () => [[lv(i), 60], [DARK, 70]]).flat(),   // this screen only: the lens of a typed digit
+};
+// plays a loop + one-shot effects into show(levels, step index, playing an effect?); tick() runs every frame
+function lightPlayer(show) {
+  let loop = [], fx = null, i = 0, t0 = 0, last = null;
+  return {
+    loop(s) { loop = s; if (!fx) i = 0, t0 = performance.now(); },
+    fx(s) { fx = s; i = 0; t0 = performance.now(); },
+    tick(now) {
+      if (now - t0 > 3000) t0 = now;                 // the tab slept: carry on from here
+      let l = fx || loop;
+      while (l.length && now - t0 >= l[i][1]) {
+        t0 += l[i][1];
+        if (++i < l.length) continue;
+        i = 0; if (fx) { fx = null; l = loop; }       // an effect ends: the loop starts over
+      }
+      const v = l.length ? l[i][0] : DARK;
+      if (v !== last) show(last = v, i, !!fx);
+    },
+  };
+}
+// the lenses on this screen. They copy the board's effects, never its code
+$('#dec').innerHTML = Array.from({ length: LIGHTS }, (_, i) =>
+  `<div class="col"><span class="num">${i + 1}</span><div class="lens"><b></b></div><i class="cnt"></i><div class="cell">_</div></div>`).join('');
+const glows = $$('#dec .lens b');
+let onLens = null;           // training: hears every step the lenses show
+const lenses = lightPlayer((v, i, inFx) => { [...v].forEach((c, j) => glows[j].style.opacity = c / 9); if (!inFx) onLens?.(v, i); });
+// counts each light's blinks into counts[] with a pip, for one full pass of the loop
+function counter() {
+  let prev = DARK, done = false;
+  return (v, i) => {
+    if (done) return;
+    if (i === 0) { done = true; return; }
+    [...v].forEach((c, j) => { if (c !== '0' && prev[j] === '0') { counts[j]++; sfx.pip(); } });
+    prev = v; renderCells();
+  };
+}
+
+// the board: the loop is pushed every PUSH_MS (that's also how the GM panel knows it's alive); effects go out once.
+// Fire-and-forget like the mask, so a dead ESP32 never stalls the game. boards.beacon = did it answer the last push
+// (true / false / 'none' = no IPs set: a phone stands in)
+const boards = {};
+let loopStr = '';
+function pushBoard() {
+  if (!CFG.BEACON_IPS.length) { boards.beacon = 'none'; return $('#hbeacon').textContent = 'none (phone stand-in)'; }
+  const c = new AbortController(); setTimeout(() => c.abort(), 1500);
+  Promise.any(CFG.BEACON_IPS.map(ip => fetch(`http://${ip}/play?p=${loopStr}`, { mode: 'no-cors', signal: c.signal })))
+    .then(() => { boards.beacon = true; $('#hbeacon').textContent = 'OK'; }, () => { boards.beacon = false; $('#hbeacon').textContent = 'OFFLINE'; });
+}
+const sendLoop = () => hubSend({ t: 'evt', e: 'p3play', v: { p: loopStr } });   // the phone stand-in
+function setLoop(steps) { loopStr = enc(steps); pushBoard(); sendLoop(); }
+function fx(name) {          // an effect on the board, the stand-in and the lenses at once
+  const s = FX[name](), p = enc(s);
+  lenses.fx(s);
+  CFG.BEACON_IPS.forEach(ip => fetch(`http://${ip}/fx?p=${p}`, { mode: 'no-cors', signal: AbortSignal.timeout(1500) }).catch(() => {}));
+  hubSend({ t: 'evt', e: 'p3fx', v: { p } });
+}
+setInterval(pushBoard, CFG.PUSH_MS);
+const showCode = () => $('#hcode').textContent = `${CODE}  (layer ${round + 1}/${LAST + 1})`;
+showCode();
+
+// ===== Hub: unlock on puzzle 2's "done", hand the lights to the phone stand-in, report TRACE =====
 // while the hub is down, messages wait in hubQ and go out on reconnect, so a win during a hub hiccup still unlocks
 // puzzle 4 (the 1 s status doesn't wait: only the latest matters)
 let hubWs, hubQ = [];
 function hubSend(o) {
-  if (o) { if (o.t === 'status' && hubWs?.readyState !== 1) return; hubQ.push(o); }
+  if (o) { if ((o.t === 'status' || o.e === 'p3fx') && hubWs?.readyState !== 1) return; hubQ.push(o); }   // a late effect is pointless
   while (hubWs?.readyState === 1 && hubQ.length) hubWs.send(JSON.stringify(hubQ.shift()));
 }
-const sendCode = () => hubSend({ t: 'evt', e: 'p3code', v: { code: CODE, ...CFG.ROUNDS[round] } });   // the phone stand-in blinks at this speed
 function unlock() {
   if (unlocked) return;
-  unlocked = true; document.body.classList.add('ready');
+  unlocked = true; B.classList.add('ready');
   $('#standby').textContent = 'PRESS SPACE TO START SEQUENCE';
   sfx.ok();
 }
@@ -319,39 +496,26 @@ async function findHub() {
 function bossLoad() {
   if (window.BOSS) return;
   window.BOSS = 1;
-  const s = document.createElement('script');
-  s.src = hubWs.url.replace(/^ws(.*)\/ws$/, 'http$1/boss.js?') + Date.now(); s.dataset.room = 3;
-  document.head.append(s);
+  for (const f of ['boss.js', 'voice.js']) {      // voice.js: Aurora's recorded lines (no hub = she blips instead)
+    const s = document.createElement('script');
+    s.src = hubWs.url.replace(/^ws(.*)\/ws$/, `http$1/${f}?`) + Date.now(); s.dataset.room = 3;
+    document.head.append(s);
+  }
 }
 async function hub() {
   const ws = hubWs = new WebSocket('ws://' + await findHub() + ':3000/ws');
-  ws.onopen = () => { ws.send(JSON.stringify({ t: 'hello', id: 'puzzle3', role: 'page' })); hubSend(); bossLoad(); sendCode(); $('#hubst').textContent = 'connected'; };
+  ws.onopen = () => { ws.send(JSON.stringify({ t: 'hello', id: 'puzzle3', role: 'page' })); hubSend(); bossLoad(); sendLoop(); $('#hubst').textContent = 'connected'; };
   ws.onclose = () => { $('#hubst').textContent = 'DOWN (Ctrl+Alt+U to unlock by hand)'; setTimeout(hub, 2000); };
   ws.onmessage = e => { const m = JSON.parse(e.data);
     if (m.t === 'cmd' && m.a === 'key') staffKey(m.v);
     if (m.t !== 'evt') return;
     if (m.e === CFG.UNLOCK_EVT) unlock();
-    if (m.e === 'p3ask') sendCode();            // a beacon stand-in just opened and wants the code
+    if (m.e === 'p3ask') sendLoop();            // a beacon stand-in just opened and wants the lights
   };
 }
 // the GM panel presses this page's Ctrl+Alt staff keys remotely, and sees its state once a second
 const staffKey = code => dispatchEvent(new KeyboardEvent('keydown', { code, ctrlKey: true, altKey: true }));
 setInterval(() => hubSend({ t: 'status', v: { mode, unlocked, code: `${CODE} (${round + 1}/${LAST + 1})`, stat: trace, boards } }), 1000);
-
-// the boards: fire-and-forget like the mask, so a dead ESP32 never stalls the game.
-// boards = did each one answer the last push (for the GM panel): true / false / 'none' (no IPs set: a phone stands in)
-const boards = {};
-function push(ips, query, el, name) {
-  if (!ips.length) { boards[name] = 'none'; return $(el).textContent = 'none (phone stand-in)'; }
-  const c = new AbortController(); setTimeout(() => c.abort(), 1500);
-  Promise.any(ips.map(ip => fetch(`http://${ip}/code?${query}`, { mode: 'no-cors', signal: c.signal })))
-    .then(() => { boards[name] = true; $(el).textContent = 'OK'; }, () => { boards[name] = false; $(el).textContent = 'OFFLINE'; });
-}
-// the code and this layer's blink speed: /code?v=352&on=100&off=120&gap=1000&loop=2500
-const pushBeacon = () => push(CFG.BEACON_IPS, new URLSearchParams({ v: CODE, ...CFG.ROUNDS[round] }), '#hbeacon', 'beacon');
-setInterval(pushBeacon, CFG.PUSH_MS);
-const showCode = () => $('#hcode').textContent = `${CODE}  (layer ${round + 1}/${LAST + 1})`;
-showCode();
 
 // ===== Sound (synthesized, same set as puzzle 2) =====
 const AC = new AudioContext();
@@ -387,33 +551,24 @@ const sfx = {
   stamp()  { tone('square', 220, 110, .15, .25); noise(.1, .4, 3000); tone('sine', 1760, 0, .4, .12, .05); },
   boom()   { tone('sine', 70, 22, 1.8, 1); noise(.6, .7, 160); },
   blip()   { tone('sine', rand(2400, 3400), 0, .04, .02); },   // the carrier's radar chirp while hidden
+  pip()    { tone('sine', 2600, 0, .05, .05); },              // a lens blinking in the training
   glitch() { noise(.08, .18, rand(1500, 5000)); tone('square', rand(200, 900), rand(80, 300), .08, .05); },   // hint tearing onto the screen
+  boot()   { for (let k = 0; k < 6; k++) noise(.04, .25, rand(2000, 6000), k * rand(.05, .12)); tone('sawtooth', 60, 220, 1, .08, .5); },   // her transmitter powers on
+  sweep()  { tone('sawtooth', 300, 2400, .9, .06); tone('sine', 1200, 4800, .9, .05, .1); },   // a layer cracked: it winds up faster
   beat()   { tone('sine', 75, 38, .22, .9); noise(.05, .25, 120); tone('sine', 68, 34, .25, .6, .24); },
   drop()   { tone('sine', 110, 28, 2.8, 1); noise(.5, .5, 180); [523, 659, 784, 1046].forEach((f, i) => tone('triangle', f, 0, 2, .16, i * .09)); },
 };
 
 // recorded sound: drop files into sounds/ with these names. A missing file is skipped silently.
 const SOUNDS = {
-  hunt:     'sounds/hunt.mp3',       // loops from the CRT boot until the code is cracked
   win:      'sounds/win.mp3',        // one-shot on SIGNAL INTERCEPTED
 };
 const tracks = {};
-function play(name, loop = false) {
+// the background music is the GM panel's soundtrack (hub/public/gm.html), on the hub laptop's speaker
+function play(name) {
   const a = tracks[name] = new Audio(SOUNDS[name]);
-  a.loop = loop; a.volume = CFG.MUSIC_VOLUME; a.muted = muted;
+  a.volume = CFG.MUSIC_VOLUME; a.muted = muted;
   a.play().catch(() => {});
-  return a;
-}
-function fade(name, to, ms = 600) {           // to = 0..1 of MUSIC_VOLUME; fading to 0 pauses
-  const a = tracks[name];
-  if (!a) return;
-  const from = a.volume, target = to * CFG.MUSIC_VOLUME, t0 = performance.now();
-  const step = () => {
-    const k = Math.min(1, (performance.now() - t0) / ms);
-    a.volume = from + (target - from) * k;
-    if (k < 1) setTimeout(step, 30); else if (!to) a.pause();
-  };
-  step();
 }
 // Aurora's voice: Undertale-style blips per letter (replaced the Windows speech voice).
 // Drop sounds/aurora-voice.mp3 (one short ~60 ms blip) to use your own sound; otherwise it is synthesized.
@@ -440,11 +595,12 @@ function shake(el, px, ms) {
 }
 let typeTok = 0;
 async function type(el, text, ms = T.typeChar, voice) {   // voice: a VOICES entry for Aurora; none = keyboard clicks
-  const me = ++typeTok; let n = 0; el.textContent = '';
+  const me = ++typeTok, sec = voice && window.auroraVoice?.(text, master);   // her recorded line: no blips, the text keeps pace
+  let n = 0; el.textContent = '';
   for (const ch of text) {
     if (me !== typeTok) return;
-    el.textContent += ch; if (/\w/.test(ch)) voice ? (n++ % voice.every || blip(voice)) : sfx.key();
-    await wait(ms);
+    el.textContent += ch; if (/\w/.test(ch)) voice ? (sec || n++ % voice.every || blip(voice)) : sfx.key();
+    await wait(sec ? sec * 1000 / text.length : ms);
   }
 }
 async function resolveText(el, text, ms) {         // letters scramble, then lock in left to right
@@ -455,7 +611,7 @@ async function resolveText(el, text, ms) {         // letters scramble, then loc
   clearInterval(s); el.textContent = text;
 }
 async function crtOn(speed = 1) {
-  scr.style.transform = 'scaleY(0)'; document.body.classList.add('crt');
+  scr.style.transform = 'scaleY(0)'; B.classList.add('crt');
   sfx.ignite();
   await beam.animate([{ opacity: 0, transform: 'scaleX(.002)' },
                       { opacity: 1, transform: 'scaleX(.004) scaleY(4)', offset: .6 },
@@ -481,7 +637,7 @@ async function crtOff() {
                      { transform: 'scale(.003,.004)', filter: 'brightness(6)' }], { duration: 260, easing: 'ease-in', fill: 'forwards' }).finished;
   await scr.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 450, fill: 'forwards' }).finished;
   scr.getAnimations().forEach(a => a.cancel());
-  document.body.classList.remove('crt');
+  B.classList.remove('crt');
 }
 
 {                                               // red static texture for the grain
@@ -496,10 +652,22 @@ $('#segs').innerHTML = '<i></i>'.repeat(50);
 const segEls = [...$('#segs').children];
 setInterval(() => $('#hex').textContent = Array.from({ length: 6 }, () => (Math.random() * 0xffff | 0).toString(16).toUpperCase().padStart(4, '0')).join(' '), 400);
 
-// ===== The carrier scope: a scrolling trace. Noise while hidden, spikes on wrong codes, a heartbeat once won =====
+// ===== The blink-rate gauge: 1-30 Hz on a log scale, with the human eye's limit marked =====
+const HZ = [1, 30], hzX = hz => Math.min(1, Math.max(0, Math.log(hz / HZ[0]) / Math.log(HZ[1] / HZ[0])));
+const hzOf = R => 1000 / (R.on + R.off);
+$('#track').style.setProperty('--eye', hzX(CFG.EYE_HZ) * 100 + '%');
+$('#ticks').innerHTML = [1, 2, 5, 10, 20, 30].map(h => `<span style="left:${hzX(h) * 100}%">${h}${h === 1 ? ' Hz' : ''}</span>`).join('');
+function renderRate(R = CFG.ROUNDS[round]) {
+  const hz = hzOf(R), x = hzX(hz);
+  $('#hz').textContent = hz.toFixed(1) + ' Hz';
+  $('#needle').style.left = x * 100 + '%'; $('#fill').style.transform = `scaleX(${x})`;
+  B.classList.toggle('fast', hz > CFG.EYE_HZ);
+}
+
+// ===== The carrier scope: a scrolling pulse train, faster every layer. Spikes on wrong codes, a heartbeat once won =====
 const cv = $('#wave'), ctx = cv.getContext('2d');
-const samples = new Array(320).fill(0);
-let spike = 0, beatAt = -1e9;
+const samples = new Array(320).fill(0), PERIOD = [34, 13, 4];   // scope pulse length in samples, per layer
+let spike = 0, beatAt = -1e9, ph = 0;
 // one heartbeat (ECG) in ms since the beat: small dip, tall spike, deep drop, back to flat
 function ecg(ms) {
   if (ms < 60)  return -ms / 60 * .2;
@@ -510,42 +678,49 @@ function ecg(ms) {
 }
 function drawWave() {
   requestAnimationFrame(drawWave);
-  if (mode !== 'hunt' && mode !== 'check' && mode !== 'won') return;
+  const now = performance.now();
+  lenses.tick(now);
+  if (!B.classList.contains('hunt') && mode !== 'won') return;
   const w = cv.clientWidth, h = cv.clientHeight;
   if (cv.width !== w) { cv.width = w; cv.height = h; }
-  const won = mode === 'won', now = performance.now();
+  const won = mode === 'won', per = PERIOD[Math.min(round, PERIOD.length - 1)];
   spike *= .93;
   for (let i = 0; i < (won ? 1 : round + 1); i++) {   // the trace scrolls faster every layer
-    samples.shift();
+    samples.shift(); ph += 1 / per;
     samples.push(won ? ecg(now - beatAt) + rand(-.02, .02)
-                     : rand(-1, 1) * (.06 + spike) + (Math.random() < .01 ? rand(-.4, .4) : 0));
+                     : (ph % 1 < .45 ? .36 : -.2) + rand(-1, 1) * (.05 + spike) + (Math.random() < .01 ? rand(-.4, .4) : 0));
   }
   ctx.clearRect(0, 0, w, h);
   ctx.strokeStyle = 'rgba(255,51,68,.15)'; ctx.lineWidth = 1;          // grid
   for (let x = 0; x < w; x += w / 16) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
   ctx.beginPath(); ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2); ctx.stroke();
-  const col = won ? '#4dff88' : '#ff3344';
-  ctx.strokeStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 12; ctx.lineWidth = 2.5;
   ctx.beginPath();
   samples.forEach((v, i) => { const x = i / (samples.length - 1) * w, y = h / 2 - v * h * .38; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
-  ctx.stroke(); ctx.shadowBlur = 0;
+  ctx.strokeStyle = won ? 'rgba(77,255,136,.25)' : 'rgba(255,51,68,.25)'; ctx.lineWidth = 7; ctx.stroke();   // the glow: a wide faint stroke, no shadowBlur
+  ctx.strokeStyle = won ? '#4dff88' : '#ff3344'; ctx.lineWidth = 2.2; ctx.stroke();
 }
 drawWave();
 
 // ===== Screen text =====
 function renderCells() {
-  $('#cells').innerHTML = [...Array(LIGHTS).keys()].map(i =>
-    `<div class="cell${i === entry.length && mode === 'hunt' ? ' cur' : ''}">${entry[i] ?? '_'}</div>`).join('');
+  $$('#dec .col').forEach((c, i) => {
+    const cell = c.querySelector('.cell'), counted = counts && countCells;
+    cell.textContent = counted ? (counts[i] || '') : entry[i] ?? '_';
+    cell.classList.toggle('cur', !counted && mode === 'hunt' && i === entry.length);
+    cell.classList.toggle('tally', !!counted);
+    c.querySelector('.cnt').textContent = counts ? '•'.repeat(counts[i]) : '';
+  });
 }
 function renderHud() {
   const found = mode === 'won' || mode === 'end';
-  $('#stats').innerHTML = mode === 'intro' ? 'CARRIER <span>SCANNING</span><br>SOURCE <span>...</span>' :
+  $('#stats').innerHTML = mode === 'intro' || mode === 'tut' ? 'CARRIER <span>SCANNING</span><br>SOURCE <span>...</span>' :
     `CARRIER <span>${found ? 'INTERCEPTED' : 'ACTIVE'}</span><br>SOURCE <span>THIS ROOM</span><br>` +
     `VISIBLE <span class="${found ? 'yes' : 'mv'}">${found ? 'YES' : 'NO'}</span>`;
   $('#freq').textContent = found ? 'HEARTBEAT' : (rand(38.1, 38.9) * (round + 1)).toFixed(2) + ' kHz';
 }
 function renderLayers() {
   const won = mode === 'won' || mode === 'end';
+  if (mode === 'tut') return $('#entry .lbl').textContent = $('#lay').innerHTML = '';
   $('#entry .lbl').textContent = won ? 'ALL LAYERS CRACKED' : `LAYER ${round + 1}/${LAST + 1} ▸ ENTER CARRIER CODE`;
   $('#lay').innerHTML = CFG.ROUNDS.map((_, i) => `<i class="${won || i < round ? 'on' : i === round ? 'cur' : ''}"></i>`).join('');
 }
@@ -601,18 +776,80 @@ async function microGlitch() {
 // ===== The game =====
 async function start() {
   if (mode !== 'standby') return;
-  mode = 'intro'; document.body.classList.add('started');
-  renderHud(); play('hunt', true);
+  mode = 'intro'; B.classList.add('started');
+  hubSend({ t: 'evt', e: 'p3start' });           // the GM's time in this room counts from here
+  renderHud();
   await crtOn();
   if (location.hash === '#game') { history.replaceState(null, '', location.pathname + location.search); return hunt(); }
   await wait(600);
   for (const l of INTRO) { await termLine(l); await wait(T.after); }
-  sfx.ok(); await wait(T.after);
-  $('#term').textContent = '';
-  hunt();
+  sfx.ok(); await wait(600);
+  await training();
+  if (mode === 'tut') hunt();
+}
+
+// ===== Training: the lenses on screen show how to read the lights before the real hunt. Few words, all shown:
+// 1 watch a demo code blink while its blinks are counted, 2 the goal, with the blink-rate gauge sweeping to
+// "beyond human sight". Then the hunt starts and they type the real code. The real board stays dark until then.
+// Ctrl+Alt+K skips it all
+const TUT = [
+  { title: 'COUNT THE BLINKS', sub: 'each light blinks its number.',
+    art: () => '<div class="eq"><i class="mini b3"></i><span>=</span><b>3</b></div>',
+    async run(prog) {
+      const steps = pattern(DEMO, CFG.TUT_SPEED), total = steps.reduce((a, s) => a + s[1], 0), t0 = performance.now();
+      counts = [0, 0, 0]; countCells = true; renderCells();
+      onLens = counter(); lenses.loop(steps);
+      while (mode === 'tut' && performance.now() - t0 < total + 300) { prog((performance.now() - t0) / total); await wait(50); }
+      onLens = null;
+      $('#tutS').innerHTML = `that light code is <b style="color:#fff">${DEMO}</b>.`;
+      $('#dec').classList.add('ok'); await wait(1200); $('#dec').classList.remove('ok');
+    } },
+  { title: 'FIND THE REAL ONE', sub: "it's hidden in this room. count it, type it.<br>3 layers. each one faster. 5 minutes.",
+    art: () => '<div class="spd">' + CFG.ROUNDS.map((R, i) => `<div><i class="mini sp" style="--d:${Math.max(.05, (R.on + R.off) / 500).toFixed(2)}s"></i>${i + 1}</div>`).join('') + '</div>',
+    async run(prog) {
+      const t0 = performance.now();
+      lenses.loop([]); counts = null; countCells = false; renderCells(); B.classList.add('tutgoal');
+      for (let r = 0; r <= LAST && mode === 'tut'; r++) {   // the gauge steps through the layers, into the red
+        renderRate(CFG.ROUNDS[r]); sfx.tick();
+        const end = t0 + T.goal * (r + 1) / (LAST + 1);
+        while (mode === 'tut' && performance.now() < end) { prog((performance.now() - t0) / T.goal); await wait(50); }
+      }
+    } },
+];
+async function training() {
+  mode = 'tut'; B.classList.add('tut'); $('#term').textContent = '';
+  renderHud(); renderLayers();
+  const panel = $('#tut'), dots = [...$('#tutDots').children], bar = $('#tutBar i');
+  const prog = p => bar.style.transform = `scaleX(${Math.min(1, Math.max(0, p)).toFixed(3)})`;
+  panel.classList.add('on');
+  for (let s = 0; s < TUT.length; s++) {
+    const st = TUT[s];
+    dots.forEach((d, i) => d.className = i < s ? 'done' : i === s ? 'now' : '');
+    panel.classList.remove('ok'); sfx.tick(); prog(0);
+    $('#tutN').textContent = `TRAINING ${s + 1} / ${TUT.length}`;
+    $('#tutT').textContent = st.title; $('#tutS').innerHTML = st.sub; $('#tutArt').innerHTML = st.art();
+    await st.run(prog);
+    if (mode !== 'tut') return;
+    panel.classList.add('ok'); $('#tutT').textContent = '✔ ' + st.title; prog(1); sfx.ok();
+    await wait(T.tutOk);
+  }
+  dots.forEach(d => d.className = 'done');
+  panel.classList.remove('on'); B.classList.remove('tut', 'tutgoal');
+}
+
+// a layer's banner: LAYER n / 3, its name scrambles in, one line under it (same strip as game 4)
+async function banner() {
+  const R = CFG.ROUNDS[round], b = $('#banner'), bt = $('#bt');
+  $('#bk').textContent = `LAYER ${round + 1} / ${LAST + 1}`; $('#bs').textContent = R.sub;
+  bt.classList.remove('glitch'); b.classList.add('on'); sfx.stamp(); shake(scr, 6, 250);
+  await resolveText(bt, R.name, 55);
+  bt.dataset.text = R.name; bt.classList.add('glitch'); setTimeout(() => bt.classList.remove('glitch'), 500);
+  await wait(T.banner);
+  b.classList.remove('on');
 }
 
 // the trace bar: time plus whatever their mistakes added. Returns 0..1
+let closeShown = '';
 function renderTrace() {
   const s = (performance.now() - huntT0) / 1000, k = Math.min(1, s / CFG.TRACE_S + tracePen / 100);
   const left = Math.max(0, Math.ceil(CFG.TRACE_S - s));
@@ -621,13 +858,19 @@ function renderTrace() {
   $('#tl').textContent = `${left / 60 | 0}:${String(left % 60).padStart(2, '0')}`;
   $('#tl').classList.toggle('low', left <= 60);
   segEls.forEach((el, i) => el.classList.toggle('on', i < k * 50));
+  const c = k.toFixed(2); if (c !== closeShown) scr.style.setProperty('--close', closeShown = c);   // the corners close in
   return k;
 }
 let loop;
-function hunt() {
-  mode = 'hunt'; document.body.classList.add('hunt', 'dark');
-  $('#term').textContent = ''; entry = ''; renderCells(); renderHud(); renderLayers();
-  huntT0 = lastT0 = performance.now(); microGlitch();
+async function hunt() {
+  mode = 'trans'; B.classList.remove('tut', 'tutgoal'); B.classList.add('hunt', 'dark');
+  $('#term').textContent = ''; $('#tut').classList.remove('on');
+  entry = ''; counts = null; onLens = null; lenses.loop([]);
+  renderCells(); renderHud(); renderLayers(); renderRate();
+  setLoop(pattern(CODE, CFG.ROUNDS[round])); fx('boot'); sfx.boot();   // her transmitter wakes up somewhere in the room
+  await banner();
+  if (mode !== 'trans') return;
+  huntT0 = lastT0 = performance.now(); mode = 'hunt'; renderCells(); microGlitch();
   aurora(AUR.intro, T.auroraHold);
   loop = setInterval(() => {
     if (mode !== 'hunt' && mode !== 'check') return;
@@ -637,7 +880,7 @@ function hunt() {
       while (hintN < CFG.HINTS.length && (performance.now() - lastT0) / 1000 >= CFG.HINTS[hintN].at) showHint();
     if (hintText && mode === 'hunt' && performance.now() > nextGlitch) glitchHint(CFG.HINT_MS);   // the latest hint keeps leaking back
     // mistakes filled the bar before time is up (at time-up, timeUp() says the line instead)
-    if (k >= 1 && !traced && s < CFG.TRACE_S) { traced = true; document.body.classList.add('traced'); sfx.alarm(); aurora(AUR.traced, T.auroraHold); }
+    if (k >= 1 && !traced && s < CFG.TRACE_S) { traced = true; B.classList.add('traced'); sfx.alarm(); aurora(AUR.traced, T.auroraHold); }
     if (s >= CFG.TRACE_S && mode === 'hunt') timeUp();   // mid-check, the wrong-code screen finishes first
   }, 100);
 }
@@ -649,39 +892,40 @@ async function check() {
   const trap = round === LAST && entry === TRAP;   // they counted with their eyes: she gloats, and the first hint follows
   tracePen += CFG.WRONG_TRACE; renderTrace();   // she hears them: the trace jumps
   $('#bar').animate([{ color: '#fff', filter: 'brightness(2.5)' }, {}], 700); shake($('#bar'), 10, 400);
-  sfx.buzz(); spike = 1.2; $('#cells').classList.add('bad'); shake(scr, 12, 420);
+  sfx.buzz(); spike = 1.2; $('#dec').classList.add('bad'); shake(scr, 12, 420);
+  fx('wrong');                                     // the board stutters, then starts its code over from light 1
   aurora(trap ? AUR.trap : any(AUR.wrong), T.auroraHold);
   if (trap && !hintN) setTimeout(() => hintN || showHint(), 1800);
   await wait(450);
-  $('#cells').classList.replace('bad', 'lock');
+  $('#dec').classList.replace('bad', 'lock');
   await wait(CFG.LOCK_MS);
   if (mode !== 'check') return;                   // staff forced the win meanwhile
-  $('#cells').classList.remove('lock');
+  $('#dec').classList.remove('lock');
   entry = ''; mode = 'hunt'; renderCells();
 }
-// a layer cracked: the next code, blinked faster. The board starts it after a dark pause, so the change shows
+// a layer cracked: the lights sweep and fade, the next code (blinked faster) starts after the board's dark pause
 async function nextLayer() {
-  $('#cells').classList.add('ok'); sfx.ok(); spike = .8;
+  $('#dec').classList.add('ok'); sfx.ok(); sfx.sweep(); spike = .8; fx('layer');
   aurora(AUR.next[round] || AUR.next.at(-1), T.auroraHold);
   const prev = CODE;
   do CODE = roll(); while (CODE === prev);
-  round++; renderLayers(); showCode(); pushBeacon(); sendCode();
-  await wait(700);
-  sfx.glitch(); shake(scr, 14, 300); scr.querySelector('.rollbar').animate([{ top: '-20%' }, { top: '110%' }], 320);
-  $('#lay').animate([{ filter: 'brightness(3)' }, {}], 600);
-  await wait(CFG.ROUND_MS - 700);
+  round++; showCode(); setLoop(pattern(CODE, CFG.ROUNDS[round]));
+  await wait(1300);
   if (mode !== 'check') return;                   // staff forced the win meanwhile
-  $('#cells').classList.remove('ok');
-  entry = ''; mode = 'hunt'; renderCells();
+  $('#dec').classList.remove('ok'); entry = ''; renderCells(); renderLayers(); renderRate(); renderHud();
+  await banner();
+  if (mode !== 'check') return;
+  mode = 'hunt'; renderCells();
   if (round === LAST) lastT0 = performance.now();
 }
 async function win() {
   renderTrace(); huntS = (performance.now() - huntT0) / 1000;   // freeze TRACE before mode leaves the hunt
   mode = 'won'; entry = CODE; renderCells(); renderHud(); renderLayers();
-  clearInterval(loop); document.body.classList.remove('traced', 'dark'); document.body.classList.add('won');
-  $('#cells').classList.add('ok'); hintText = null;
-  sfx.ok(); fade('hunt', 0, 900);
-  // Aurora's voice corrupts mid-word, then her heartbeat comes through the carrier
+  clearInterval(loop); B.classList.remove('traced', 'dark'); B.classList.add('won');
+  $('#dec').classList.remove('bad', 'lock'); $('#dec').classList.add('ok'); hintText = null;
+  setLoop([]);                                    // the signal is cut: after her heartbeat, the board goes dark
+  sfx.ok();
+  // Aurora's voice corrupts mid-word, then her heartbeat comes through the carrier and the lights
   const aur = $('#aur'); aurTok++;
   await type(aur, AUR.caught, T.typeChar, VOICES.aurora);
   const glyphs = '▓▒░#%&@$/\\';
@@ -690,6 +934,7 @@ async function win() {
     await wait(40);
   }
   aur.textContent = '';
+  fx('win');
   for (let i = 0; i < 5; i++) { beatAt = performance.now(); sfx.beat(); shake(scr, 4 + i * 2, 200); await wait(900 - i * 120); }
   await wait(500);
   await crtOff();
@@ -698,7 +943,8 @@ async function win() {
 // 5:00 ran out: she found them. TRACE 100%, and the team still moves on to puzzle 4 (no one gets stuck in a room)
 async function timeUp() {
   mode = 'lost'; clearInterval(loop); huntS = CFG.TRACE_S; trace = 100;
-  hintText = null; document.body.classList.remove('dark'); fade('hunt', 0, 600);
+  hintText = null; B.classList.remove('dark');
+  setLoop([]); fx('timeUp');
   sfx.alarm(); spike = 2; shake(scr, 16, 600);
   $('#flash').animate([{ opacity: .7, background: '#ff3344' }, { opacity: 0 }], 500);
   const aur = $('#aur'); aurTok++;
@@ -713,7 +959,7 @@ async function ending(won = true) {
   f.classList.toggle('lost', !won);
   if (won) { $('#flash').animate([{ opacity: 1 }, { opacity: 1, offset: .2 }, { opacity: 0 }], { duration: 1400, easing: 'ease-out' }); sfx.drop(); play('win'); }
   else sfx.boom();
-  document.body.classList.add('final');
+  B.classList.add('final');
   $('#fk').textContent = won ? `SECTOR 03 ▸ CARRIER INTERCEPTED ▸ TRACE ${trace}% ▸ LINK SEVERED` : 'SECTOR 03 ▸ TRACE 100% ▸ TIME UP';
   await wait(350);
   await resolveText(ft, won ? 'SIGNAL INTERCEPTED' : 'TRACE COMPLETE', 70);
@@ -729,14 +975,16 @@ async function ending(won = true) {
 
 // ===== Keys: players type digits; staff use Ctrl+Alt+<key> =====
 addEventListener('keydown', e => {
-  if (e.ctrlKey && e.altKey && e.code === 'KeyH') { e.preventDefault(); document.body.classList.toggle('help'); return; }
+  if (e.ctrlKey && e.altKey && e.code === 'KeyH') { e.preventDefault(); B.classList.toggle('help'); return; }
   if (e.ctrlKey && e.altKey) {
     e.preventDefault();
+    const hunting = mode === 'hunt' || mode === 'check';
     if (e.code === 'KeyU') unlock();
     if (e.code === 'KeyS') start();
     if (e.code === 'KeyK') { location.hash = 'game'; location.reload(); }
-    if (e.code === 'KeyI' && (mode === 'hunt' || mode === 'check')) showHint();
-    if (e.code === 'KeyF' && (mode === 'hunt' || mode === 'check')) { entry = CODE; win(); }
+    if (e.code === 'KeyN' && mode === 'hunt') { entry = CODE; mode = 'check'; round < LAST ? nextLayer() : win(); }
+    if (e.code === 'KeyI' && hunting) showHint();
+    if (e.code === 'KeyF' && hunting) { entry = CODE; win(); }
     if (e.code === 'KeyR') location.reload();
     if (e.code === 'KeyW') { location.hash = 'win'; location.reload(); }
     if (e.code === 'KeyM') { muted = !muted; store.set('muted', muted); master.gain.value = muted ? 0 : CFG.VOLUME;
@@ -746,14 +994,16 @@ addEventListener('keydown', e => {
   if (e.code === 'Space' && mode === 'standby') { e.preventDefault(); if (unlocked) start(); return; }
   if (mode !== 'hunt') return;
   if (/^\d$/.test(e.key) && entry.length < LIGHTS) {
+    const i = entry.length;
     entry += e.key; sfx.tick(); renderCells();
+    lenses.fx(FX.type(i, +e.key));               // the lens above blinks the number back
     if (entry.length === LIGHTS) { mode = 'check'; setTimeout(check, 200); }
   } else if (e.key === 'Backspace') { entry = entry.slice(0, -1); renderCells(); }
 });
 
-hub(); pushBeacon();
-if (location.hash === '#game') setTimeout(start, 300);   // skip: start() jumps past the intro
-if (location.hash === '#win') { history.replaceState(null, '', location.pathname + location.search); document.body.classList.add('started'); replay = true; ending(); }
+hub(); setLoop([]);                               // the board stays dark until the hunt
+if (location.hash === '#game') setTimeout(start, 300);   // skip: start() jumps past the intro and the training
+if (location.hash === '#win') { history.replaceState(null, '', location.pathname + location.search); B.classList.add('started'); replay = true; ending(); }
 
 // self-check: open game.html?test and look at the console
 if (location.search === '?test') {
@@ -763,6 +1013,14 @@ if (location.search === '?test') {
   console.assert(AUR.next.length >= LAST, 'a line for every layer change');
   console.assert(ecg(0) === 0 && ecg(100) > 1 && ecg(500) === 0, 'heartbeat shape: flat, spike, flat');
   console.assert(CFG.HINTS.every((h, i) => !i || h.at > CFG.HINTS[i - 1].at), 'hints are in time order');
+  const starts = s => { const n = [0, 0, 0]; let p = DARK; s.forEach(([v]) => { [...v].forEach((c, j) => { if (c !== '0' && p[j] === '0') n[j]++; }); p = v; }); return n.join(''); };
+  const slow = pattern('312', CFG.ROUNDS[0]), quick = pattern('352', CFG.ROUNDS[LAST]);
+  console.assert(slow[0][0] === DARK && slow[0][1] === CFG.ROUNDS[0].loop && slow.at(-1)[0] !== DARK, 'pattern: dark pause first, ends on a blink');
+  console.assert(starts(slow) === '312' && starts(quick) === '352', 'pattern: each light blinks its digit');
+  console.assert(quick.every(([v, ms]) => v === DARK || ms === CFG.ROUNDS[LAST].on), 'fast blinks are one crisp full-on step');
+  console.assert(FX.win().slice(0, 4).reduce((a, s) => a + s[1], 0) === 900, "her heartbeat's first beat lasts 900 ms, like the screen's");
+  console.assert(/^(\d{3}:\d+,)*\d{3}:\d+$/.test(enc(FX.boot())), 'steps encode as abc:ms,abc:ms');
+  console.assert(Math.max(...Object.keys(FX).filter(k => k !== 'type').map(k => FX[k]().length), pattern('555', CFG.ROUNDS[0]).length) <= 160, 'lists fit the board (MAX_STEPS 160)');
   console.log('self-check done (no assertion errors above = pass)');
 }
 </script>

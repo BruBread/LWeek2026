@@ -8,7 +8,9 @@ rem Back up sales.jsonl and the photos folder to a USB stick at the end of every
 rem booth.bat sets NET: the page searches it for the hub (for "how far is the current team").
 call "%~dp0..\booth.bat"
 set URL=http://localhost:4000/?net=%NET%
-set FLAGS=--kiosk %URL% --window-position=0,0 --user-data-dir="%LOCALAPPDATA%\nexus-kiosk-signup" --autoplay-policy=no-user-gesture-required --no-first-run --use-fake-ui-for-media-stream
+rem --disable-gpu: after hours of idling, a display driver hiccup can leave the kiosk lit but black until the browser restarts.
+rem Drawing without the GPU avoids that. Remove it if the animations stutter on a slow laptop.
+set FLAGS=--kiosk %URL% --window-position=0,0 --user-data-dir="%LOCALAPPDATA%\nexus-kiosk-signup" --autoplay-policy=no-user-gesture-required --no-first-run --use-fake-ui-for-media-stream --disable-gpu
 
 cd /d "%~dp0"
 start "nexus-signup" /min node server.js

@@ -15,3 +15,6 @@ LWeek-Queuing-System/
 
 .claude/
 .vscode/
+
+# Clean voice cuts (aurora-voice/cut.py rebuilds them from the ElevenLabs take)
+aurora-voice/raw/

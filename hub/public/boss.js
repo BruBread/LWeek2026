@@ -186,6 +186,8 @@ function blip(v) {
   s.buffer = b; s.playbackRate.value = k * v.f / 440; g.gain.value = v.vol * 8;
   s.connect(g).connect(master); s.start();
 }
+const say = text => window.auroraVoice?.(text, master) || 0;   // her recorded line (voice.js): its length in s, 0 = none (blip)
+const taunt = () => { const t = any(SAY.fail); say(t); return t; };
 // the page under us goes quiet the moment the finale needs the speakers
 function silencePage() {
   page(() => AC.suspend());
@@ -481,12 +483,13 @@ async function line(tx, text, v, o) {
   const t0 = performance.now();
   let typing = true, skip = false, next = false, n = 0;
   dlgKey = () => { if (o.auto || performance.now() - t0 < C.SKIP_GUARD) return; if (typing) skip = true; else next = true; };
+  const sec = say(text);                     // her recorded line: no blips, the text keeps pace with it
   tx.textContent = '* ';
   for (const ch of text) {
     if (skip || dlgCut || o.cancel?.()) { tx.textContent = '* ' + text; break; }
     tx.textContent += ch;
-    if (/\w/.test(ch) && n++ % v.every === 0) blip(v);
-    await wait(/[.,?!]/.test(ch) ? C.TYPE_MS * 4 : C.TYPE_MS);
+    if (!sec && /\w/.test(ch) && n++ % v.every === 0) blip(v);
+    await wait(sec ? sec * 1000 / text.length : /[.,?!]/.test(ch) ? C.TYPE_MS * 4 : C.TYPE_MS);
   }
   typing = false; $('bstage').classList.remove('talk');
   const end = performance.now() + (o.hold ?? C.HOLD_MS);
@@ -671,7 +674,7 @@ function step(done) {
 const pips = () => `<div class="pips" id="bpips">${Array.from({ length: cur.need }, (_, i) => `<i class="${i < cur.done ? 'on' : ''}"></i>`).join('')}</div>`;
 const source = (k, from, what) => `<div class="src bt">${k.toUpperCase()} <span>${res(k)}%</span> ▸ FROM ${SEC(from)}<br>${what}</div>`;
 async function purge() {                      // this room's task is done: it goes back to red
-  const g = gen, scream = any(SAY.purged);
+  const g = gen, scream = any(SAY.purged); say(scream);
   task?.stop(); task = cur = null; view = 'purge'; loop('fight', false); scene = null; clearFx();
   theme('red'); flash(.6, 350, '#ff3344'); one('purged'); shake(B, 12, 500);
   main(hd(SEC(ROOM) + ' ▸ CLEAN') + `<div class="mid"><div class="note">${SEC(ROOM)}</div><div class="big" id="bst"></div>` +
@@ -850,7 +853,7 @@ function crossTask() {
     strip(hit ? 'hit' : 'miss'); flash(.25, 150, hit ? '#4dff88' : '#ff3344');
     for (let k = 0; k < (hit ? 70 : 30); k++) { const an = rand(0, TAU), sp = rand(20, hit ? 130 : 80);
       parts.push({ x: ex, y: ey, vx: Math.cos(an) * sp, vy: Math.sin(an) * sp, t: rand(.3, .9), c: hit ? any(['#fff', '#4dff88', '#b8ffd0']) : any(['#fff', '#ff3344', '#ff8a96']) }); }
-    if (!hit) { sfx.bad(); $('bxa').textContent = any(SAY.fail); return; }
+    if (!hit) { sfx.bad(); $('bxa').textContent = taunt(); return; }
     hits++; sfx.catch(); $('bxa').textContent = ''; step(hits);
     if (hits < n) setTimeout(() => { if (task === me && stage === 'play') { place(); stage = 'enter'; t0 = performance.now(); sfx.glitch(); } }, 900);
   }
@@ -1062,7 +1065,7 @@ async function failed(ev) {
   one('fail'); flash(.45, 400, '#ff3344'); shake(B, 14, 400);
   const f = $('bkf'); if (!f) return;
   f.textContent = ev.missing?.length ? `SECTOR ${ev.missing.map(r => '0' + r).join(' · ')} NEVER PRESSED` : `OUT OF SYNC ▸ ${ev.spread.toFixed(2)} s APART`;
-  if ($('bka')) $('bka').textContent = any(SAY.fail);
+  if ($('bka')) $('bka').textContent = taunt();
   const at = ev.at; await wait(3000);
   if (S.ev?.at === at) { f.textContent = ''; if ($('bka')) $('bka').textContent = ''; }
 }

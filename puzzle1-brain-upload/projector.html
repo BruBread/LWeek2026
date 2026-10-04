@@ -371,9 +371,11 @@ async function findHub() {
 function bossLoad() {
   if (window.BOSS) return;
   window.BOSS = 1;
-  const s = document.createElement('script');
-  s.src = hubWs.url.replace(/^ws(.*)\/ws$/, 'http$1/boss.js?') + Date.now(); s.dataset.room = 1;
-  document.head.append(s);
+  for (const f of ['boss.js', 'voice.js']) {      // voice.js: Aurora's recorded lines (no hub = she blips instead)
+    const s = document.createElement('script');
+    s.src = hubWs.url.replace(/^ws(.*)\/ws$/, `http$1/${f}?`) + Date.now(); s.dataset.room = 1;
+    document.head.append(s);
+  }
 }
 async function hub() {
   const ws = hubWs = new WebSocket('ws://' + await findHub() + ':3000/ws');
@@ -441,16 +443,20 @@ const sfx = {
 
 // finale beat: kick on quarters, hat on offbeats, bass line; `dist` = Aurora attacking
 // recorded sound: drop files into sounds/ with these names. A missing file is skipped silently.
+// The loops (background music) live in hub/public/sounds/ instead and play on the hub laptop: the GM panel plays them.
 const SOUNDS = {
   upload1:     'sounds/upload1.mp3',        // first brain upload: from the click until the screen collapses
   detected:    'sounds/detected.mp3',       // one-shot as "UNAUTHORIZED CONSCIOUSNESS DETECTED" slams in
   mashIn:      'sounds/mash-in.mp3',        // one-shot when the MASH ANY KEY banner appears
   mashOut:     'sounds/mash-out.mp3',       // one-shot when it goes away (shattered or timed out)
-  crtMusic:    'sounds/crt-music.mp3',      // loops from the green CRT boot until the code is cracked
-  finaleMusic: 'sounds/finale-music.mp3',   // loops from the red CRT boot; replaces the built-in beat when present
+  crtMusic:    'sounds/crt-music.mp3',      // loop (hub): from the green CRT boot until the code is cracked
+  finaleMusic: 'sounds/finale-music.mp3',   // loop (hub): from the red CRT boot to MIND UPLOADED
 };
 const tracks = {};
+// background music: sent to the hub, never queued (a late "start" would play over the wrong moment)
+const music = (name, v) => hubWs?.readyState === 1 && hubWs.send(JSON.stringify({ t: 'evt', e: 'music', v: { f: SOUNDS[name].split('/').pop(), ...v } }));
 function play(name, loop = false) {
+  if (loop) return music(name, { start: 1 });
   const a = tracks[name] = new Audio(SOUNDS[name]);
   a.loop = loop; a.volume = CFG.MUSIC_VOLUME; a.muted = muted;
   a.onplaying = () => a.ok = true;
@@ -459,7 +465,7 @@ function play(name, loop = false) {
 }
 function fade(name, to, ms = 600) {           // to = 0..1 of MUSIC_VOLUME; fading to 0 pauses
   const a = tracks[name];
-  if (!a) return;
+  if (!a) return music(name, { to, ms });       // a loop: it plays on the hub
   if (to && a.paused) a.play().catch(() => {});
   const from = a.volume, target = to * CFG.MUSIC_VOLUME, t0 = performance.now();
   const step = () => {
@@ -473,14 +479,15 @@ function fade(name, to, ms = 600) {           // to = 0..1 of MUSIC_VOLUME; fadi
 const beat = { on: false, bpm: 112, dist: false, step: 0, next: 0 };
 const BASS = [0, 0, 12, 0, 0, 10, 0, 7];   // semitones over A1
 setInterval(() => {
-  if (!beat.on || tracks.finaleMusic?.ok) return;   // the recorded finale music takes over when it exists
+  if (!beat.on) return;
+  const loud = hubWs?.readyState !== 1;     // the hub plays the finale music; the synth beat only fills in while it's down (the pulse always runs)
   const spb = 60 / beat.bpm / 2;
   if (beat.next < AC.currentTime) beat.next = AC.currentTime + .05;
   while (beat.next < AC.currentTime + .15) {
     const s = beat.step++ % 8, d = beat.next - AC.currentTime;
-    if (s % 2 === 0) { tone('sine', 150, 40, .35, beat.dist ? 1 : .8, d); setTimeout(() => { if (net) net.pulse = 1.2; }, d * 1000); }
-    else noise(.05, .12, 8000, d);
-    tone(beat.dist ? 'square' : 'sawtooth', 55 * 2 ** (BASS[s] / 12), 0, spb * .9, .09, d);
+    if (s % 2 === 0) { if (loud) tone('sine', 150, 40, .35, beat.dist ? 1 : .8, d); setTimeout(() => { if (net) net.pulse = 1.2; }, d * 1000); }
+    else if (loud) noise(.05, .12, 8000, d);
+    if (loud) tone(beat.dist ? 'square' : 'sawtooth', 55 * 2 ** (BASS[s] / 12), 0, spb * .9, .09, d);
     beat.next += spb;
   }
 }, 25);
@@ -502,7 +509,8 @@ function blip(v) {
   s.buffer = voiceBuf; s.playbackRate.value = k * v.f / 440; g.gain.value = v.vol * 8;   // * 8: tune by ear for your file
   s.connect(g).connect(master); s.start();
 }
-async function say(text, v = VOICES.angry) {       // voice with no typing: a quick babble for scare lines
+async function say(text, v = VOICES.angry) {       // voice with no typing: her clip, or a quick babble for scare lines
+  if (window.auroraVoice?.(text, master)) return;
   for (const ch of text) { if (/\w/.test(ch)) blip(v); await wait(35); }
 }
 let hum;
@@ -749,15 +757,16 @@ let typeTok = 0;
 async function type(el, text, voice) {             // voice: a VOICES entry for Aurora; none = keyboard clicks
   // while Aurora talks the eyes flicker with her blips, like a mouth; not during code entry, where they stay off
   const me = ++typeTok, base = eyeWant, mouth = voice && mode !== 'input' && mode !== 'check';
+  const sec = voice && window.auroraVoice?.(text, master);   // her recorded line: no blips, the text keeps pace with it
   let n = 0, open = false; el.textContent = '';
   for (const ch of text) {
     if (me !== typeTok) return;
     el.textContent += ch;
     if (/\w/.test(ch)) {
       if (!voice) sfx.key();
-      else if (!(n++ % voice.every)) { blip(voice); if (mouth) eyes((open = !open) ? (base ? CFG.EYES_LOW : CFG.EYES_FULL) : base); }
+      else if (!(n++ % voice.every)) { sec || blip(voice); if (mouth) eyes((open = !open) ? (base ? CFG.EYES_LOW : CFG.EYES_FULL) : base); }
     }
-    await wait(T.typeChar);
+    await wait(sec ? sec * 1000 / text.length : T.typeChar);
   }
   if (mouth) eyes(base);
 }
@@ -770,6 +779,7 @@ function log(line) {
 async function capture() {
   if (mode !== 'idle' || calib) return;
   mode = 'capture'; humOn(false); hs.classList.remove('on'); eyes(CFG.EYES_FULL);
+  hubSend([{ t: 'evt', e: 'p1start' }]);           // the run clock starts at the team's first click (this, or opening Binary Key)
 
   // beat 2: capture
   $('#flash').animate([{ opacity: 1 }, { opacity: 1, offset: .35 }, { opacity: 0 }], 200);

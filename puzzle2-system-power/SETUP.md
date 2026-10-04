@@ -152,6 +152,8 @@ The Tapo C200 ("NexusCam") sits **behind** the players. When the fake start begi
 
 The pop-up closes 4 s after game 2 ends (`p2done`), or after 90 s at most. No key closes it. Any signup in progress waits underneath, and its idle timer pauses. The pop-up never opens on the staff screen or on the `/queue` TV. Nothing is recorded.
 
+The GM panel shows the same camera any time (its CAMERA box): hub\start.bat starts a second go2rtc on the hub laptop, for that laptop only. It needs `signup\go2rtc.exe` and `signup\camera.json` on the hub laptop too.
+
 How it works: the camera streams all the time, and the pop-up is what "turns it on". go2rtc, on the signup PC, turns the camera's RTSP stream into something the browser can play. The booth router can't reserve addresses, so the camera has no fixed IP. Each time the pop-up opens the stream, go2rtc runs `signup/camera.js`, which finds the camera on the network in about 0.3 s (it's the device that answers on port 2020). go2rtc only answers the signup PC itself, because its API can run programs.
 
 One-time setup (done 2026-10-02 on the dev laptop):

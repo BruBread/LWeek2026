@@ -298,7 +298,6 @@ const CFG = {
   TUT_HELP_S: 15,            // training: s on one step before its extra help line shows...
   TUT_SKIP_S: 30,            // ...and before it moves on by itself, so no team gets stuck
   VOLUME: 0.8,
-  MUSIC_VOLUME: 0.7,
 };
 const T = {                  // ms
   dot: 380, line: 460, open: 750, ghost: 1300,   // CRT boot, same as puzzle 1
@@ -391,9 +390,11 @@ async function findHub() {
 function bossLoad() {
   if (window.BOSS) return;
   window.BOSS = 1;
-  const s = document.createElement('script');
-  s.src = hubWs.url.replace(/^ws(.*)\/ws$/, 'http$1/boss.js?') + Date.now(); s.dataset.room = 2;
-  document.head.append(s);
+  for (const f of ['boss.js', 'voice.js']) {      // voice.js: Aurora's recorded lines (no hub = she blips instead)
+    const s = document.createElement('script');
+    s.src = hubWs.url.replace(/^ws(.*)\/ws$/, `http$1/${f}?`) + Date.now(); s.dataset.room = 2;
+    document.head.append(s);
+  }
 }
 async function hub() {
   const ws = hubWs = new WebSocket('ws://' + await findHub() + ':3000/ws');
@@ -403,7 +404,10 @@ async function hub() {
 }
 // the GM panel presses this page's Ctrl+Alt staff keys remotely, and sees its state once a second
 const staffKey = code => dispatchEvent(new KeyboardEvent('keydown', { code, ctrlKey: true, altKey: true }));
-setInterval(() => hubSend({ t: 'status', v: { mode, unlocked, stat: Math.round(energy), lit, held } }), 1000);
+// pos: the team started typing "power" in the training, so the GM tells the staff AIs to get into position (sent the moment it happens)
+let pos = false;
+const report = () => hubSend({ t: 'status', v: { mode, unlocked, stat: Math.round(energy), lit, held, pos } });
+setInterval(report, 1000);
 
 // ===== Sound (synthesized, copied from puzzle 1) =====
 const AC = new AudioContext();
@@ -460,30 +464,10 @@ const sfx = {
   drop()   { tone('sine', 110, 28, 2.8, 1); noise(.5, .5, 180); [523, 659, 784, 1046].forEach((f, i) => tone('triangle', f, 0, 2, .16, i * .09)); },
 };
 
-// recorded sound: drop files into sounds/ with these names. A missing file is skipped silently.
-const SOUNDS = {
-  tutorial:   'sounds/tutorial.mp3',     // loops under the tutorial and the fake start
-  lookbehind: 'sounds/lookbehind.mp3',   // one-shot as LOOK BEHIND YOU slams in
-  game:       'sounds/game.mp3',         // loops during the real game
-};
-const tracks = {};
-function play(name, loop = false) {
-  const a = tracks[name] = new Audio(SOUNDS[name]);
-  a.loop = loop; a.volume = CFG.MUSIC_VOLUME; a.muted = muted;
-  a.play().catch(() => {});
-  return a;
-}
-function fade(name, to, ms = 600) {           // to = 0..1 of MUSIC_VOLUME; fading to 0 pauses
-  const a = tracks[name];
-  if (!a) return;
-  const from = a.volume, target = to * CFG.MUSIC_VOLUME, t0 = performance.now();
-  const step = () => {
-    const k = Math.min(1, (performance.now() - t0) / ms);
-    a.volume = from + (target - from) * k;
-    if (k < 1) setTimeout(step, 30); else if (!to) a.pause();
-  };
-  step();
-}
+// background music: the GM panel's soundtrack (hub/public/gm.html) plays this room's track (hub/public/sounds/game2.mp3)
+// from SPACE to the end, and the scream (scream.mp3) at LOOK BEHIND YOU ('p2scare'). This page only fades the track out
+// during the dread; the GM brings it back after the scream. Sent straight, never queued
+const music = v => hubWs?.readyState === 1 && hubWs.send(JSON.stringify({ t: 'evt', e: 'music', v: { f: 'game2.mp3', ...v } }));
 // Aurora's voice: Undertale-style blips per letter (replaced the Windows speech voice).
 // Drop sounds/aurora-voice.mp3 (one short ~60 ms blip) to use your own sound; otherwise it is synthesized.
 const VOICES = {
@@ -501,7 +485,8 @@ function blip(v) {
   s.buffer = voiceBuf; s.playbackRate.value = k * v.f / 440; g.gain.value = v.vol * 8;   // * 8: tune by ear for your file
   s.connect(g).connect(master); s.start();
 }
-async function say(text, v = VOICES.angry) {       // voice with no typing: a quick babble for scare lines
+async function say(text, v = VOICES.angry) {       // voice with no typing: her clip, or a quick babble for scare lines
+  if (window.auroraVoice?.(text, master)) return;
   for (const ch of text) { if (/\w/.test(ch)) blip(v); await wait(35); }
 }
 
@@ -513,11 +498,12 @@ function shake(el, px, ms) {
 }
 let typeTok = 0;
 async function type(el, text, ms = T.typeChar, voice) {   // voice: a VOICES entry for Aurora; none = keyboard clicks
-  const me = ++typeTok; let n = 0; el.textContent = '';
+  const me = ++typeTok, sec = voice && window.auroraVoice?.(text, master);   // her recorded line: no blips, the text keeps pace
+  let n = 0; el.textContent = '';
   for (const ch of text) {
     if (me !== typeTok) return;
-    el.textContent += ch; if (/\w/.test(ch)) voice ? (n++ % voice.every || blip(voice)) : sfx.key();
-    await wait(ms);
+    el.textContent += ch; if (/\w/.test(ch)) voice ? (sec || n++ % voice.every || blip(voice)) : sfx.key();
+    await wait(sec ? sec * 1000 / text.length : ms);
   }
 }
 async function resolveText(el, text, ms) {         // letters scramble, then lock in left to right
@@ -612,6 +598,7 @@ let idleT, lastKey = 0;
 function typeKey(k) {
   const w = word; if (!w) return;
   lastKey = performance.now();
+  if (mode === 'tut' && !pos) { pos = true; report(); }
   caret.classList.remove('idle'); clearTimeout(idleT); idleT = setTimeout(() => caret.classList.add('idle'), 800);
   if (k === 'Backspace') { if (w.typed) { w.typed = w.typed.slice(0, -1); w.bs++; drawWord(); moveCaret(); } return; }
   if (w.typed.length >= w.text.length + 6) return;
@@ -760,10 +747,10 @@ async function training() {
 async function start() {
   if (mode !== 'standby') return;
   mode = 'tut'; document.body.classList.add('started');
+  hubSend({ t: 'evt', e: 'p2start' });           // the GM's time in this room counts from here
   energy = 3; renderBar(); renderHud(); lights('off');
-  play('tutorial', true);
   await crtOn();
-  if (location.hash === '#game') { history.replaceState(null, '', location.pathname + location.search); fade('tutorial', 0, 300); return game(false); }
+  if (location.hash === '#game') { history.replaceState(null, '', location.pathname + location.search); return game(false); }
   await wait(600);
   await training();
 
@@ -775,7 +762,7 @@ async function start() {
 async function jumpscare() {
   typing = false; lightOK = false; held = false;
   // 1. dread: the timer freezes, the word rots into green static, the lights stutter and a whine rises
-  sfx.riser(T.dread / 1000); fade('tutorial', 0, T.dread);
+  sfx.riser(T.dread / 1000); music({ to: 0, ms: T.dread });
   caret.hidden = true; word.el.style.color = 'var(--g)';
   const pool = '#%&@$/▓▒░', t0 = performance.now();
   while (performance.now() - t0 < T.dread) {
@@ -801,7 +788,7 @@ async function jumpscare() {
   $('#flash').animate([{ opacity: 1, background: '#fff' }, { opacity: 0 }, { opacity: 1, background: '#f00' }, { opacity: 0 },
                        { opacity: 1, background: '#fff' }, { opacity: 0 }, { opacity: .8, background: '#f00' }, { opacity: 0 }],
                       { duration: 520, easing: 'steps(8)' });
-  sfx.scream(); sfx.boom(); play('lookbehind'); say('Look behind you.'); shake(app, 26, 1400); lights('scare'); kiosk('p2scare');
+  sfx.scream(); sfx.boom(); say('Look behind you.'); shake(app, 26, 1400); lights('scare'); kiosk('p2scare');
   await wait(T.look);
   // 4. gone as suddenly as it came, then the real game boots
   big.hidden = true; big.classList.remove('jit'); document.body.classList.remove('scare'); lights('off');
@@ -817,7 +804,6 @@ function game(fake) {
   energy = CFG.START_ENERGY; done = 0; adaptive = true;
   stats = { chars: 0, keys: 0, good: 0, t0: performance.now() };
   newWord(); wordsEl.classList.add('on'); typing = true;
-  if (!fake) play('game', true);
   const t0 = performance.now(), fakeN = any(CFG.FAKE_WORDS);
   let last = t0, frozenMs = 0;
   loop = setInterval(() => {
@@ -874,7 +860,6 @@ async function rescue() {
 async function end(kind) {
   if (mode === 'end') return;
   mode = 'end'; clearInterval(loop); typing = false; lightOK = false; held = false;
-  fade('game', 0, 800); fade('tutorial', 0, 400);
   document.body.classList.remove('low');
   $('#aur').textContent = ''; $('#big').hidden = true;
   // POWER carried to the finale; every ending advances the team (caught/grid lost just carry less)
@@ -925,8 +910,7 @@ addEventListener('keydown', e => {
     if (e.code === 'KeyX' && mode === 'game') end('caught');
     if (e.code === 'KeyR') { lights('idle'); setTimeout(() => location.reload(), 150); }
     if (e.code === 'KeyW') { location.hash = 'win'; location.reload(); }
-    if (e.code === 'KeyM') { muted = !muted; store.set('muted', muted); master.gain.value = muted ? 0 : CFG.VOLUME;
-      Object.values(tracks).forEach(a => a.muted = muted); }
+    if (e.code === 'KeyM') { muted = !muted; store.set('muted', muted); master.gain.value = muted ? 0 : CFG.VOLUME; }
     return;
   }
   if (e.code === 'Space' && mode === 'standby') { e.preventDefault(); if (unlocked) start(); return; }
