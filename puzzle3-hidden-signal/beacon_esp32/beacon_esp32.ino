@@ -11,7 +11,7 @@
 // Networks in order of preference (same as the mask). If one can't be joined within TRY_MS, it tries the next.
 // The board uses the ip in secrets.h, also listed in game.html (CFG.BEACON_IPS).
 struct Net { const char* ssid; const char* pass; IPAddress ip, gateway; };
-#include "secrets.h"   // Net NETS[] = {...}: Wi-Fi names + passwords. Not in git: copy secrets.example.h to secrets.h
+#include "secrets.h"   // Net NETS[] = {...}: Wi-Fi names + passwords
 const int NET_COUNT = sizeof(NETS) / sizeof(NETS[0]);
 IPAddress SUBNET(255, 255, 255, 0);
 const unsigned long TRY_MS = 10000;

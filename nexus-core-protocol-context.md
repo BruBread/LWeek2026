@@ -49,7 +49,7 @@ Players "upload their heads" into Aurora in order to stop her from within.
 - Aurora has no spoken (TTS) voice. She "talks" Undertale-style: a pitched blip plays for each letter as her text types out (`VOICES` / `blip()` / `type(..., voice)` in every game page), and a fast, low babble (`say()`) plays under scare lines. To use a recorded blip, drop `sounds/aurora-voice.mp3` next to the page. Every new game (4, 5) copies the same block.
 
 ## Booth Network (router)
-- Router: **COMFAST**, Wi-Fi name **NexusV** (2.4 GHz). Admin page: `http://192.168.0.1` (it opens on `/computer/wifi.html`). No WAN cable: the booth runs with no internet. The Wi-Fi password lives only in the sketches' `secrets.h` (git ignores it), not in this file.
+- Router: **COMFAST**, Wi-Fi name **NexusV** (2.4 GHz). Admin page: `http://192.168.0.1` (it opens on `/computer/wifi.html`). No WAN cable: the booth runs with no internet. The Wi-Fi password lives only in the sketches' `secrets.h` (in the public repo), not in this file.
 - Address map (network 192.168.0.x, `NET=192.168.0` in `booth.bat`):
 
 | Address | Device |
@@ -61,7 +61,7 @@ Players "upload their heads" into Aurora in order to stop her from within.
 | DHCP (was .125) | P2 hallway camera, Tapo C200 "NexusCam", MAC C0-06-C3-AF-97-F5. No reservation: this router has none, so `signup/camera.js` finds the camera by its ONVIF port 2020. See "Hallway camera" in `puzzle2-system-power/SETUP.md` |
 | 192.168.0.100-249 | everything else, from the router's DHCP: the 7 laptops, the phones. The hub's laptop has no fixed IP; every page finds it by searching the network |
 
-- The ESP32s fall back to `walawifi`, then `secretwifi` if NexusV is down. On those they use 192.168.1.x; the pages send to both addresses. The laptops must join the same network as the boards.
+- The ESP32s only know NexusV (the walawifi/secretwifi backups were removed 2026-10-04, when the secrets went into the public repo). The laptops must be on NexusV.
 - **Network → LAN** (checked 2026-10-02, leave as is): IP 192.168.0.1, mask 255.255.255.0, DHCP Server, start 100, 150 addresses (so .100-.249, clear of .50-.53), lease 1440 min.
 - **Network → Wireless, Advanced Setting** (checked 2026-10-02): bandwidth 20 MHz, channel 6, Tx power 100%, Maxassoc 256, FRAG 2346, RTS 2347, Rekey off, **Isolate off** (must stay off, or nothing can reach anything), WMM on, Shortgi on.
   - To do: **turn WDS off** (only for linking to another router or extender). Set Country to Philippines if it's listed (China also allows channels 1-13).
@@ -148,7 +148,7 @@ No AIs (staff) involved.
   - Status 2026-10-02: the bulb is paired to NexusV, its local key fetched, and the bridge built and tested live (light on = **green**, off = dim red glow). The router can't reserve addresses, so the bridge now finds the bulb by itself (port 6668); this hasn't been tested with the lamp on yet. Still to do: that test, set the power-on behaviour, run the offline test.
   - `puzzle2-system-power/bulb_bridge.py` runs on the hub laptop. It joins the hub as device `strip`, so the GM status dot and the SAFE / FINALE RED scenes work unchanged, and it drives the bulb with TinyTuya over the local Wi-Fi.
   - `lights(state)` in `game.html` sends `{t:'cmd', to:'strip', a:'p2', v:state}` through the hub.
-  - The bulb's ID and local key live in `puzzle2-system-power/devices.json` (git ignores it). The dev copy and test scripts are in `C:\Users\user\PycharmProjects\Lights`.
+  - The bulb's ID and local key live in `puzzle2-system-power/devices.json` (in the repo). The dev copy and test scripts are in `C:\Users\user\PycharmProjects\Lights`.
 - Tape/cable covers to keep the hallway floor clear and safe
 - Floor marks for AI start line and player start line
 - Spare: a second bulb of the same model is optional. It needs its own pairing and its own local key
@@ -242,7 +242,7 @@ Quiet and observational. **5:00 hunt.** No AIs. The lateral jump: IR light is in
 **Before the parts arrive**: open `http://<hub IP>:3000/beacon` on a phone (3 white lights). It gets the current code from game.html through the hub and blinks the same pattern as the ESP32. This uses visible light, so it tests the counting, not the camera trick.
 
 **Materials**
-- 1 ESP32 (`puzzle3-hidden-signal/beacon_esp32/beacon_esp32.ino`): static IP 192.168.0.51, same networks as the mask: NexusV, then walawifi, then secretwifi). 3 IR LEDs (940 nm) on D32/D33/D25 sharing ONE 120R (or 2 x 120R = 60R) from their joined short legs to GND (safe because only one IR LED is ever lit), plus a red "not on Wi-Fi" LED on D27 with its own 120R, as on the mask. USB power bank.
+- 1 ESP32 (`puzzle3-hidden-signal/beacon_esp32/beacon_esp32.ino`): static IP 192.168.0.51, same network as the mask: NexusV). 3 IR LEDs (940 nm) on D32/D33/D25 sharing ONE 120R (or 2 x 120R = 60R) from their joined short legs to GND (safe because only one IR LED is ever lit), plus a red "not on Wi-Fi" LED on D27 with its own 120R, as on the mask. USB power bank.
 - game.html sends `GET /code?v=<code>` every 3 s. Without Wi-Fi the board keeps blinking its last code.
 - Before the board exists, a phone on `/beacon` stands in.
 - Camera caveat: many iPhone rear cameras filter IR; the selfie camera usually sees it. Test staff phones and keep a known-good loaner.

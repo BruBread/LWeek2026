@@ -39,7 +39,7 @@ To do, in this order:
 |---|---|
 | `game.html` | The game. `lights(state)` sends every light change to the hub. `CFG.LIGHT_KEY` = the key that holds the light on |
 | `bulb_bridge.py` | The bulb bridge. Runs on the hub laptop; `hub\start.bat` starts it when `devices.json` is present |
-| `devices.json` | A copy of `PycharmProjects\Lights\devices.json`: the bulb's ID, **local key** and version (its IP is ignored). Git ignores it. Never commit it, and never copy `tinytuya.json` or `snapshot.json` here (they hold the cloud secret and the key) |
+| `devices.json` | A copy of `PycharmProjects\Lights\devices.json`: the bulb's ID, **local key** and version (its IP is ignored). It is in the repo. Never copy `tinytuya.json` or `snapshot.json` here (they hold the cloud secret and the key) |
 
 ## One-time bulb setup
 Steps 1-3 are done. Repeat them only if the bulb is ever removed from the app or reset.
@@ -159,7 +159,7 @@ One-time setup (done 2026-10-02 on the dev laptop):
 3. Set **Night Vision** to always on, not Auto. Otherwise the picture flips between colour and black-and-white, with a click, every time the bulb changes. Keep **Motion Tracking** and **Patrol** off, or the camera turns away by itself.
 4. Create `signup/camera.json` with the Camera Account: `{"user": "...", "pass": "..."}`.
 
-`signup/go2rtc.exe` (v1.9.14, from github.com/AlexxIT/go2rtc/releases) is in the repo. Git ignores `camera.json`: copy it by hand to whichever laptops run the signup or the camera setup.
+`signup/go2rtc.exe` (v1.9.14, from github.com/AlexxIT/go2rtc/releases) and `camera.json` are in the repo. A saved aim only stays on that laptop until its next Update.bat; commit it to keep it.
 
 **Aiming: `hub\camerasetup.bat`** (any laptop on NexusV). It opens the live view in the browser and finds the camera. Keys:
 - **Arrows** move it.

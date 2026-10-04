@@ -86,10 +86,10 @@ Any laptop can take any job. Copy the whole folder to every laptop, then:
 
 No IPs are typed in. Every page searches for the hub: its own laptop first, then the last hub it found, then every address on the booth network (`NET` in [booth.bat](booth.bat), `192.168.0` by default) at once. The hub learns the signup PC's address when the kiosk connects, and the GM panel shows the URLs to open on the beacon phones. Every launcher also keeps its laptop from sleeping. `?hub=<IP>` on a page's URL skips the search. Every game also works without the hub or the hardware: staff keys (Ctrl+Alt+H shows them) unlock and force each step, so any room can be tried on its own.
 
-Setup that stays out of git:
-- **ESP32 Wi-Fi:** copy `secrets.example.h` to `secrets.h` in each sketch folder and fill in the networks.
-- **Puzzle 2 bulb key:** put the `devices.json` from `python -m tinytuya wizard` in `puzzle2-system-power/` (see its SETUP.md).
-- **Kiosk staff password:** put it on one line in `signup/pin.txt`, or set the `PIN` environment variable.
+Booth credentials are in the repo, so a clone runs as is:
+- **ESP32 Wi-Fi:** `secrets.h` in each sketch folder (NexusV only).
+- **Puzzle 2 bulb key:** `puzzle2-system-power/devices.json`, from `python -m tinytuya wizard` (see its SETUP.md).
+- **Hallway camera login:** `signup/camera.json`.
 
 ## Tests
 

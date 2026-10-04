@@ -1,7 +1,7 @@
 @echo off
 rem NEXUS installer: run once on each booth laptop, from the flash drive, with internet. Click Yes when Windows asks.
-rem Runs FreshStart.bat (next to this file: Git, Node.js, Python, packages, firewall), downloads the game into
-rem Downloads\LWeek2026 and copies the secrets from the LWeek2026 folder next to this file.
+rem Runs FreshStart.bat (next to this file: Git, Node.js, Python, packages, firewall) and downloads the game into
+rem Downloads\LWeek2026.
 rem Safe to run again: it skips what's already installed, then does what Update.bat does.
 net session >nul 2>&1 || (powershell -NoProfile -Command "Start-Process -Verb RunAs -FilePath '%~f0'" & exit /b)
 set "DEST=%USERPROFILE%\Downloads\LWeek2026"

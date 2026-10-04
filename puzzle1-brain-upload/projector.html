@@ -246,7 +246,7 @@ Ctrl+Alt+M  mute / unmute</div>
 <script>
 // ===== Tuning knobs: adjust these at the booth =====
 const CFG = {
-  MASK_IPS: ['192.168.0.50', '192.168.1.50'], // mask ESP32 IP on each Wi-Fi it may join (see NETS in mask_esp32.ino); commands go to all
+  MASK_IPS: ['192.168.0.50'], // mask ESP32 IP on each Wi-Fi it may join (see NETS in secrets.h); commands go to all
   EYES_DIM: 255, EYES_FULL: 255,   // eyes on hover / on click (0..255)
   DUST: 140,                 // particles sucked into the mask after the click; lower if the booth laptop stutters
   RAIN_CELL: 18,             // px per character in the collapse; smaller = more mask detail, bigger = faster

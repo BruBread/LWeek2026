@@ -7,7 +7,7 @@
 // Networks in order of preference. If one can't be joined within TRY_MS, the mask tries the next.
 // Each ip must be free on that network, sit in its router's subnet, and be listed in CFG.MASK_IPS in projector.html.
 struct Net { const char* ssid; const char* pass; IPAddress ip, gateway; };
-#include "secrets.h"   // Net NETS[] = {...}: Wi-Fi names + passwords. Not in git: copy secrets.example.h to secrets.h
+#include "secrets.h"   // Net NETS[] = {...}: Wi-Fi names + passwords
 const int NET_COUNT = sizeof(NETS) / sizeof(NETS[0]);
 IPAddress SUBNET(255, 255, 255, 0);
 const unsigned long TRY_MS = 10000;

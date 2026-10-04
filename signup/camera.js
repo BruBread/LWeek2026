@@ -3,7 +3,7 @@
 //                        camera on the booth network and prints its stream address, or nothing if the camera is off.
 //   node camera.js       aims the camera (hub\camerasetup.bat): arrows move it, + / - change the step,
 //                        S saves the aim, H goes back to the saved aim, Q quits.
-// camera.json next to this file (git ignores it) holds the Camera Account from the Tapo app, and the saved aim:
+// camera.json next to this file holds the Camera Account from the Tapo app, and the saved aim:
 //   {"user": "...", "pass": "..."}
 const crypto = require('crypto'), fs = require('fs'), net = require('net'), path = require('path'), readline = require('readline');
 

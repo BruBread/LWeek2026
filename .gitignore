@@ -1,11 +1,8 @@
 node_modules/
 __pycache__/
 
-# Secrets: kept on the booth machines only
-**/secrets.h
-puzzle2-system-power/devices.json
+# Old kiosk staff PIN, no longer used
 signup/pin.txt
-signup/camera.json
 
 # Event data: sales, player photos, run history
 signup/sales.jsonl

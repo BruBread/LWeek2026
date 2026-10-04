@@ -1,6 +1,6 @@
 """NEXUS Puzzle 2 bulb bridge: joins the hub as device "strip" and drives the hallway Tuya bulb.
 Runs on the hub laptop (hub\\start.bat starts it). Needs, once: python -m pip install tinytuya websocket-client
-The bulb's ID and local key come from devices.json next to this file (git ignores it). See SETUP.md."""
+The bulb's ID and local key come from devices.json next to this file. See SETUP.md."""
 import colorsys, json, os, socket, threading, time
 from concurrent.futures import ThreadPoolExecutor
 import tinytuya, websocket

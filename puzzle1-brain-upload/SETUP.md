@@ -10,7 +10,7 @@
 ## Mask
 ### Flash the ESP32 (once)
 1. Install the Arduino IDE. In Boards Manager, install **esp32 by Espressif (3.x)**. Select board **ESP32 Dev Module** and the COM port.
-2. In `mask_esp32/`, copy `secrets.example.h` to `secrets.h` (git ignores it) and fill in the `NETS` list. Current order: **NexusV**, then **walawifi**, then secretwifi (the puzzle 3 beacon uses the same list). The mask tries each for 10 s until one works.
+2. In `mask_esp32/`, `secrets.h` holds the `NETS` list: **NexusV** only (the puzzle 3 beacon uses the same list). With more than one network, the mask tries each for 10 s until one works.
    - Each network's `ip` must be listed in `CFG.MASK_IPS` at the top of `projector.html`.
    - **The laptop must be on the same Wi-Fi as the mask.** If the laptop joins the other network, the mask stays red.
    - Pick an IP outside the router's DHCP range, or reserve it in the router.

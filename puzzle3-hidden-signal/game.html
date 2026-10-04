@@ -200,7 +200,7 @@ Ctrl+Alt+M  mute / unmute</div>
 const CFG = {
   UNLOCK_EVT: 'p2done',      // puzzle 2 sends this when SYSTEM POWERED finishes
   DONE_EVT: 'p3done',        // sent to the hub when this puzzle is won (for puzzle 4)
-  BEACON_IPS: ['192.168.0.51', '192.168.1.51'],   // the hidden IR board (see NETS in beacon_esp32.ino). The phone stand-ins get the codes through the hub instead
+  BEACON_IPS: ['192.168.0.51'],   // the hidden IR board (see NETS in secrets.h). The phone stand-ins get the codes through the hub instead
   PUSH_MS: 3000,             // resend the code to the board this often
   DIM: 0.65,                 // how much darker the screen gets during the hunt (0 = normal, 1 = black). Staff panel (Ctrl+Alt+H) stays bright
   // TRACE, carried to the finale = the trace bar when they crack it (lower is better). Mistakes push the bar forward:

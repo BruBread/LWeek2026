@@ -3,7 +3,6 @@ rem NEXUS FreshStart: installs everything the game needs on a computer that has 
 rem Click Yes when Windows asks. Safe to run again: it skips what's already installed.
 rem Installs Git, Node.js, Python + the bridges' packages, lets Node and Python through Windows Firewall, and, when this
 rem file sits in the game folder, the hub's packages. Install.bat calls it too.
-rem Not in GitHub, copy by hand: puzzle2-system-power\devices.json (bulb) and signup\camera.json (camera).
 net session >nul 2>&1 || (powershell -NoProfile -Command "Start-Process -Verb RunAs -FilePath '%~f0'" & exit /b)
 
 where winget >nul 2>&1 || (echo winget is missing: install "App Installer" from the Microsoft Store, then run this again. & goto fail)

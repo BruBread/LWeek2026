@@ -24,7 +24,7 @@ The phone gets the current code from the game through the hub, so a reset (Ctrl+
 
 ## Flash the ESP32 (once)
 1. Arduino IDE, board **ESP32 Dev Module**, the right COM port, same as the mask.
-2. `beacon_esp32/secrets.h` already has the same networks as the mask, in this order: **NexusV**, then **walawifi**, then secretwifi. On NexusV (router 192.168.0.1) the board uses IP **192.168.0.51**. The mask is .50. On the backup networks it uses 192.168.1.51.
+2. `beacon_esp32/secrets.h` already has the same network as the mask: **NexusV**. There (router 192.168.0.1) the board uses IP **192.168.0.51**. The mask is .50.
    - The laptop must be on the same Wi-Fi as the board.
    - The IPs are listed at the top of `game.html` (`CFG.BEACON_IPS`).
 3. Open `beacon_esp32/beacon_esp32.ino` itself (not a pasted copy).
