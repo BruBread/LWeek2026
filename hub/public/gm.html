@@ -175,7 +175,7 @@ const hubUp = () => ws?.readyState === 1, linked = id => rost.pages.includes(id)
 const via = (room, f) => !hubUp() ? [null, 'the hub is down'] : !online(room) ? [null, `can't tell: the ${room} laptop is offline`] : f(status[room]);
 const beacon = () => hubUp() && linked('beacon-sim') ? [true, 'a phone stands in (/beacon)'] :
   via('puzzle3', s => s.boards?.beacon === undefined ? [null, 'checking…'] : s.boards.beacon === true ? [true, 'ESP32 board answering (.51)'] :
-    [false, 'IR beacon ESP32 not answering (.51), and no phone on /beacon. Switched on? On NexusV?']);
+    [false, 'beacon ESP32 not answering (.0.51 / .1.51), and no phone on /beacon. Switched on? On NexusV or walawifi?']);
 // the P4 controller ESP32 (knobs + fire wires + screen): on NexusV, or walawifi as a backup (same list as game.html's
 // CFG.CTRL_IPS). ?ctrl=<ip> replaces the list
 const CTRL_IPS = (q => q ? [q] : ['192.168.0.52', '192.168.1.52'])(new URLSearchParams(location.search).get('ctrl'));
@@ -203,7 +203,7 @@ const DEVS = {
     [false, 'bridge running, but the bulb is not answering. Lamp switched on at the wall? On NexusV?']],
   camera: ['CAMERA', () => !S ? [null, "can't tell: the signup server is down"] : !S.camera ? [null, 'checking…'] : S.camera.error ? [false, S.camera.error] :
     S.camera.ip ? [true, 'camera at ' + S.camera.ip] : [false, 'camera not found on the network. Plugged in? On NexusV?']],
-  beacon: ['IR BEACON', beacon],
+  beacon: ['BEACON', beacon],
   ctrl:   ['CONTROLLER', ctrl],
 };
 $('#sys').innerHTML = ['hub', 'signup', 'kiosk', 'board'].map(d => `<span class="dev unk" data-dev="${d}">${DEVS[d][0]}</span>`).join('');
@@ -274,7 +274,7 @@ function drawRooms() {
 }
 
 // ===== Game 5: what's happening, what staff do, and a SKIP that works even if a room's laptop died =====
-const TASKS = [['binary', 'BINARY'], ['words', 'WORDS'], ['cross', 'KNOBS']];
+const TASKS = [['binary', 'BINARY'], ['words', 'WORDS'], ['cross', 'MIRRORS']];
 const PHASES = {
   null:     ['WAITING FOR GAME 4', 'Starts by itself when game 4\'s fake win stalls at 97%.', ''],
   crash:    ['SHE\'S TALKING', 'Her dialogue plays on the room 4 screen. Then the team walks back to room 3.', 'SKIP HER DIALOGUE'],

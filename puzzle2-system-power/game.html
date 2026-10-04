@@ -71,14 +71,63 @@ body.game #timer, body.game #lstate { display: block; }
 #lstate { font-size: 1.6vw; letter-spacing: .3em; }
 body.game:not(.lit) #lstate { animation: blink .6s steps(1) infinite; }
 
-/* the tutorial terminal, centered */
-#term { min-width: 44vw; padding: 1.4vw 2vw; font-size: 1.6vw; line-height: 1.7; white-space: pre;
-  border: 1px solid currentColor; background: rgba(8,0,2,.9); }
-#term:empty { display: none; }
-#term .ok { color: #fff; }
-#term .step { font-size: .75em; letter-spacing: .35em; opacity: .6; margin-bottom: .5em; }
-#term .warn { color: #fff; font-weight: 700; }
-#term div:last-child::after { content: "\258C"; animation: blink .6s steps(1) infinite; }
+/* training (same panel as game 4): one step at a time on the left, the word and the hallway stay in the middle */
+#tut { position: absolute; z-index: 3; left: 3.5vw; top: 50%; translate: 0 -50%; width: 25vw; display: none; padding: 1.3vw 1.6vw 1.5vw;
+  background: rgba(10,0,3,.9); border: 1px solid rgba(255,51,68,.6); }
+#tut.on { display: block; animation: boxIn .5s backwards; }
+#tutN { font-size: .9vw; letter-spacing: .4em; opacity: .85; }
+#tutT { display: block; margin: .7vw 0 .5vw; font-size: 2.1vw; line-height: 1.15; letter-spacing: .05em; color: #fff; font-weight: 700; }
+#tut.ok #tutT { color: var(--g); text-shadow: 0 0 18px var(--g); }
+#tutS { display: block; min-height: 3em; font-size: 1.05vw; line-height: 1.5; letter-spacing: .1em; color: #ffc9cf; }
+#tutArt { height: 8.5vw; margin: .6vw 0 .9vw; display: flex; align-items: center; justify-content: center; gap: .3vw; }
+#tutArt svg { height: 100%; overflow: visible; }
+#tutBar { height: .55vw; background: rgba(255,51,68,.2); }
+#tutBar i { display: block; width: 100%; height: 100%; background: #fff; box-shadow: 0 0 10px var(--hud); transform-origin: left; transform: scaleX(0); }
+#tutDots { display: flex; gap: .4vw; margin-top: .9vw; }
+#tutDots i { flex: 1; height: .25vw; background: rgba(255,51,68,.25); }
+#tutDots i.now { background: var(--hud); } #tutDots i.done { background: #fff; }
+/* the training is pointing at the power bar: its outline blinks */
+body.tutBar #segs { outline: 2px solid #fff; outline-offset: .35vw; animation: callOut .7s steps(1) infinite; }
+@keyframes callOut { 50% { outline-color: transparent; } }
+/* the art. Keycaps: the word's letters, lit as they're typed, the next one tapping */
+.kb { display: inline-block; min-width: 2.8vw; padding: .45vw .6vw; border: 2px solid rgba(255,255,255,.35); border-bottom-width: .4vw; border-radius: .4vw;
+  color: rgba(255,255,255,.45); font-size: 1.5vw; text-align: center; }
+.kb.next { color: #fff; border-color: #fff; animation: keyTap 1s ease-in-out infinite; }
+.kb.on { color: #000; background: #fff; border-color: #fff; border-bottom-width: .15vw; translate: 0 .25vw; box-shadow: 0 0 14px var(--hud); }
+.kb.wide { min-width: 7vw; }
+@keyframes keyTap { 0%, 55%, 100% { transform: none; } 20%, 40% { transform: translateY(.3vw); border-bottom-width: .15vw; } }
+/* the plush key and the bulb it switches: a demo press loops until someone really holds it (#tutArt.lit) */
+.plush .cap { animation: press 2.4s ease-in-out infinite; }
+.plush .glass { fill: #1a0408; animation: glassOn 2.4s infinite; }
+.plush .rays { opacity: 0; animation: raysOn 2.4s infinite; }
+@keyframes press { 0%, 20%, 90%, 100% { transform: none; } 28%, 82% { transform: translateY(7px); } }
+@keyframes glassOn { 0%, 27% { fill: #1a0408; } 28%, 83% { fill: #4dff88; } 84%, 100% { fill: #1a0408; } }
+@keyframes raysOn { 0%, 27% { opacity: 0; } 28%, 83% { opacity: 1; } 84%, 100% { opacity: 0; } }
+#tutArt.lit .cap { animation: none; transform: translateY(7px); }
+#tutArt.lit .glass { animation: none; fill: #4dff88; }
+#tutArt.lit .rays { animation: none; opacity: 1; }
+#tutArt.lit .push { opacity: 0; }
+#tutArt.lit .wire { stroke: #4dff88; }
+/* the two jobs: each lights up while someone is doing it */
+.job { display: flex; flex-direction: column; align-items: center; gap: .6vw; opacity: .4; transition: opacity .2s; }
+.job em { font-style: normal; font-size: .9vw; letter-spacing: .4em; color: #fff; }
+.plus { font-size: 2vw; color: #fff; margin: 0 .6vw; }
+#tutArt.lit .j1, #tutArt.typing .j2 { opacity: 1; }
+#tutArt.lit .j1 .kb, #tutArt.typing .j2 .kb { color: #000; background: #fff; border-color: #fff; box-shadow: 0 0 14px var(--hud); }
+.goal { font-size: 6vw; font-weight: 700; line-height: 1; color: #fff; }
+.goal small { font-size: 1.2vw; letter-spacing: .4em; margin-left: .6vw; }
+
+/* training: a small copy of the hallway that lights up with the key. In the dark, eyes blink open; the light chases
+   them off. Nothing names them or says they hunt you: the watchdogs only come out at LOOK BEHIND YOU */
+#hall { width: 38vw; display: none; overflow: visible; }
+#hall.on { display: block; animation: boxIn .5s backwards; }
+#hall .cone { opacity: 0; transition: opacity .12s; }
+#hall .bulb { fill: #1a0408; }
+#hall .eyes { fill: var(--g); opacity: 0; animation: eyes 3.4s steps(1) infinite; }
+@keyframes eyes { 0%, 30% { opacity: 0; } 34%, 88% { opacity: .9; } 90% { opacity: 0; } 92%, 100% { opacity: .9; } }
+body.lit #hall .cone { opacity: 1; }
+body.lit #hall .bulb { fill: var(--g); }
+body.lit #hall .eyes { animation: none; opacity: 0; }
 
 /* one word at a time, monkeytype style: dim untyped letters, white typed, red mistakes, a caret that glides */
 #words { position: relative; display: flex; justify-content: center; min-width: 40vw; font-size: 4.2vw; line-height: 1.65em;
@@ -96,10 +145,6 @@ body.game:not(.lit) #lstate { animation: blink .6s steps(1) infinite; }
 #words.shake { animation: nope .18s; }
 @keyframes nope { 25% { transform: translateX(-8px) } 75% { transform: translateX(8px) } }
 
-#hint { padding: .6vw 2vw; font-size: 2vw; font-weight: 700; letter-spacing: .25em; color: #fff; background: var(--hud);
-  text-shadow: 0 0 6px rgba(0,0,0,.7); box-shadow: 0 0 30px var(--hud); display: none;
-  animation: hintPulse .45s ease-in-out infinite alternate; }
-#hint.on { display: block; }
 /* last chance: emergency word banner with a countdown bar */
 #boost { display: none; flex-direction: column; align-items: center; gap: 1.2vh; }
 #boost.on { display: flex; }
@@ -189,10 +234,22 @@ body.help #help { display: block; }
       <div id="timer" class="txt">SURVIVE<b id="tl">30.0</b></div>
       <div id="lstate" class="txt"></div>
       <div id="boost"><b></b><div id="rbar"><i></i></div></div>
-      <div id="term" class="txt"></div>
+      <svg id="hall" viewBox="0 0 400 124">
+        <defs><linearGradient id="hallLight" x2="0" y2="1"><stop offset="0" stop-color="#4dff88" stop-opacity=".5"/><stop offset="1" stop-color="#4dff88" stop-opacity=".06"/></linearGradient></defs>
+        <g fill="none" stroke="#ff3344" stroke-opacity=".5"><path d="M 0 6 H 400 M 0 108 H 400"/><rect x="96" y="50" width="28" height="58"/><rect x="266" y="50" width="28" height="58"/></g>
+        <path class="cone" d="M 193 30 L 207 30 L 400 108 L 0 108 Z" fill="url(#hallLight)"/>
+        <path d="M 200 6 V 20" stroke="#fff" stroke-width="1.5"/><circle class="bulb" cx="200" cy="27" r="7" stroke="#fff" stroke-width="2"/>
+        <!-- eyes in the dark; the last pair is behind YOU, for anyone who looks twice after LOOK BEHIND YOU -->
+        <g class="eyes"><rect x="30" y="64" width="4" height="2"/><rect x="37" y="64" width="4" height="2"/></g>
+        <g class="eyes" style="animation-delay: -1.3s; animation-duration: 4.1s"><rect x="104" y="76" width="4" height="2"/><rect x="111" y="76" width="4" height="2"/></g>
+        <g class="eyes" style="animation-delay: -2.2s; animation-duration: 5s"><rect x="388" y="58" width="3.5" height="2"/><rect x="394" y="58" width="3.5" height="2"/></g>
+        <g transform="translate(372 108)" fill="#ff3344"><circle cy="-34" r="7"/><path d="M -10 0 V -18 Q -10 -26 0 -26 Q 10 -26 10 -18 V 0 Z"/>
+          <text y="12" fill="#fff" font-size="9" text-anchor="middle" letter-spacing="2">YOU</text></g>
+      </svg>
       <div id="words"><div id="caret"></div></div>
-      <div id="hint"></div>
     </div>
+    <div id="tut" class="txt"><span id="tutN"></span><b id="tutT"></b><span id="tutS"></span><div id="tutArt"></div>
+      <div id="tutBar"><i></i></div><div id="tutDots"><i></i><i></i><i></i><i></i></div></div>
     <div id="bar" class="txt"><div class="row"><span>CORE POWER</span><span id="bp">0.0%</span></div><div id="segs"></div></div>
   </div>
   <div id="beam"></div>
@@ -238,40 +295,24 @@ const CFG = {
   FAST_CPS: 3,               // letters per second (from word shown to word done) that counts as fast...
   SLOW_CPS: 1.4,             // ...and as slow
   MANY_BS: 3,                // this many backspaces in one word counts as struggling
+  TUT_HELP_S: 15,            // training: s on one step before its extra help line shows...
+  TUT_SKIP_S: 30,            // ...and before it moves on by itself, so no team gets stuck
   VOLUME: 0.8,
   MUSIC_VOLUME: 0.7,
 };
 const T = {                  // ms
   dot: 380, line: 460, open: 750, ghost: 1300,   // CRT boot, same as puzzle 1
-  termChar: 32,              // tutorial terminal typing speed
   typeChar: 45,              // Aurora's typing speed
-  after: 1400,               // pause after each tutorial step
-  rule: 900,                 // pause after each line of the rules (step 3)
-  tryType: 12000,            // tutorial: how long players get to type the practice word...
-  tryHold: 10000,            // ...and to hold the light key before it moves on anyway
-  holdNeed: 1500,            // how long they must hold it in the tutorial
-  fakeMax: 9000,             // ...or at most this long, then the jumpscare
+  after: 900,                // the ✔ pause after each training step
+  holdNeed: 1500,            // training: how long they must hold the light key
+  goal: 4500,                // training: the last card (the goal) stays up this long while the power charges
+  fakeMax: 9000,             // the fake start lasts at most this long, then the jumpscare
   dread: 1100,               // the fake game rots before the cut: word scrambles, lights stutter, whine rises
   scareGap: 600,             // dead black and silence between the cut and LOOK BEHIND YOU
   look: 2800,                // how long LOOK BEHIND YOU stays up
   rescue: 3000,              // how long they get to type the emergency word (time is frozen meanwhile)
   boostGrace: 1000,          // no drain for this long after a boost lands
   afterScare: 700,           // black after it vanishes, before the real game boots
-};
-const TUT = {                // the players' side of the tutorial (red terminal): 3 steps, one on screen at a time
-  type:    'TYPE THE WORD TO MAKE POWER',
-  typed:   '[ OK ] POWER UP',
-  hold:    `HOLD [${CFG.LIGHT_LABEL}] TO TURN ON THE LIGHT`,
-  held:    '[ OK ] LIGHT ON',
-  rules: [                   // step 3; the last one is shown in white
-    'LIGHT ON  ▸ THE WATCHDOGS FREEZE',
-    'LIGHT OFF ▸ THEY MOVE TOWARD YOU',
-    'THE LIGHT EATS POWER ▸ KEEP TYPING',
-    `SURVIVE ${CFG.SURVIVE / 1000} SECONDS`,
-    'LEFTOVER POWER COMES WITH YOU',
-    "DON'T LET THEM REACH YOU",
-  ],
-  reserve: 'CHARGING... GET READY',
 };
 const AUR = {                // Aurora (green)
   low: ['Running out of light?', 'Tick. Tock.', 'I can hear you typing.', "They're getting closer."],
@@ -567,9 +608,10 @@ function moveCaret() {
   const sp = word.el.children, s = sp[Math.min(word.typed.length, sp.length - 1)];
   caret.style.left = word.el.offsetLeft + (word.typed.length >= sp.length ? s.offsetLeft + s.offsetWidth : s.offsetLeft) + 'px';
 }
-let idleT;
+let idleT, lastKey = 0;
 function typeKey(k) {
   const w = word; if (!w) return;
+  lastKey = performance.now();
   caret.classList.remove('idle'); clearTimeout(idleT); idleT = setTimeout(() => caret.classList.add('idle'), 800);
   if (k === 'Backspace') { if (w.typed) { w.typed = w.typed.slice(0, -1); w.bs++; drawWord(); moveCaret(); } return; }
   if (w.typed.length >= w.text.length + 6) return;
@@ -589,7 +631,7 @@ function wordDone(w) {
   $('#bp').animate([{ color: '#fff', textShadow: '0 0 30px #fff' }, {}], 300);
   renderBar();
   if (adaptive) tier = nextTier(tier, { cps: w.text.length / Math.max(.2, (performance.now() - w.shown) / 1000), bs: w.bs });
-  if (mode === 'tut') { typing = false; return; }  // the practice word is the only one
+  if (mode === 'tut' && !tutMore) { typing = false; return; }  // training: one word at a time, unless the step wants more
   newWord();
 }
 
@@ -603,29 +645,116 @@ function setLit(v) {
 const wpm = () => Math.round(stats.chars / 5 / Math.max(1 / 60, (performance.now() - stats.t0) / 60000));
 const acc = () => stats.keys ? Math.round(stats.good / stats.keys * 100) : 100;
 function renderHud() {
-  const inGame = mode === 'game' || mode === 'fake';
-  $('#stats').innerHTML = !inGame ? 'WATCHDOGS <span>3</span><br>STATUS <span>DORMANT</span>' :
-    `WPM <span>${wpm()}</span><br>ACC <span>${acc()}%</span><br>` +
-    `WATCHDOGS <span class="${lit ? '' : 'mv'}">${lit ? 'FROZEN' : 'MOVING'}</span>` +
-    (mode === 'game' ? `<br>BACKUP CELLS <span>${'▮'.repeat(CFG.RESCUE.length - rescues) || 'SPENT'}</span>` : '');
-  $('#lstate').textContent = lit ? 'LIGHTS ON ▸ WATCHDOGS FROZEN' : "LIGHTS OFF ▸ DON'T LET THEM REACH YOU";
+  // nothing names the watchdogs or says they hunt you before LOOK BEHIND YOU: until then it's only "THEM"
+  const inGame = mode === 'game' || mode === 'fake', real = mode === 'game';
+  const on = (y, n) => `<span class="${lit ? '' : 'mv'}">${lit ? y : n}</span>`;
+  $('#stats').innerHTML = !inGame ? 'GRID <span>OFFLINE</span><br>STATUS <span>DORMANT</span>' :
+    `WPM <span>${wpm()}</span><br>ACC <span>${acc()}%</span><br>` + (real ? `WATCHDOGS ${on('FROZEN', 'MOVING')}` +
+    `<br>BACKUP CELLS <span>${'▮'.repeat(CFG.RESCUE.length - rescues) || 'SPENT'}</span>` : `LIGHTS ${on('ON', 'OFF')}`);
+  $('#lstate').textContent = real ? lit ? 'LIGHTS ON ▸ WATCHDOGS FROZEN' : "LIGHTS OFF ▸ DON'T LET THEM REACH YOU"
+    : lit ? 'LIGHTS ON ▸ THEY STAY AWAY' : 'LIGHTS ON KEEPS THEM AWAY';
 }
 
-// ===== The tutorial =====
-async function termLine(text, cls = '') {
-  const tm = $('#term'), line = document.createElement('div');
-  line.className = cls; tm.append(line);
-  while (tm.children.length > 8) tm.firstChild.remove();
-  await type(line, '> ' + text, T.termChar);
-}
-function step(n, title) {    // clears the terminal: each tutorial step stands on its own
-  $('#term').innerHTML = `<div class="step">STEP ${n} / 3 ▸ ${title}</div>`;
-}
 async function aurora(text) {
   const a = $('#aur');
   a.classList.remove('glitch');
   await type(a, text, T.typeChar, VOICES.aurora);
   a.dataset.text = text; a.classList.add('glitch'); shake(a, 8, 300);
+}
+
+// ===== Training (like game 4's): the team learns each control by doing it. A panel on the left, one step at a time;
+// each step waits for the real thing, shows extra help after TUT_HELP_S and moves on by itself after TUT_SKIP_S.
+// No Aurora lines in it (cut on purpose). Ctrl+Alt+K skips it all.
+function setHtml(el, html) { if (el._html !== html) el.innerHTML = el._html = html; }
+
+const hall = $('#hall');     // the training hallway: CSS only, it follows body.lit
+
+// the art: the plush key pressing down and the hallway bulb it switches, then the two jobs side by side
+const PLUSH_ART = `<svg class="plush" viewBox="0 0 220 96">
+  <path class="wire" d="M 138 58 C 160 58 165 72 192 61" stroke="#ff3344" stroke-width="2.5" stroke-dasharray="4 4" fill="none"/>
+  <rect x="10" y="44" width="128" height="44" rx="12" fill="#3a0a10" stroke="#fff" stroke-width="2"/>
+  <g class="cap"><path class="push" d="M 74 2 V 22 M 66 14 L 74 23 L 82 14" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="10" y="32" width="128" height="44" rx="12" fill="#1a0408" stroke="#fff" stroke-width="3"/>
+    <text x="74" y="60" fill="#fff" font-size="16" font-weight="700" text-anchor="middle" font-family="Consolas, monospace" letter-spacing="3">${CFG.LIGHT_LABEL}</text></g>
+  <path class="rays" d="M 192 19 V 12 M 178.6 24.6 L 173.6 19.6 M 205.4 24.6 L 210.4 19.6 M 173 38 H 166 M 211 38 H 218" stroke="#4dff88" stroke-width="3" stroke-linecap="round"/>
+  <circle class="glass" cx="192" cy="38" r="14" stroke="#fff" stroke-width="2.5"/><rect x="185" y="52" width="14" height="9" fill="#888"/></svg>`;
+const JOBS_ART = `<div class="job j1"><span class="kb wide">${CFG.LIGHT_LABEL}</span><em>HOLD</em></div><b class="plus">+</b>
+  <div class="job j2"><div><span class="kb">A</span> <span class="kb">Z</span></div><em>TYPE</em></div>`;
+const okLen = () => { let i = 0; while (i < word.typed.length && word.typed[i] === word.text[i]) i++; return i; };   // letters right so far
+let tutMore = false;         // training step 3 wants a new word after each one
+
+// each step: prog(v, dt) -> 0..1 (v = this step's own state), and what the panel shows
+const TUT_STEPS = [
+  { name: 'POWER', bar: true,
+    enter() { newWord('power'); wordsEl.classList.add('on'); typing = true; },
+    prog: () => okLen() / word.text.length,
+    title: () => 'TYPE THE WORD ▸',
+    sub: () => 'type it on the laptop keyboard.<br>each word fills the POWER bar ▼',
+    art: () => [...word.text].map((c, i) => `<span class="kb ${i < okLen() ? 'on' : i === okLen() ? 'next' : ''}">${c.toUpperCase()}</span>`).join(''),
+    help: 'no Enter or space needed: the word finishes by itself.',
+    leave() { typing = false; wordsEl.classList.remove('on'); } },
+  { name: 'LIGHT', hall: true,
+    enter() { lightOK = true; },
+    prog: (v, dt) => (v.held = lit ? v.held + dt : 0) * 1000 / T.holdNeed,
+    title: () => `HOLD THE BIG ${CFG.LIGHT_LABEL} KEY`,
+    sub: () => lit ? 'keep holding...<br>lights on keeps THEM away.' : 'press it down and keep holding.<br>it turns on the hallway light.',
+    art: () => PLUSH_ART,
+    help: 'the big soft key. one player keeps it pressed down.' },
+  { name: 'TEAMWORK', hall: true, bar: true,
+    enter() { charge(25, 500); tutMore = true; newWord(); wordsEl.classList.add('on'); typing = true; },
+    prog(v, dt) {              // the light drains for real here; only words typed while it's on count
+      if (lit) { energy = Math.max(1, energy - CFG.DRAIN_ON * dt); renderBar(); }
+      if (done > v.seen) { v.seen = done; lit ? v.n++ : v.miss = performance.now(); }
+      return v.n / 2;
+    },
+    title: () => 'HOLD + TYPE, TOGETHER',
+    sub: v => performance.now() - v.miss < 2500 ? 'the light was OFF!<br>type while someone holds the key.'
+      : `the light drains power ▼<br>typing fills it back.<br>words with the light on: ${v.n} / 2`,
+    art: () => JOBS_ART,
+    help: 'one player on the big key, everyone else on the keyboard.',
+    leave() { tutMore = false; typing = false; wordsEl.classList.remove('on'); } },
+];
+async function charge(to, ms, each) {         // the power bar fills to `to` over ms, ticking
+  const e0 = energy, n = Math.max(1, Math.round(ms / 40));
+  for (let k = 1; k <= n; k++) { energy = e0 + (to - e0) * k / n; renderBar(); each?.(k / n); if (k % 3 === 1) sfx.tick(); await wait(40); }
+}
+async function training() {
+  const panel = $('#tut'), dots = [...$('#tutDots').children], bar = $('#tutBar i'), art = $('#tutArt');
+  panel.classList.add('on');
+  for (let s = 0; s < TUT_STEPS.length; s++) {
+    const st = TUT_STEPS[s], v = { t: 0, held: 0, n: 0, seen: done, miss: -1e9 };
+    dots.forEach((d, i) => d.className = i < s ? 'done' : i === s ? 'now' : '');
+    panel.classList.remove('ok'); sfx.tick();
+    hall.classList.toggle('on', !!st.hall);
+    document.body.classList.toggle('tutBar', !!st.bar);
+    setHtml($('#tutN'), `STEP ${s + 1} / ${dots.length} ▸ ${st.name}`);
+    st.enter?.();
+    for (let last = performance.now(), prog = 0; prog < 1 && v.t < CFG.TUT_SKIP_S; ) {
+      await wait(50);
+      const now = performance.now(), dt = (now - last) / 1000; last = now; v.t += dt;
+      prog = st.prog(v, dt);
+      setHtml($('#tutT'), st.title(v));
+      setHtml($('#tutS'), st.sub(v) + (v.t > CFG.TUT_HELP_S ? `<br><b style="color:#fff">${st.help}</b>` : ''));
+      setHtml(art, st.art(v));
+      art.classList.toggle('lit', lit); art.classList.toggle('typing', now - lastKey < 600);
+      bar.style.transform = `scaleX(${Math.min(1, prog).toFixed(3)})`;
+    }
+    st.leave?.();
+    panel.classList.add('ok'); setHtml($('#tutT'), '✔ ' + $('#tutT').textContent); bar.style.transform = 'scaleX(1)';
+    sfx.ok(); await wait(T.after);
+  }
+  // the goal: nothing to do, the power charges up while they read it (the hallway still follows the key)
+  dots.forEach((d, i) => d.className = i < TUT_STEPS.length ? 'done' : 'now');
+  panel.classList.remove('ok'); document.body.classList.add('tutBar');
+  setHtml($('#tutN'), `STEP ${dots.length} / ${dots.length} ▸ GOAL`);
+  setHtml($('#tutT'), `SURVIVE ${CFG.SURVIVE / 1000} SECONDS`);
+  setHtml($('#tutS'), "lights on keeps THEM away.<br>don't let the power hit 0.<br>leftover power comes with you.");
+  setHtml(art, `<div class="goal">${CFG.SURVIVE / 1000}<small>SEC</small></div>`);
+  await charge(CFG.START_ENERGY, T.goal, f => bar.style.transform = `scaleX(${f})`);
+  panel.classList.add('ok'); setHtml($('#tutT'), 'GET READY'); sfx.ok();
+  lightOK = false; setLit(false);
+  await wait(T.after);
+  panel.classList.remove('on'); hall.classList.remove('on'); document.body.classList.remove('tutBar');
 }
 
 async function start() {
@@ -636,38 +765,7 @@ async function start() {
   await crtOn();
   if (location.hash === '#game') { history.replaceState(null, '', location.pathname + location.search); fade('tutorial', 0, 300); return game(false); }
   await wait(600);
-
-  // step 1: type one word
-  step(1, 'POWER');
-  await termLine(TUT.type);
-  newWord('power'); wordsEl.classList.add('on'); typing = true;
-  await until(() => done > 0, T.tryType);
-  typing = false;
-  if (done > 0) { sfx.ok(); await termLine(TUT.typed, 'ok'); }
-  await wait(T.after); wordsEl.classList.remove('on');
-
-  // step 2: hold the light
-  step(2, 'LIGHT');
-  await termLine(TUT.hold);
-  const hint = $('#hint'); hint.textContent = `HOLD ▸ ${CFG.LIGHT_LABEL}`; hint.classList.add('on'); lightOK = true;
-  let heldFor = 0;
-  await until(() => (heldFor = lit ? heldFor + 50 : 0) >= T.holdNeed, T.tryHold);
-  hint.classList.remove('on');
-  if (heldFor >= T.holdNeed) { sfx.ok(); await termLine(TUT.held, 'ok'); }
-  await wait(T.after);
-
-  // step 3: the rules, one line at a time
-  step(3, 'THE RULES');
-  for (const [i, r] of TUT.rules.entries()) {
-    const last = i === TUT.rules.length - 1;
-    await termLine(r, last ? 'warn' : ''); await wait(last ? T.after : T.rule);
-  }
-  await termLine(TUT.reserve);
-  for (let e = energy; e < CFG.START_ENERGY; e += 1) { energy = e; renderBar(); sfx.tick(); await wait(30); }
-  energy = CFG.START_ENERGY; renderBar();
-  lightOK = false; setLit(false);
-  await wait(T.after);
-  $('#term').textContent = '';
+  await training();
 
   // the fake start: looks exactly like the real game, then cuts to the jumpscare after a few words
   kiosk('p2cam');

@@ -1,11 +1,11 @@
 # Puzzle 1: Brain Upload (booth setup)
 
 ## Laptop (once)
-1. Create a local Windows account named **AURORA**. Players only ever see this account.
-2. Set the wallpaper to "Think outside the box". Put only the **Aurora video** and the **binary sheet** on the desktop. Right-click the desktop → View → uncheck other icons, and hide the Recycle Bin via Settings → Personalization → Themes → Desktop icon settings.
-3. Display settings: **Extend** these displays, and drag the projector to the **right** of the laptop at the same height. Taskbar settings → turn off "Show my taskbar on all displays".
-4. Power settings: sleep = Never, screen off = Never. Turn off notifications (Do not disturb), and disable the lock screen timeout.
-5. Put the real laptop width into `PRIMARY_WIDTH` in `start.bat` (Settings → Display → resolution ÷ scale, e.g. 1920×1080 at 125% = 1536).
+Players never see the real Windows desktop. `start.bat` covers the laptop screen with `desktop.html`, a fake Windows desktop: the "Think outside the box" wallpaper with a mouse pointer pointing down, and one app, **Binary Key** (the 0-9 binary table, revealed with a short animation each time it opens). The projector shows `projector.html`.
+1. Create a local Windows account named **AURORA**, so no personal pop-ups appear.
+2. Display settings: **Extend** these displays, and drag the projector **below** the laptop, left edges lined up. Players reach the wall by moving the mouse off the **bottom** of the laptop screen. Taskbar settings → turn off "Show my taskbar on all displays".
+3. Power settings: sleep = Never, screen off = Never. Turn off notifications (Do not disturb), and disable the lock screen timeout.
+4. Put the real laptop height into `PRIMARY_HEIGHT` in `start.bat` (Settings → Display → resolution ÷ scale, e.g. 1920×1080 at 125% = 864).
 
 ## Mask
 ### Flash the ESP32 (once)
@@ -42,17 +42,19 @@ The DevKit's own small blue LED (GPIO 2) is switched off by the sketch. Its red 
 3. Run `start.bat` and hover the mask area on the projector: the eyes light up.
 
 ## Each day
-1. Power the router, then the mask, and wait for its red LED to go off. Log into AURORA and run `start.bat`.
+1. Power the router, then the mask, and wait for its red LED to go off. Log into AURORA and run `start.bat`. The laptop shows the fake desktop, the projector stays black.
 2. Press **Ctrl+Alt+H** to open the control panel. Drag the green box over the mask on the wall (drag its corner to resize), then press Ctrl+Alt+H again. Calibration is saved. The panel itself can be dragged out of the way.
 3. Do one full test run, then press Ctrl+Alt+R.
 
 ## Staff keys (on the projector page; click the projector once so it has focus)
+The keyboard types into whichever screen was clicked last. When the projector needs the keys (code entry, mashing) and the laptop screen has them, the projector says **CLICK HERE, THEN TYPE THE KEY** (or **...MASH ANY KEY**).
+
 | Key | What it does |
 |---|---|
 | Ctrl+Alt+H | Control panel: mask box, corner brackets, current code and this list (drag the panel to move it) |
 | Ctrl+Alt+F | Force capture (use if the click or mask fails) |
 | Ctrl+Alt+B | Blink the mask eyes 3 times (hint for a team that hasn't found the mask). Also **BLINK MASK** on the GM panel |
-| Ctrl+Alt+R | Reset for the next team (new code, eyes off) |
+| Ctrl+Alt+R | Reset for the next team (new code, eyes off). The laptop's fake desktop resets too, through the hub (Ctrl+Alt+R on the laptop screen resets only the desktop) |
 | Ctrl+Alt+P | Replay the sequence (for tuning timings) |
 | Ctrl+Alt+W | Replay only the win / mind-upload finale |
 | Ctrl+Alt+M | Mute / unmute |
@@ -63,10 +65,10 @@ Timings, particle count and volume are in `CFG` / `T` at the top of `projector.h
 
 ## Hint ladder
 1. "Aurora's reach goes beyond the screen."
-2. "Try moving the mouse past the edge of the desktop."
-3. "Look to the right of the laptop."
+2. "Try moving the mouse off the bottom of the screen."
+3. "Look at the wall: the mouse is on it now."
 4. "Click the mask."
-5. "Use the sheet to translate each group of 4 bits."
+5. "Open Binary Key on the laptop and match each group of 4 bits."
 
 ## Sound files
 Drop these into `sounds/` (mp3). Any file that's missing is skipped, so the page still runs without them. Overall level: `CFG.MUSIC_VOLUME`.

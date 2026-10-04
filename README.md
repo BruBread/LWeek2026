@@ -4,12 +4,12 @@ A multi-room escape room built for the ICpEP.se booth at LWeek 2026 (October 5�
 
 The booth is open to the whole university, so the puzzles test observation and teamwork rather than engineering knowledge. The engineering is in the system that runs them.
 
-<!-- TODO: add a 60–90 s video or GIF of a run, plus photos of the mask and the IR beacon -->
+<!-- TODO: add a 60–90 s video or GIF of a run, plus photos of the mask and the beacon -->
 
 ## Highlights
 
 - **Networked rooms.** Five game pages, a GM panel and ESP32 props stay in sync over a Node.js WebSocket hub on a local router with no internet.
-- **Hardware props.** An ESP32 drives the wall mask's LED eyes when the projected cursor hovers over it. A second ESP32 blinks a hidden code on 940 nm IR LEDs that only phone cameras can see. Two more are Room 4's ring controllers: one potentiometer each, streamed to the browser over USB with Web Serial.
+- **Hardware props.** An ESP32 drives the wall mask's LED eyes when the projected cursor hovers over it. A second ESP32 blinks a hidden code on 3 blue LEDs, faster every round, until only a phone's slow-motion video can count it. Two more are Room 4's ring controllers: one potentiometer each, streamed to the browser over USB with Web Serial.
 - **Fail-safe by design.** The laptop page is the single source of truth. ESP32s only execute commands, keep a safe default when Wi-Fi drops, and cycle through backup networks. Every room has staff override keys, and the GM can press them remotely.
 - **State that carries over.** Each room hands one resource (SYNC, POWER, TRACE, HUMAN) to the finale, and an "intruder dossier" replays the team's run.
 - **Front of house.** A keyboard-only ticket kiosk handles sales, time slots, party limits, staff-PIN payments and voids. It keeps an append-only sales log that rebuilds its state after a crash.
@@ -28,7 +28,7 @@ flowchart LR
     GM["GM panel<br/>/ (gm.html)"]
     DOS["Intruder dossier<br/>/dossier"]
     MASK["ESP32 mask<br/>PWM LED eyes"]
-    BEACON["ESP32 IR beacon<br/>3 IR LEDs"]
+    BEACON["ESP32 beacon<br/>3 blue LEDs"]
     BRIDGE["bulb_bridge.py<br/>Python + TinyTuya<br/>(on the hub laptop)"]
     BULB["Tuya RGB bulb<br/>hallway light"]
   end
@@ -56,7 +56,7 @@ flowchart LR
 |---|------|-----------------|------|
 | 1 | Brain Upload | Drag the cursor off the laptop onto the projected wall, click the physical mask and decode 4-bit binary groups. | Extended display, canvas hotspot calibration, ESP32 PWM |
 | 2 | System Power | Type words to charge a draining meter while one player holds a giant plush Enter key to keep the hallway lit. Staff "AIs" advance whenever it goes dark. | Adaptive word difficulty, key-hold detection, Tuya smart bulb driven locally through a Python bridge |
-| 3 | Hidden Signal | Find a beacon that is invisible to the eye by looking through a phone camera. Count the IR blinks. | ESP32, 940 nm IR LEDs, per-reset random codes |
+| 3 | Hidden Signal | Find a hidden beacon and count its blinks. Three layers, each faster, until the last is too quick for the eye and only a phone's slow-motion video shows the count. | ESP32, blue LEDs, blink timing sent from the page with each code, per-reset random codes |
 | 4 | Orbit Lock | Turn two shield rings around Aurora's heart until both gaps line up with the laser, then fire. Four layers: her drift, watchdog drones that eat the beam, and an emitter she moves after every miss. 2 ESP32 knob controllers over USB (Web Serial), Govee strip over Bluetooth (Python bridge), canvas renderer with pre-blurred glow sprites (no shadowBlur or CSS filters), synthesized laser audio |
 | 5 | Everywhere At Once | Game 4's win is fake: the save stalls at 97% and Aurora crashes back in, talking in an Undertale-style box. She takes over every room's laptop. Room 3 becomes the map; rooms 1, 2 and 4 get her tasks (binary, hard words, a two-knob crosshair), which jump between rooms. The kill switch: three rooms press at the same moment while the team counts down across the tarps. | `boss.js` loaded into every room page from the hub; hub-owned state; clock sync for the kill switch; low-res pixel canvas |
 

@@ -1140,7 +1140,7 @@ addEventListener('keydown', e => {
     e.preventDefault();
     if (e.code === 'KeyF') capture();
     if (e.code === 'KeyB') blink(3, 300);          // staff hint: "look at the mask"
-    if (e.code === 'KeyR') { eyes(0); setTimeout(() => location.reload(), 150); }
+    if (e.code === 'KeyR') { eyes(0); hubSend([{ t: 'cmd', to: 'desk1', a: 'key', v: 'KeyR' }]); setTimeout(() => location.reload(), 150); }   // the laptop's desktop.html resets too
     if (e.code === 'KeyP') { eyes(0); location.hash = 'replay'; location.reload(); }
     if (e.code === 'KeyW') { eyes(0); location.hash = 'win'; location.reload(); }
     if (e.code === 'KeyM') { muted = !muted; store.set('muted', muted); master.gain.value = muted ? 0 : CFG.VOLUME;
@@ -1159,6 +1159,13 @@ addEventListener('keydown', e => {
     if (entry.length === 4) check();
   } else if (e.key === 'Backspace') { entry = entry.slice(0, -1); renderCells(); }
 });
+
+// the laptop screen (desktop.html) is a separate window: keys only reach this one after a click on the wall
+setInterval(() => {
+  const f = document.hasFocus(), set = (el, t) => el.textContent !== t && (el.textContent = t);
+  set($('#entry .lbl'), f ? 'ENTER DECRYPTION KEY' : 'CLICK HERE, THEN TYPE THE KEY');
+  set($('#mash'), f ? 'MASH ANY KEY TO PUSH THROUGH' : 'CLICK HERE, THEN MASH ANY KEY');
+}, 300);
 
 eyes(0);
 if (location.hash === '#replay') { history.replaceState(null, '', location.pathname + location.search); setTimeout(capture, 400); }

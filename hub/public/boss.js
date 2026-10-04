@@ -3,7 +3,7 @@
 // takes over that laptop's screen. The hub owns the state (server.js, "Game 5"); this file draws it and sends what
 // the players do.
 //
-//   room 4 (game 4's laptop)  game 4's fake win breaks > Aurora talks (Undertale box) > LOCKED: back to room 3 > CROSSHAIR
+//   room 4 (game 4's laptop)  game 4's fake win breaks > Aurora talks (Undertale box) > LOCKED: back to room 3 > MIRRORS
 //   room 3 (the map)          siren > trace her > live map > regroup > kill switch briefing > counts the kill
 //   rooms 1, 2                INFECTED > BINARY / WORDS (they swap once) > kill switch
 //   every room                the takeover and the blackout land at one hub time; her last words on every screen at once
@@ -27,9 +27,9 @@ const C = {
   CRASH_HOLD_MS: 1500,       // her lines right after game 4 move on by themselves after this long (no SPACE there)
   BIN_GROUPS: [[70, 2], [40, 3], [0, 4]],   // BINARY: SYNC (game 1) at least the first number = that many groups
   WORDS: 5, WORDS_HARD_BELOW: 50,           // WORDS: 5 rounds. POWER (game 2) below 50 = the hardest list
-  // CROSSHAIR: catches to win, hit radius and her speed in arena heights, ms on target per catch, +speed per catch,
-  // s without a catch before she tires (half speed), the keyboard stand-in's speed, and which way the inner knob turns
-  CROSS: { catches: 5, hit: .075, lockMs: 900, speed: [.14, .32], up: .1, tiredS: 20, keySpeed: .8, flipY: true },
+  // MIRRORS (room 4): hits to win; her core's radius and each mirror's half-length in arena heights, [at HUMAN 0, at HUMAN
+  // 100]; the keyboard stand-in's turning speed (knob travel per s); ms to charge a shot (as in game 4) and to vent after
+  MIRROR: { hits: 5, core: [.09, .055], mirror: [.12, .085], keySpeed: .35, chargeMs: 900, coolMs: 1300 },
   ARROW: '',                 // room 4's lockout: e.g. '◄' if that points at room 3 from where the players stand
   KILL_KEYS: ['Space', 'Enter', 'NumpadEnter'],   // any of these counts in every kill room (the screens name one)
 };
@@ -46,7 +46,7 @@ const SAY = {
   brief: [["you can't kill me from one room."], ["you'd have to be everywhere at once.", 'smug']],
   purged: ['NO-', 'GET OUT OF MY ROOM', 'that was MINE', 'fine. i have others.'],
   fail: ['ha. sloppy.', 'humans. no rhythm.', 'close. not close enough.', 'again? adorable.'],
-  tired: '...stop chasing me.',
+  rings: [["YOU DON'T NEED THIS ANYMORE.", 'angry']],   // room 4: the first try to fire, before she breaks game 4's rings
 };
 // her last words, the same on every screen: the worst thing she saw in this run (the dossier's facts), or a clean run
 function lastWords(r) {
@@ -65,7 +65,7 @@ const WORD_LISTS = [         // game 2's two hardest tiers
   'cryptography semiconductor oscilloscope microcontroller authentication configuration decompression infrastructure virtualization cybersecurity synchronization neuroplasticity'.split(' '),
   'hexadecimal asynchronous pseudorandom electroencephalogram superconductivity photolithography microarchitecture counterintelligence incomprehensibility electromagnetism thermodynamics deoxyribonucleic'.split(' '),
 ];
-const NAME = { binary: 'BINARY', words: 'WORDS', cross: 'KNOBS' };
+const NAME = { binary: 'BINARY', words: 'WORDS', cross: 'MIRRORS' };
 
 // ===== Helpers =====
 const $ = s => document.getElementById(s);
@@ -74,7 +74,7 @@ const rand = (a, b) => a + Math.random() * (b - a), any = a => a[Math.random() *
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const SEC = r => 'SECTOR 0' + r, TAU = Math.PI * 2;
 const res = k => S?.run?.[k] ?? 50;                     // a game staff skipped counts as 50
-const need = name => name === 'binary' ? C.BIN_GROUPS.find(([min]) => res('sync') >= min)[1] : name === 'words' ? C.WORDS : C.CROSS.catches;
+const need = name => name === 'binary' ? C.BIN_GROUPS.find(([min]) => res('sync') >= min)[1] : name === 'words' ? C.WORDS : C.MIRROR.hits;
 const page = (f, d) => { try { return f(); } catch { return d; } };   // the room page's own globals (knobs, laser, AC, ...)
 
 // ===== Hub: our own connection (role 'fin'), plus a clock synced to the hub's so presses can be compared =====
@@ -379,7 +379,7 @@ function wake() {
   B.innerHTML = '<canvas id="bx"></canvas><div id="bgrid"></div><div id="bmain"></div>' +
     '<div id="bstage"><i class="glow"></i><img class="f0" alt="" crossorigin="anonymous"><img class="f1" alt=""><img class="f2" alt=""></div>' +
     '<div id="bdlg"><div class="pf"><img alt=""></div><div class="tx"></div></div>' +
-    '<div id="bfocus"><div class="big">CLICK HERE</div><div class="sub">MOVE THE MOUSE OFF THE RIGHT EDGE OF THE LAPTOP, ONTO THIS WALL, AND CLICK</div></div>' +
+    '<div id="bfocus"><div class="big">CLICK HERE</div><div class="sub">MOVE THE MOUSE OFF THE BOTTOM EDGE OF THE LAPTOP, ONTO THIS WALL, AND CLICK</div></div>' +
     '<div id="bflash"></div><div id="bscan"></div><div id="bvig"></div><div id="bflick"></div><div id="bhelp"></div>';
   document.documentElement.append(B);   // outside <body>, so hiding the page doesn't hide us
   B.classList.add('on');
@@ -531,7 +531,7 @@ async function dissolve() {                   // her face crumbles into pixels, 
 }
 
 // ===== Following the hub =====
-let phase = null, gen = 0, evAt, armed = false, task = null, cur = null, pressed = false, view = '';   // view: arm | task | purge | swap | clean
+let phase = null, gen = 0, evAt, armed = false, task = null, cur = null, pressed = false, view = '', jump = false;   // jump: Ctrl+Alt+B   // view: arm | task | purge | swap | clean
 function apply(s) {
   const was = S; S = s;
   if (!s.phase) { if (live) location.reload(); return; }   // FINISH RUN / NEW TEAM: back to this room's own game
@@ -545,7 +545,7 @@ function enter(from) {
   const g = ++gen, restore = from == null;   // restore = this laptop (re)loaded mid-finale: no intros
   wake();
   if (phase !== 'crash') { hidePage(); B.classList.remove('see', 'black'); hideDlg(); }   // a skipped scene leaves no box behind
-  ({ crash: () => crash(restore), takeover: () => takeover(g, restore), fight: () => fight(g, from), regroup: () => regroup(g, restore),
+  ({ crash: () => crash(restore || jump), takeover: () => takeover(g, restore || jump), fight: () => fight(g, from), regroup: () => regroup(g, restore),
      brief: () => brief(g), kill: () => kill(g), end: () => theEnd(g, restore) })[phase]?.();
 }
 function changed() {
@@ -596,6 +596,16 @@ async function crash(restore) {
   send({ t: 'fin', a: 'takeover' });
 }
 
+// Ctrl+Alt+B on game 4's laptop (staff, for testing): straight to room 4's MIRRORS, its rings still. It starts the finale
+// for real on every laptop (FINISH RUN or NEW TEAM on the GM panel ends it) and fast-forwards this room past the crash
+// scene, the map and its PRESS SPACE
+async function jumpToMirrors() {
+  if (ROOM !== 4 || cur?.name === 'cross') return;
+  jump = armed = true; wake();
+  if (S?.phase === 'fight') { if (mine()) startTask(mine()); return; }
+  for (const a of ['crash', 'takeover', 'trace']) { send({ t: 'fin', a }); await wait(300); }
+}
+
 // ===== Every room: she takes over, at one hub time =====
 async function takeover(g, restore) {
   theme('green');
@@ -631,7 +641,7 @@ async function fight(g, from) {
     loop('fight', true);
     return;
   }
-  if (from === 'takeover') { await until(S.at); if (g !== gen) return; }   // her rooms light up as the trace reaches them
+  if (from === 'takeover' && !jump) { await until(S.at); if (g !== gen) return; }   // her rooms light up as the trace reaches them
   if (!mine()) return cleanScreen();
   armed ? startTask(mine()) : armScreen();
 }
@@ -744,87 +754,202 @@ function wordsTask() {
     stop() {},
   };
 }
-// --- CROSSHAIR (room 4): the outer knob moves it left/right, the inner knob up/down. Hold it on her ---
+// --- MIRRORS (room 4): it opens as game 4, still: her heart, the two rings, the laser. The first try to fire and she
+// breaks the rings ("YOU DON'T NEED THIS ANYMORE"). Then a mirror slides in on each side: the outer knob turns the left
+// one, the inner knob the right one, each like game 4's rings (the knob's travel = half a turn of the mirror). The laser
+// always fires at the left mirror; bounce it off the right mirror into her core. Her shield faces left, so a shot
+// straight from the left mirror is blocked. A live laser sight shows the whole bounce path. Hold the two wires together
+// (or SPACE) to charge and fire, as in game 4. Each hit moves her core and both mirrors. HUMAN shrinks the core and mirrors.
 let grid = null;
 function crossTask() {
-  const K = C.CROSS, h = res('human') / 100, keys = {}, parts = [], n = cur.need;
-  let hint = '';
-  let catches = cur.done, lock = 0, inv = 0, lastCatch = performance.now(), tired = false, stall = 0, nextStall = performance.now() + rand(3000, 5000);
-  let cx = .5, cy = .5, her = { x: .2, y: .2, vx: 0, vy: 0, tx: .5, ty: .5, retarget: 0, boost: 0, dodgeAt: 0 };
-  const speedNo = Math.round(1 + h * 4);
-  main(hd('SECTOR 04 ▸ CROSSHAIR') + source('human', 4, `HER SPEED <span>${speedNo}</span> / 5`) +
+  const K = C.MIRROR, h = res('human') / 100, keys = {}, parts = [], n = cur.need, lerp = ([x0, x1]) => x0 + (x1 - x0) * h;
+  const rC = lerp(K.core), rS = rC * 1.7, half = lerp(K.mirror), sizeNo = Math.round(5 - h * 4);
+  let hits = cur.done, stage = hits ? 'play' : 'still', t0 = performance.now(), charge = 0, coolUntil = 0, shot = null;
+  let spaceOk = false, charging = false, hint = '', kk = [.5, .5], core = { x: 0, y: .42 }, from = null, M = [{ x: .07, y: .5 }, { x: 0, y: .5 }];
+  main(hd('SECTOR 04 ▸ MIRRORS') + source('human', 4, `HER CORE <span>${sizeNo}</span> / 5`) +
     `<div class="foot"><div class="note" id="bxk"></div><div class="aur" id="bxa"></div>${pips()}</div>`);
-  const A = () => ({ x: fw * .06, y: fh * .17, w: fw * .88, h: fh * .62 });
+  const A = () => ({ x: fw * .04, y: fh * .15, w: fw * .92, h: fh * .64 });   // the arena, in canvas pixels; inside it, y 0-1 and x 0-ar()
   const ar = () => { const a = A(); return a.w / a.h; };
-  const respawn = () => {                     // somewhere far from the crosshair
-    let best = null, far = -1;
-    for (let k = 0; k < 20; k++) { const p = { x: rand(.06, ar() - .06), y: rand(.06, .94) }, d = Math.hypot(p.x - cx * ar(), p.y - cy); if (d > far) { far = d; best = p; } }
-    Object.assign(her, best, { vx: 0, vy: 0, retarget: 0 });
+  const E = () => ({ x: ar() / 2, y: .985 });                // the laser, bottom centre
+  core.x = ar() / 2;                                          // her heart starts in the middle, inside game 4's rings
+  const live = () => page(() => potLive(), false);
+  // knob i, 0-1: game 4's latest reading (its page is frozen now, so not its smoothed knobs[]), else null = use the keys
+  const reading = i => live() ? page(() => (typeof knobTo === 'object' ? knobTo : knobs)[i], null) : null;
+  const segDist = (q, p1, p2) => { const dx = p2.x - p1.x, dy = p2.y - p1.y, t = clamp(((q.x - p1.x) * dx + (q.y - p1.y) * dy) / (dx * dx + dy * dy), 0, 1);
+    return Math.hypot(q.x - p1.x - t * dx, q.y - p1.y - t * dy); };
+  const place = () => {                         // her core and both mirrors somewhere new, always with a clean two-bounce path
+    const R = ar();
+    for (let k = 0; k < 500; k++) {
+      const m0 = { x: .07, y: rand(.2, .8) }, m1 = { x: R - .07, y: rand(.2, .8) }, c = { x: rand(.36, .62) * R, y: rand(.2, .62) };
+      if (!(segDist(c, E(), m0) > rS + .05 && segDist(c, m0, m1) > rS + .07 && Math.hypot(c.x - m1.x, c.y - m1.y) > .4 &&
+          Math.abs(m0.y - M[0].y) + Math.abs(m1.y - M[1].y) > .15)) continue;
+      const was = { M, core }; M = [m0, m1]; core = c;
+      if (solve()) { from = { M: was.M.map(m => ({ ...m })), core: { ...was.core } }; return; }
+      M = was.M; core = was.core;                // no way in from here: try another layout
+    }
   };
-  respawn();
-  const knob = i => page(() => potLive(i) ? knobs[i] : null, null);
+  // where a shot would go right now: from the laser at the left mirror, bouncing, until it ends somewhere
+  const trace = (kv = kk) => {
+    const R = ar(), pts = [E()], seq = [], mir = M.map((m, i) => ({ ...m, ux: Math.cos(kv[i] * Math.PI), uy: Math.sin(kv[i] * Math.PI) }));
+    let p = E(), dx = M[0].x - p.x, dy = M[0].y - p.y, l = Math.hypot(dx, dy), last = -1;
+    dx /= l; dy /= l;
+    for (let b = 0; b < 6; b++) {
+      let t = Infinity, what = 'wall', idx = -1;
+      mir.forEach((m, i) => {                   // p + t·d = m + s·u, with |s| <= half
+        if (i === last) return;
+        const det = m.ux * dy - dx * m.uy; if (Math.abs(det) < 1e-9) return;
+        const wx = m.x - p.x, wy = m.y - p.y, tt = (m.ux * wy - wx * m.uy) / det, ss = (dx * wy - dy * wx) / det;
+        if (tt > 1e-6 && Math.abs(ss) <= half && tt < t) { t = tt; what = 'mirror'; idx = i; }
+      });
+      const circle = r => { const ox = p.x - core.x, oy = p.y - core.y, bb = ox * dx + oy * dy, cc = ox * ox + oy * oy - r * r, D = bb * bb - cc;
+        if (D < 0) return Infinity; const t1 = -bb - Math.sqrt(D); return t1 > 1e-6 ? t1 : Infinity; };
+      const ts = circle(rS);                    // her shield: the left half of a ring around her core, stops what comes from the left
+      if (ts < t && dx > 0 && p.x + dx * ts <= core.x) { t = ts; what = 'shield'; }
+      const tc = circle(rC); if (tc < t) { t = tc; what = 'core'; }
+      if (what === 'wall') t = Math.min(dx > 0 ? (R - p.x) / dx : dx < 0 ? -p.x / dx : Infinity, dy > 0 ? (1 - p.y) / dy : dy < 0 ? -p.y / dy : Infinity);
+      p = { x: p.x + dx * t, y: p.y + dy * t }; pts.push(p);
+      if (what !== 'mirror') return { pts, end: what, seq };
+      const m = mir[idx], nx = -m.uy, ny = m.ux, dn = dx * nx + dy * ny;   // bounce
+      dx -= 2 * dn * nx; dy -= 2 * dn * ny; last = idx; seq.push(idx);
+    }
+    return { pts, end: 'wall', seq };
+  };
+  // knob settings that land a shot in her core (left mirror, right mirror, core), or null. Every placement must have one
+  const solve = () => {
+    for (let j = 0; j <= 720; j++) {
+      const kv = [j / 720, .5];
+      for (let it = 0; it < 5; it++) {
+        const tr = trace(kv);
+        if (tr.end === 'core' && tr.seq.join() === '0,1') return kv;
+        if (tr.seq[0] !== 0 || tr.seq[1] !== 1) break;
+        const P = tr.pts[2], Q = tr.pts[1], il = Math.hypot(P.x - Q.x, P.y - Q.y), ol = Math.hypot(core.x - P.x, core.y - P.y);
+        const nx = (core.x - P.x) / ol - (P.x - Q.x) / il, ny = (core.y - P.y) / ol - (P.y - Q.y) / il;   // the normal bisects out and in
+        kv[1] = ((Math.atan2(nx, -ny) % Math.PI + Math.PI) % Math.PI) / Math.PI;                       // the mirror runs across it
+      }
+    }
+    return null;
+  };
+  async function breakRings() {                 // the first try to fire: she breaks game 4's rings
+    stage = 'break'; charge = 0; strip('cancel');
+    await talk(SAY.rings, { auto: true, hold: 900 });
+    if (task !== me) return;
+    const a = A(), cx = a.x + core.x * a.h, cy = a.y + core.y * a.h;
+    for (const r of [.3, .2]) for (let k = 0; k < 70; k++) {
+      const an = rand(0, TAU), x = cx + Math.cos(an) * r * a.h, y = cy + Math.sin(an) * r * a.h, sp = rand(30, 140);
+      parts.push({ x, y, vx: Math.cos(an) * sp, vy: Math.sin(an) * sp, t: rand(.5, 1.4), c: any(['#ff3344', '#fff', '#ff8a96']) });
+    }
+    sfx.crash(); flash(.7, 400); shake(B, 18, 700); strip('miss');
+    await wait(900); if (task !== me) return;
+    place(); from.M = from.M.map(m => ({ ...m, x: m.x < ar() / 2 ? -.3 : ar() + .3 }));   // the mirrors slide in from off screen
+    stage = 'enter'; t0 = performance.now(); sfx.glitch();
+  }
+  function fire(now) {
+    const tr = trace(), end = tr.pts[tr.pts.length - 1], a = A(), ex = a.x + end.x * a.h, ey = a.y + end.y * a.h, hit = tr.end === 'core';
+    shot = { t0: now, pts: tr.pts, hit }; coolUntil = now + K.coolMs; charging = false;
+    page(() => ctrlFire());                     // the controller's little screen flashes FIRE
+    strip(hit ? 'hit' : 'miss'); flash(.25, 150, hit ? '#4dff88' : '#ff3344');
+    for (let k = 0; k < (hit ? 70 : 30); k++) { const an = rand(0, TAU), sp = rand(20, hit ? 130 : 80);
+      parts.push({ x: ex, y: ey, vx: Math.cos(an) * sp, vy: Math.sin(an) * sp, t: rand(.3, .9), c: hit ? any(['#fff', '#4dff88', '#b8ffd0']) : any(['#fff', '#ff3344', '#ff8a96']) }); }
+    if (!hit) { sfx.bad(); $('bxa').textContent = any(SAY.fail); return; }
+    hits++; sfx.catch(); $('bxa').textContent = ''; step(hits);
+    if (hits < n) setTimeout(() => { if (task === me && stage === 'play') { place(); stage = 'enter'; t0 = performance.now(); sfx.glitch(); } }, 900);
+  }
+  if (stage === 'play') place();                // reloaded mid-task: straight to the mirrors
+  if (location.search.includes('test')) window.BOSS_MIRRORS = { solve, state: () => ({ stage, hits, kk: [...kk] }) };   // for test runs only
+  const me = {
+    key(e) { keys[e.code] = true; },
+    up(e) { delete keys[e.code]; if (e.code === 'Space') spaceOk = true; },   // the SPACE that armed this room must come up first
+    blur() { for (const k in keys) delete keys[k]; },
+    stop() { scene = null; clearFx(); if (charging) strip('cancel'); },
+  };
+  setTimeout(() => spaceOk = true, 1500);
   scene = (now, dt) => {
-    const a = A(), R = ar();
-    // the crosshair: the knobs when their controllers talk, else the keys (A/D ←/→ across, W/S ↑/↓ up and down)
-    const k0 = knob(0), k1 = knob(1);
-    cx = k0 != null ? k0 : clamp(cx + ((keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0)) * K.keySpeed * dt, 0, 1);
-    cy = k1 != null ? (K.flipY ? 1 - k1 : k1) : clamp(cy + ((keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0)) * K.keySpeed * dt, 0, 1);
-    const hn = `${k0 != null ? 'OUTER KNOB' : 'A / D'} ↔   ·   ${k1 != null ? 'INNER KNOB' : 'W / S'} ↕   ·   HOLD THE CROSSHAIR ON HER`;
-    if (hn !== hint) $('bxk').textContent = hint = hn;   // DOM only when it changes: a write every frame repaints it every frame
-    const px = cx * R, py = cy;
-    // her: wanders between targets, dodges when the crosshair gets close, stalls now and then (the window to catch her)
-    if (!tired && (now - lastCatch) / 1000 > K.tiredS) { tired = true; $('bxa').textContent = SAY.tired; }
-    if (now > nextStall) { stall = now + 700; nextStall = now + rand(3000, 5000); }
-    const near = Math.hypot(her.x - px, her.y - py);
-    if (near < K.hit * 2.4 && now > her.dodgeAt && now > stall && Math.random() < dt * 1.2) {
-      her.tx = clamp(her.x + (her.x - px) * 4 + rand(-.2, .2), .06, R - .06); her.ty = clamp(her.y + (her.y - py) * 4 + rand(-.2, .2), .06, .94);
-      her.boost = now + 500; her.dodgeAt = now + 1600;
-    } else if (now > her.retarget || Math.hypot(her.tx - her.x, her.ty - her.y) < .05) {
-      her.tx = rand(.06, R - .06); her.ty = rand(.06, .94); her.retarget = now + rand(900, 1800);
+    const a = A(), R = ar(), c = live(), X = x => a.x + x * a.h, Y = y => a.y + y * a.h;
+    for (const i of [0, 1]) {                   // the knobs turn the mirrors, gliding like game 4's rings; else the keys
+      const t = reading(i);
+      if (t != null) kk[i] += (t - kk[i]) * (1 - Math.exp(-dt / .06));
+      else if (stage === 'play') kk[i] = clamp(kk[i] + ((keys[i ? 'ArrowRight' : 'KeyD'] ? 1 : 0) - (keys[i ? 'ArrowLeft' : 'KeyA'] ? 1 : 0)) * K.keySpeed * dt, 0, 1);
     }
-    const sp = (K.speed[0] + (K.speed[1] - K.speed[0]) * h) * (1 + K.up * catches) * (tired ? .5 : 1) * (now < stall ? .25 : 1) * (now < her.boost ? 1.7 : 1);
-    const dx = her.tx - her.x, dy = her.ty - her.y, dl = Math.hypot(dx, dy) || 1;
-    her.vx += (dx / dl * sp - her.vx) * Math.min(1, dt * 3); her.vy += (dy / dl * sp - her.vy) * Math.min(1, dt * 3);
-    her.x = clamp(her.x + her.vx * dt, .04, R - .04); her.y = clamp(her.y + her.vy * dt, .04, .96);
-    // lock on
-    const on = near < K.hit && now > inv;
-    lock = on ? lock + dt * 1000 / K.lockMs : Math.max(0, lock - dt * 1.5);
-    if (lock >= 1) {
-      lock = 0; catches++; lastCatch = now; inv = now + 600; tired = false; $('bxa').textContent = '';
-      const bx = a.x + her.x * a.h, by = a.y + her.y * a.h;
-      for (let k = 0; k < 60; k++) { const an = rand(0, TAU), s = rand(20, 110); parts.push({ x: bx, y: by, vx: Math.cos(an) * s, vy: Math.sin(an) * s, t: rand(.3, .9), c: any(['#fff', '#4dff88', '#b8ffd0']) }); }
-      sfx.catch(); strip('hit'); flash(.3, 220, '#4dff88');
-      respawn(); step(catches);
-      if (catches >= n) return;
+    const trying = (c && page(() => wires, false)) || (keys.Space && spaceOk);
+    const hn = stage === 'still' || stage === 'break' ? (c ? 'TOUCH THE TWO WIRES TOGETHER TO FIRE' : 'HOLD SPACE TO FIRE')
+      : `${c ? 'OUTER KNOB' : 'A / D'} ▸ LEFT MIRROR  ·  ${c ? 'INNER KNOB' : '◄ / ►'} ▸ RIGHT MIRROR  ·  BOUNCE OFF BOTH INTO HER`;
+    if (hn !== hint) $('bxk').textContent = hint = hn;   // DOM only when it changes
+    if (stage === 'still' && trying) breakRings();
+    let k = 1;
+    if (stage === 'enter') { k = Math.min(1, (now - t0) / 800); if (k >= 1) stage = 'play'; }
+    const ease = 1 - Math.pow(1 - k, 3), lp = (p, q) => ({ x: p.x + (q.x - p.x) * ease, y: p.y + (q.y - p.y) * ease });
+    const cc = stage === 'enter' && from ? lp(from.core, core) : core, MM = stage === 'enter' && from ? M.map((m, i) => lp(from.M[i], m)) : M;
+    if (stage === 'play') {                     // charge while they hold; letting go drains it
+      if (trying && now > coolUntil && !shot) {
+        if (!charging) { charging = true; strip('charge'); }
+        charge += dt * 1000 / K.chargeMs; if (charge >= 1) { charge = 0; fire(now); }
+      } else { charge = Math.max(0, charge - dt * 3); if (charging && !charge) { charging = false; strip('cancel'); } }
     }
+    if (shot && now - shot.t0 > 700) shot = null;
     // draw (low resolution: every line is a fat pixel)
     if (!grid || grid.width !== fw) {           // the arena, drawn once
       grid = document.createElement('canvas'); grid.width = fw; grid.height = fh;
-      const g = grid.getContext('2d'); g.strokeStyle = 'rgba(77,255,136,.12)'; g.lineWidth = 1;
+      const g = grid.getContext('2d'); g.strokeStyle = 'rgba(77,255,136,.1)'; g.lineWidth = 1;
       for (let x = a.x; x <= a.x + a.w + .1; x += a.w / 16) { g.beginPath(); g.moveTo((x | 0) + .5, a.y); g.lineTo((x | 0) + .5, a.y + a.h); g.stroke(); }
       for (let y = a.y; y <= a.y + a.h + .1; y += a.h / 8) { g.beginPath(); g.moveTo(a.x, (y | 0) + .5); g.lineTo(a.x + a.w, (y | 0) + .5); g.stroke(); }
-      g.strokeStyle = 'rgba(77,255,136,.5)'; g.strokeRect((a.x | 0) + .5, (a.y | 0) + .5, a.w | 0, a.h | 0);
+      g.strokeStyle = 'rgba(77,255,136,.45)'; g.strokeRect((a.x | 0) + .5, (a.y | 0) + .5, a.w | 0, a.h | 0);
     }
-    fx.globalAlpha = 1; fx.fillStyle = 'rgba(0,0,0,.35)'; fx.fillRect(0, 0, fw, fh);   // what moves leaves a short trail
+    fx.globalAlpha = 1; fx.fillStyle = 'rgba(0,0,0,.4)'; fx.fillRect(0, 0, fw, fh);   // what moves leaves a short trail
     fx.drawImage(grid, 0, 0);
-    const hx = a.x + her.x * a.h, hy = a.y + her.y * a.h, flick = now < stall && (now / 60 | 0) % 2;
-    if (!flick) {
-      fx.globalAlpha = .18; fx.fillStyle = '#4dff88'; fx.beginPath(); fx.arc(hx, hy, 9 + 2 * Math.sin(now / 90), 0, TAU); fx.fill();
-      fx.globalAlpha = .45; fx.beginPath(); fx.arc(hx, hy, 5, 0, TAU); fx.fill();
-      fx.globalAlpha = 1; fx.fillStyle = '#fff'; fx.fillRect(hx - 1.5, hy - 1.5, 3, 3);
+    const ex = X(E().x), ey = Y(E().y), pulse = .5 + .5 * Math.sin(now / 160);
+    // her core: green, beating; her shield on its left once the rings are gone
+    const hx = X(cc.x), hy = Y(cc.y), rr = rC * a.h;
+    fx.fillStyle = '#4dff88'; fx.globalAlpha = .15 + .1 * pulse; fx.beginPath(); fx.arc(hx, hy, rr * 2.2, 0, TAU); fx.fill();
+    fx.globalAlpha = 1; fx.fillStyle = '#062'; fx.beginPath(); fx.arc(hx, hy, rr, 0, TAU); fx.fill();
+    fx.strokeStyle = '#4dff88'; fx.lineWidth = 1; fx.stroke();
+    fx.fillStyle = '#dcffe8'; fx.beginPath(); fx.arc(hx, hy, rr * (.35 + .15 * pulse), 0, TAU); fx.fill();
+    if (stage === 'still' || stage === 'break') {   // game 4's two rings around her heart, gaps down at the laser, not moving
+      const shake = stage === 'break' ? 2 : 0;
+      [[.3, 3], [.2, 3]].forEach(([r, w]) => {
+        fx.strokeStyle = '#ff3344'; fx.lineWidth = w; fx.beginPath();
+        fx.arc(hx + rand(-shake, shake), hy + rand(-shake, shake), r * a.h, Math.PI / 2 + .45, Math.PI / 2 - .45 + TAU); fx.stroke();
+      });
+      fx.strokeStyle = 'rgba(255,51,68,.6)'; fx.lineWidth = 1; fx.beginPath(); fx.moveTo(ex, ey); fx.lineTo(hx, hy + rr); fx.stroke();   // the sight
+    } else {
+      fx.strokeStyle = '#4dff88'; fx.lineWidth = 2; fx.globalAlpha = .8;
+      fx.beginPath(); fx.arc(hx, hy, rS * a.h, Math.PI / 2 + .15, Math.PI * 1.5 - .15); fx.stroke(); fx.globalAlpha = 1;
+      fx.font = 'bold 7px monospace'; fx.textAlign = 'right'; fx.fillStyle = '#4dff88';   // says why a shot from the left bounces off
+      fx.fillText('SHIELD', hx - rS * a.h - 3, hy + 2); fx.textAlign = 'left';
+      // the mirrors: silver bars that turn with their knob, a label under each
+      MM.forEach((m, i) => {
+        const mx = X(m.x), my = Y(m.y), ux = Math.cos(kk[i] * Math.PI) * half * a.h, uy = Math.sin(kk[i] * Math.PI) * half * a.h;
+        fx.strokeStyle = 'rgba(255,255,255,.25)'; fx.lineWidth = 5; fx.beginPath(); fx.moveTo(mx - ux, my - uy); fx.lineTo(mx + ux, my + uy); fx.stroke();
+        fx.strokeStyle = '#e8f6ff'; fx.lineWidth = 2; fx.beginPath(); fx.moveTo(mx - ux, my - uy); fx.lineTo(mx + ux, my + uy); fx.stroke();
+        fx.fillStyle = '#ff3344'; fx.fillRect(mx - 1.5, my - 1.5, 3, 3);
+        fx.font = 'bold 7px monospace'; fx.textAlign = 'center'; fx.fillStyle = 'rgba(255,255,255,.75)';
+        fx.fillText(i ? 'INNER' : 'OUTER', mx, my + half * a.h + 9);
+      });
+      fx.textAlign = 'left';
+      if (stage === 'play' && !shot) {          // the laser sight: the whole bounce path, white once it ends in her core
+        const tr = trace(), good = tr.end === 'core';
+        fx.strokeStyle = good ? '#fff' : 'rgba(255,51,68,.85)'; fx.lineWidth = good || charge > 0 ? 2 : 1;
+        fx.beginPath(); tr.pts.forEach((q, j) => fx[j ? 'lineTo' : 'moveTo'](X(q.x), Y(q.y))); fx.stroke();
+        const q = tr.pts[tr.pts.length - 1]; fx.fillStyle = good ? '#fff' : '#ff3344'; fx.fillRect(X(q.x) - 2, Y(q.y) - 2, 4, 4);
+      }
     }
-    const ux = a.x + px * a.h, uy = a.y + py * a.h, rr = K.hit * a.h;
-    fx.fillStyle = 'rgba(255,51,68,.55)'; fx.fillRect(a.x, uy | 0, a.w, 1); fx.fillRect(ux | 0, a.y, 1, a.h);
-    fx.strokeStyle = on ? '#fff' : '#ff3344'; fx.lineWidth = 1; fx.strokeRect((ux - 4 | 0) + .5, (uy - 4 | 0) + .5, 8, 8);
-    fx.beginPath(); fx.arc(ux, uy, rr, 0, TAU); fx.globalAlpha = .4; fx.stroke(); fx.globalAlpha = 1;
-    if (lock > 0) { fx.strokeStyle = '#fff'; fx.lineWidth = 2; fx.beginPath(); fx.arc(ux, uy, rr + 2, -Math.PI / 2, -Math.PI / 2 + lock * TAU); fx.stroke(); }
-    for (let k = parts.length - 1; k >= 0; k--) {
-      const p = parts[k]; p.t -= dt; if (p.t <= 0) { parts.splice(k, 1); continue; }
-      p.x += p.vx * dt; p.y += p.vy * dt; fx.fillStyle = p.c; fx.globalAlpha = Math.min(1, p.t * 2); fx.fillRect(p.x | 0, p.y | 0, 1, 1);
+    if (shot) {                                 // the shot: a fat beam along the path, fading
+      const f = 1 - (now - shot.t0) / 700;
+      [[5, shot.hit ? 'rgba(77,255,136,.35)' : 'rgba(255,51,68,.35)'], [2, '#fff']].forEach(([w, col]) => {
+        fx.globalAlpha = Math.max(0, f); fx.strokeStyle = col; fx.lineWidth = w;
+        fx.beginPath(); shot.pts.forEach((q, j) => fx[j ? 'lineTo' : 'moveTo'](X(q.x), Y(q.y))); fx.stroke();
+      });
+      fx.globalAlpha = 1;
+    }
+    // the laser itself, bottom centre: charging glows white
+    fx.fillStyle = '#ff3344'; fx.fillRect(ex - 6, ey - 3, 12, 6); fx.fillRect(ex - 2, ey - 7, 4, 4);
+    if (charge > 0) { fx.globalAlpha = charge; fx.fillStyle = '#fff'; fx.beginPath(); fx.arc(ex, ey - 7, 2 + 5 * charge, 0, TAU); fx.fill(); fx.globalAlpha = 1; }
+    for (let j = parts.length - 1; j >= 0; j--) {
+      const q = parts[j]; q.t -= dt; if (q.t <= 0) { parts.splice(j, 1); continue; }
+      q.x += q.vx * dt; q.y += q.vy * dt; fx.fillStyle = q.c; fx.globalAlpha = Math.min(1, q.t * 2); fx.fillRect(q.x | 0, q.y | 0, 2, 2);
     }
     fx.globalAlpha = 1;
   };
-  return { key(e) { keys[e.code] = true; }, up(e) { delete keys[e.code]; }, blur() { for (const k in keys) delete keys[k]; }, stop() { scene = null; clearFx(); } };
+  return me;
 }
 
 // ===== Room 3: the map =====
@@ -975,6 +1100,7 @@ async function theEnd(g, restore) {
 // ===== Keys: while the finale runs, this file gets them first; the page only still gets Ctrl+Alt+R and M =====
 function staff(code) {
   if (code === 'KeyH') return helpPanel();
+  if (code === 'KeyB') return jumpToMirrors();
   if (code !== 'KeyF') return;                 // F = skip this step (the GM panel's FORCE key)
   if (phase === 'crash') { dlgCut = true; return; }
   if (phase === 'takeover' && ROOM === 3) return send({ t: 'fin', a: 'trace' });
@@ -1012,9 +1138,10 @@ function helpPanel() {
   B.classList.toggle('help');
   $('bhelp').textContent = `GAME 5 · THE FINALE\nroom ${ROOM}   phase ${phase}   hub ${ws?.readyState === 1 ? 'connected' : 'DOWN'}   clock ±${Math.round(best / 2)} ms\n\n` +
     'Ctrl+Alt+F  skip this step (the GM panel\'s FORCE key does the same)\nCtrl+Alt+R  reload this laptop (it rejoins the finale)\n' +
+    (ROOM === 4 ? 'Ctrl+Alt+B  jump to MIRRORS (testing)\n' : '') +
     'Ctrl+Alt+M  mute / unmute\nCtrl+Alt+H  hide this\n\nFINISH RUN or NEW TEAM on the GM panel ends the finale on every laptop.';
 }
 
-window.BOSS = { crash: () => crash(false), state: () => S };   // game 4's fake win calls crash() at 97%
+window.BOSS = { crash: () => crash(false), state: () => S, mirrors: jumpToMirrors };   // game 4's fake win calls crash() at 97%; Ctrl+Alt+B mirrors()
 connect();
 })();

@@ -87,13 +87,18 @@ body.hunt #entry, body.won #entry { display: flex; animation: boxIn .6s .2s back
 #cells.bad .cell { color: var(--red); border-color: var(--red); box-shadow: 0 0 24px rgba(255,42,74,.6); }
 #cells.lock .cell { opacity: .35; }
 #cells.ok .cell { color: var(--g); border-color: var(--g); box-shadow: 0 0 30px rgba(77,255,136,.6), inset 0 0 20px rgba(77,255,136,.2); }
+/* one pip per layer: cracked = lit, the current one blinks */
+#lay { display: flex; gap: 1vw; }
+#lay i { width: 5vw; height: .6vw; background: currentColor; opacity: .25; }
+#lay i.on { opacity: 1; box-shadow: 0 0 10px currentColor; }
+#lay i.cur { opacity: 1; animation: blink 1s steps(1) infinite; }
 
 /* hints leak through as glitches: the text tears onto the screen for a moment, then it's gone again */
 #ghintWrap { position: absolute; inset: 0; z-index: 4; display: none; align-items: center; justify-content: center; pointer-events: none; }
 #ghintWrap.on { display: flex; }
 #ghint { position: relative; font-size: 3vw;   /* 3vw fits the longest hint on one line */ font-weight: 700; letter-spacing: .08em; color: #fff; white-space: nowrap;
   text-shadow: -4px 0 rgba(0,255,255,.7), 4px 0 rgba(255,0,255,.7); }
-/* the whole screen darkens during the hunt so its glow doesn't wash out the IR lights on phone cameras.
+/* the whole screen darkens during the hunt so its glow doesn't wash out the beacon's lights (or a phone's slow-mo).
    A plain black layer, not a filter: cheap on the booth laptop */
 #dim { position: fixed; inset: 0; z-index: 65; background: #000; opacity: 0; pointer-events: none; transition: opacity 2s; }
 body.dark #dim { opacity: var(--dim); }
@@ -164,7 +169,7 @@ body.help #help { display: block; }
     <div id="mid">
       <div id="term" class="txt"></div>
       <div id="scope" class="txt"><div class="row"><span>CARRIER ▸ LIVE</span><span id="freq">-- Hz</span></div><canvas id="wave"></canvas></div>
-      <div id="entry"><div class="lbl txt">ENTER CARRIER CODE</div><div id="cells" class="txt"></div></div>
+      <div id="entry"><div class="lbl txt">ENTER CARRIER CODE</div><div id="lay" class="txt"></div><div id="cells" class="txt"></div></div>
     </div>
     <div id="bar" class="txt"><div class="row"><span>AURORA TRACING YOU ▸ <b id="tl">5:00</b> LEFT</span><span id="bp">0%</span></div><div id="segs"></div></div>
   </div>
@@ -182,7 +187,7 @@ body.help #help { display: block; }
 <div id="dim"></div>
 <div id="help">STAFF SHORTCUTS
 code <b id="hcode"></b>
-IR board: <span id="hbeacon">...</span>   hub: <span id="hubst">...</span>
+board: <span id="hbeacon">...</span>   hub: <span id="hubst">...</span>
 (no board yet? a phone on :3000/beacon)
 
 Ctrl+Alt+H  show / hide this panel
@@ -190,8 +195,8 @@ Ctrl+Alt+U  unlock by hand (if puzzle 2's signal never came)
 Ctrl+Alt+S  start now, even if locked
 Ctrl+Alt+K  skip the intro, straight to the hunt
 Ctrl+Alt+I  show the next hint now (it glitches onto the screen)
-Ctrl+Alt+F  force the correct code (beacon dead / team stuck)
-Ctrl+Alt+R  reset for next team (new code, locks again)
+Ctrl+Alt+F  force the win, all layers (beacon dead / team stuck)
+Ctrl+Alt+R  reset for next team (new codes, locks again)
 Ctrl+Alt+W  replay only the win screen
 Ctrl+Alt+M  mute / unmute</div>
 
@@ -200,18 +205,29 @@ Ctrl+Alt+M  mute / unmute</div>
 const CFG = {
   UNLOCK_EVT: 'p2done',      // puzzle 2 sends this when SYSTEM POWERED finishes
   DONE_EVT: 'p3done',        // sent to the hub when this puzzle is won (for puzzle 4)
-  BEACON_IPS: ['192.168.0.51'],   // the hidden IR board (see NETS in secrets.h). The phone stand-ins get the codes through the hub instead
+  BEACON_IPS: ['192.168.0.51', '192.168.1.51'],   // the hidden blue-LED board on NexusV, or on walawifi as a backup (see NETS in secrets.h). The phone stand-ins get the codes through the hub instead
   PUSH_MS: 3000,             // resend the code to the board this often
   DIM: 0.65,                 // how much darker the screen gets during the hunt (0 = normal, 1 = black). Staff panel (Ctrl+Alt+H) stays bright
+  // 3 rounds ("layers"), each a new code blinked faster. The game sends these with every code and the board and the phone
+  // stand-in follow them, so tune here: no reflash. ms: on = one blink, off = between blinks of the same light,
+  // gap = before the next light, loop = the dark pause before it all repeats.
+  // The last round must look like ONE flash per light to the eye and still split into separate blinks in slow motion
+  ROUNDS: [
+    { on: 300, off: 400, gap: 1200, loop: 3000 },   // easy to count: they learn the pattern
+    { on: 100, off: 120, gap: 1000, loop: 2500 },   // fast: countable if they focus
+    { on: 25,  off: 30,  gap: 1000, loop: 2500 },   // too fast for eyes: 240 fps slow-mo shows each blink ~6 frames
+  ],
+  ROUND_MS: 2600,            // pause after a cracked layer before the next one takes input
   // TRACE, carried to the finale = the trace bar when they crack it (lower is better). Mistakes push the bar forward:
   WRONG_TRACE: 5,            // % per wrong code
   LOCK_MS: 2500,             // input locked this long after a wrong code
   TRACE_S: 300,              // the hunt clock: the trace bar fills over this many seconds, then time is up (TRACE 100%, team moves on)
-  // hints glitch onto the screen at these seconds into the hunt; Ctrl+Alt+I shows the next one early.
+  // hints glitch onto the screen at these seconds into the LAST round (rounds 1-2 need none); Ctrl+Alt+I shows the next one early.
+  // Typing 111 there (what it looks like to the eye) brings the first one at once.
   // After it first appears, the latest hint glitches back every HINT_EVERY ms so nobody misses it
   HINTS: [
-    { at: 100, text: "THE DARKER IT IS, THE EASIER YOU'LL SEE" },
-    { at: 190, text: 'USE YOUR FRONT CAMS' },
+    { at: 45, text: 'TOO FAST FOR HUMAN EYES' },
+    { at: 90, text: 'FILM IT IN SLOW-MO' },
   ],
   HINT_EVERY: [8000, 13000],   // random gap between repeat glitches (ms)
   HINT_FIRST_MS: 2600,         // how long the first glitch of a new hint lasts...
@@ -232,11 +248,13 @@ const INTRO = [              // the players' side (red terminal)
   'find the transmitter: 3 lights, numbered 1 to 3.',
   'each light blinks its digit, one after another.',
   '3 blinks = 3. 5 blinks = 5.',
-  'enter the 3-digit carrier code to cut her link.',
-  'you have 5 minutes before she traces you.',
+  'her signal has 3 layers. each one blinks faster.',
+  'crack all 3 codes in 5 minutes, before she traces you.',
 ];
 const AUR = {                // Aurora (green)
   intro: "You'll never see it. Human eyes are so... limited.",
+  next: ['Lucky. Faster, then.', 'Now try counting.'],   // after layer 1, after layer 2
+  trap: "One blink each? That's all I let you see.",     // 111 in the last layer
   wrong: ['Wrong frequency.', "That's not me.", 'Keep looking. Or don\'t.', 'Static. Just like your thinking.', 'Colder.'],
   traced: 'I see you. All of you.',
   caught: 'No. That frequency is-',
@@ -253,13 +271,15 @@ const any = a => a[Math.random() * a.length | 0];
 const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)) } catch { return null } },
                 set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} } };
 
-// one code per session, digits 1-5 (no zeros, nothing too long to count); reset reloads the page, which rolls a new one
-const LIGHTS = 3;            // digits in the code = IR lights on the beacon (must match IR_PINS in beacon_esp32.ino)
-const roll = () => Array.from({ length: LIGHTS }, () => 1 + (Math.random() * 5 | 0)).join('');
-const CODE = roll();
+// a new code every layer, digits 2-5: no zeros, nothing too long to count, and no 1s, so 111 (the last layer to the
+// naked eye) is always wrong. Reset reloads the page, which rolls new ones
+const LIGHTS = 3;            // digits in the code = lights on the beacon (must match LED_PINS in beacon_esp32.ino)
+const LAST = CFG.ROUNDS.length - 1, TRAP = '1'.repeat(LIGHTS);
+const roll = () => Array.from({ length: LIGHTS }, () => 2 + (Math.random() * 4 | 0)).join('');
+let round = 0, CODE = roll();
 
 let mode = 'standby';        // standby | intro | hunt | check | won | end
-let unlocked = false, entry = '', huntT0 = 0, hintN = 0, traced = false;
+let unlocked = false, entry = '', huntT0 = 0, lastT0 = 0, hintN = 0, traced = false;
 let tracePen = 0, trace = 0, wrong = 0, huntS = 0, replay = false;   // trace = bar %, frozen on the win
 
 // ===== Hub: unlock on puzzle 2's "done", hand the code to the phone stand-in, report TRACE =====
@@ -270,7 +290,7 @@ function hubSend(o) {
   if (o) { if (o.t === 'status' && hubWs?.readyState !== 1) return; hubQ.push(o); }
   while (hubWs?.readyState === 1 && hubQ.length) hubWs.send(JSON.stringify(hubQ.shift()));
 }
-const sendCode = () => hubSend({ t: 'evt', e: 'p3code', v: { code: CODE } });
+const sendCode = () => hubSend({ t: 'evt', e: 'p3code', v: { code: CODE, ...CFG.ROUNDS[round] } });   // the phone stand-in blinks at this speed
 function unlock() {
   if (unlocked) return;
   unlocked = true; document.body.classList.add('ready');
@@ -316,20 +336,22 @@ async function hub() {
 }
 // the GM panel presses this page's Ctrl+Alt staff keys remotely, and sees its state once a second
 const staffKey = code => dispatchEvent(new KeyboardEvent('keydown', { code, ctrlKey: true, altKey: true }));
-setInterval(() => hubSend({ t: 'status', v: { mode, unlocked, code: CODE, stat: trace, boards } }), 1000);
+setInterval(() => hubSend({ t: 'status', v: { mode, unlocked, code: `${CODE} (${round + 1}/${LAST + 1})`, stat: trace, boards } }), 1000);
 
 // the boards: fire-and-forget like the mask, so a dead ESP32 never stalls the game.
 // boards = did each one answer the last push (for the GM panel): true / false / 'none' (no IPs set: a phone stands in)
 const boards = {};
-function push(ips, code, el, name) {
+function push(ips, query, el, name) {
   if (!ips.length) { boards[name] = 'none'; return $(el).textContent = 'none (phone stand-in)'; }
   const c = new AbortController(); setTimeout(() => c.abort(), 1500);
-  Promise.any(ips.map(ip => fetch(`http://${ip}/code?v=${code}`, { mode: 'no-cors', signal: c.signal })))
+  Promise.any(ips.map(ip => fetch(`http://${ip}/code?${query}`, { mode: 'no-cors', signal: c.signal })))
     .then(() => { boards[name] = true; $(el).textContent = 'OK'; }, () => { boards[name] = false; $(el).textContent = 'OFFLINE'; });
 }
-const pushBeacon = () => push(CFG.BEACON_IPS, CODE, '#hbeacon', 'beacon');
+// the code and this layer's blink speed: /code?v=352&on=100&off=120&gap=1000&loop=2500
+const pushBeacon = () => push(CFG.BEACON_IPS, new URLSearchParams({ v: CODE, ...CFG.ROUNDS[round] }), '#hbeacon', 'beacon');
 setInterval(pushBeacon, CFG.PUSH_MS);
-$('#hcode').textContent = CODE;
+const showCode = () => $('#hcode').textContent = `${CODE}  (layer ${round + 1}/${LAST + 1})`;
+showCode();
 
 // ===== Sound (synthesized, same set as puzzle 2) =====
 const AC = new AudioContext();
@@ -493,9 +515,11 @@ function drawWave() {
   if (cv.width !== w) { cv.width = w; cv.height = h; }
   const won = mode === 'won', now = performance.now();
   spike *= .93;
-  samples.shift();
-  samples.push(won ? ecg(now - beatAt) + rand(-.02, .02)
-                   : rand(-1, 1) * (.06 + spike) + (Math.random() < .01 ? rand(-.4, .4) : 0));
+  for (let i = 0; i < (won ? 1 : round + 1); i++) {   // the trace scrolls faster every layer
+    samples.shift();
+    samples.push(won ? ecg(now - beatAt) + rand(-.02, .02)
+                     : rand(-1, 1) * (.06 + spike) + (Math.random() < .01 ? rand(-.4, .4) : 0));
+  }
   ctx.clearRect(0, 0, w, h);
   ctx.strokeStyle = 'rgba(255,51,68,.15)'; ctx.lineWidth = 1;          // grid
   for (let x = 0; x < w; x += w / 16) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
@@ -518,7 +542,12 @@ function renderHud() {
   $('#stats').innerHTML = mode === 'intro' ? 'CARRIER <span>SCANNING</span><br>SOURCE <span>...</span>' :
     `CARRIER <span>${found ? 'INTERCEPTED' : 'ACTIVE'}</span><br>SOURCE <span>THIS ROOM</span><br>` +
     `VISIBLE <span class="${found ? 'yes' : 'mv'}">${found ? 'YES' : 'NO'}</span>`;
-  $('#freq').textContent = found ? 'HEARTBEAT' : (rand(38.1, 38.9)).toFixed(2) + ' kHz';
+  $('#freq').textContent = found ? 'HEARTBEAT' : (rand(38.1, 38.9) * (round + 1)).toFixed(2) + ' kHz';
+}
+function renderLayers() {
+  const won = mode === 'won' || mode === 'end';
+  $('#entry .lbl').textContent = won ? 'ALL LAYERS CRACKED' : `LAYER ${round + 1}/${LAST + 1} ▸ ENTER CARRIER CODE`;
+  $('#lay').innerHTML = CFG.ROUNDS.map((_, i) => `<i class="${won || i < round ? 'on' : i === round ? 'cur' : ''}"></i>`).join('');
 }
 async function termLine(text, cls = '') {
   const tm = $('#term'), line = document.createElement('div');
@@ -597,14 +626,15 @@ function renderTrace() {
 let loop;
 function hunt() {
   mode = 'hunt'; document.body.classList.add('hunt', 'dark');
-  $('#term').textContent = ''; entry = ''; renderCells(); renderHud();
-  huntT0 = performance.now(); microGlitch();
+  $('#term').textContent = ''; entry = ''; renderCells(); renderHud(); renderLayers();
+  huntT0 = lastT0 = performance.now(); microGlitch();
   aurora(AUR.intro, T.auroraHold);
   loop = setInterval(() => {
     if (mode !== 'hunt' && mode !== 'check') return;
     const s = (performance.now() - huntT0) / 1000, k = renderTrace();
     if (Math.random() < .08) { sfx.blip(); renderHud(); }
-    while (hintN < CFG.HINTS.length && s >= CFG.HINTS[hintN].at) showHint();   // hints follow plain time, not the trace
+    if (round === LAST)   // hints follow plain time in the last layer, not the trace
+      while (hintN < CFG.HINTS.length && (performance.now() - lastT0) / 1000 >= CFG.HINTS[hintN].at) showHint();
     if (hintText && mode === 'hunt' && performance.now() > nextGlitch) glitchHint(CFG.HINT_MS);   // the latest hint keeps leaking back
     // mistakes filled the bar before time is up (at time-up, timeUp() says the line instead)
     if (k >= 1 && !traced && s < CFG.TRACE_S) { traced = true; document.body.classList.add('traced'); sfx.alarm(); aurora(AUR.traced, T.auroraHold); }
@@ -614,12 +644,14 @@ function hunt() {
 
 async function check() {
   mode = 'check';
-  if (entry === CODE) return win();
+  if (entry === CODE) return round < LAST ? nextLayer() : win();
   wrong++;
+  const trap = round === LAST && entry === TRAP;   // they counted with their eyes: she gloats, and the first hint follows
   tracePen += CFG.WRONG_TRACE; renderTrace();   // she hears them: the trace jumps
   $('#bar').animate([{ color: '#fff', filter: 'brightness(2.5)' }, {}], 700); shake($('#bar'), 10, 400);
   sfx.buzz(); spike = 1.2; $('#cells').classList.add('bad'); shake(scr, 12, 420);
-  aurora(any(AUR.wrong), T.auroraHold);
+  aurora(trap ? AUR.trap : any(AUR.wrong), T.auroraHold);
+  if (trap && !hintN) setTimeout(() => hintN || showHint(), 1800);
   await wait(450);
   $('#cells').classList.replace('bad', 'lock');
   await wait(CFG.LOCK_MS);
@@ -627,9 +659,25 @@ async function check() {
   $('#cells').classList.remove('lock');
   entry = ''; mode = 'hunt'; renderCells();
 }
+// a layer cracked: the next code, blinked faster. The board starts it after a dark pause, so the change shows
+async function nextLayer() {
+  $('#cells').classList.add('ok'); sfx.ok(); spike = .8;
+  aurora(AUR.next[round] || AUR.next.at(-1), T.auroraHold);
+  const prev = CODE;
+  do CODE = roll(); while (CODE === prev);
+  round++; renderLayers(); showCode(); pushBeacon(); sendCode();
+  await wait(700);
+  sfx.glitch(); shake(scr, 14, 300); scr.querySelector('.rollbar').animate([{ top: '-20%' }, { top: '110%' }], 320);
+  $('#lay').animate([{ filter: 'brightness(3)' }, {}], 600);
+  await wait(CFG.ROUND_MS - 700);
+  if (mode !== 'check') return;                   // staff forced the win meanwhile
+  $('#cells').classList.remove('ok');
+  entry = ''; mode = 'hunt'; renderCells();
+  if (round === LAST) lastT0 = performance.now();
+}
 async function win() {
   renderTrace(); huntS = (performance.now() - huntT0) / 1000;   // freeze TRACE before mode leaves the hunt
-  mode = 'won'; entry = CODE; renderCells(); renderHud();
+  mode = 'won'; entry = CODE; renderCells(); renderHud(); renderLayers();
   clearInterval(loop); document.body.classList.remove('traced', 'dark'); document.body.classList.add('won');
   $('#cells').classList.add('ok'); hintText = null;
   sfx.ok(); fade('hunt', 0, 900);
@@ -709,8 +757,10 @@ if (location.hash === '#win') { history.replaceState(null, '', location.pathname
 
 // self-check: open game.html?test and look at the console
 if (location.search === '?test') {
-  const re = new RegExp(`^[1-5]{${LIGHTS}}$`);
-  console.assert(re.test(CODE), 'code is LIGHTS digits 1-5');
+  const re = new RegExp(`^[2-5]{${LIGHTS}}$`);
+  console.assert(Array.from({ length: 200 }, roll).every(c => re.test(c)), 'codes are LIGHTS digits 2-5, so the trap is never right');
+  console.assert(CFG.ROUNDS.every((r, i) => !i || r.on < CFG.ROUNDS[i - 1].on), 'every layer blinks faster');
+  console.assert(AUR.next.length >= LAST, 'a line for every layer change');
   console.assert(ecg(0) === 0 && ecg(100) > 1 && ecg(500) === 0, 'heartbeat shape: flat, spike, flat');
   console.assert(CFG.HINTS.every((h, i) => !i || h.at > CFG.HINTS[i - 1].at), 'hints are in time order');
   console.log('self-check done (no assertion errors above = pass)');

@@ -166,5 +166,6 @@ A **Govee H6143** (5 m, 15 segments, 12 V) taped along the wall behind the scree
 | Ctrl+Alt+R | Reset for the next team |
 | Ctrl+Alt+W | Replay only the win screen |
 | Ctrl+Alt+M | Mute / unmute |
+| Ctrl+Alt+B | Testing: jump straight to game 5's **MIRRORS** (rings still, then her line and the mirrors). Starts the finale on every laptop; NEW TEAM or FINISH RUN on the GM panel ends it. Needs the hub |
 
 The GM panel can press UNLOCK, FORCE WIN and RESET remotely.

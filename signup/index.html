@@ -713,11 +713,23 @@ async function lineView() {                  // VIEW THE LINE: everyone waiting 
 // The USB camera first, then the laptop's own camera. Only when neither gives a picture does the screen ask for staff.
 // Laptop cameras are recognised by name; if the USB one gets picked wrong, put part of its name in CFG.CAMERA
 // (the staff screen shows the name of the camera in use, and [K] there switches to the next one).
+// A camera plugged in while the kiosk runs is a USB camera whatever its name, so it goes first and is switched to on its own.
 const BUILTIN = /integrated|built-?in|internal|front|facetime|user.?facing|truevision/i;
-function camOrder(devs) {                    // the preferred camera first, laptop cameras last
+const plugged = new Set();                   // names of cameras that turned up after the kiosk started
+function camOrder(devs) {                    // the preferred camera first, then just plugged in, laptop cameras last
   const pick = d => CFG.CAMERA && d.label.toLowerCase().includes(CFG.CAMERA.toLowerCase());
-  return [...devs.filter(pick), ...devs.filter(d => !pick(d) && !BUILTIN.test(d.label)), ...devs.filter(d => !pick(d) && BUILTIN.test(d.label))];
+  const rank = d => pick(d) ? 0 : plugged.has(d.label) ? 1 : BUILTIN.test(d.label) ? 3 : 2;
+  return [0, 1, 2, 3].flatMap(r => devs.filter(d => rank(d) === r));
 }
+let camSeen = null, camStale = false;        // camera names at the last look; a new one waits for the signup to end
+navigator.mediaDevices?.addEventListener('devicechange', async () => {
+  let devs = [];
+  try { devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput' && d.label); } catch {}
+  const fresh = camSeen ? devs.filter(d => !camSeen.has(d.label)) : [];
+  camSeen = new Set(devs.map(d => d.label));
+  fresh.forEach(d => plugged.add(d.label));
+  if (fresh.length) flow ? camStale = true : startCam();   // never swap cameras in the middle of a signup
+});
 let cam = false, camName = 'NONE', camSkip = '';
 async function openCam(deviceId) {           // a stream that actually shows a picture within 4 s, or null
   let s;
@@ -731,11 +743,13 @@ async function openCam(deviceId) {           // a stream that actually shows a p
 }
 async function startCam(next = false) {     // next = skip the camera in use (staff [K])
   if (next) camSkip = camName;
+  camStale = false;
   vid.srcObject?.getTracks().forEach(t => t.stop()); cam = false; camName = 'NONE';
   const probe = await openCam();             // the first permission request also unlocks the camera names
   probe?.getTracks().forEach(t => t.stop());
   let devs = [];
   try { devs = camOrder((await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput')); } catch {}
+  camSeen = new Set(devs.map(d => d.label).filter(Boolean));
   if (next) devs = [...devs.filter(d => d.label !== camSkip), ...devs.filter(d => d.label === camSkip)];
   for (const d of devs) {
     const s = await openCam(d.deviceId);
@@ -1045,6 +1059,7 @@ async function main() {
     try { await signup(); }
     catch (e) { unmodal(); if (e !== CANCEL) { console.error(e); flow = false; await notice('SOMETHING BROKE. CALL A STAFF MEMBER.', esc(e.message)); } }
     flow = false; assist = testing = bypass = false; vid.hidden = true; document.body.append(vid); renderStats();
+    if (camStale) startCam();
   }
 }
 
@@ -1116,6 +1131,9 @@ if (location.search === '?test') {
   CFG.CAMERA = 'hd uvc';
   console.assert(cams(['USB2.0 HD UVC WebCam', 'Logitech C270']) === 'USB2.0 HD UVC WebCam,Logitech C270', 'CFG.CAMERA forces one first');
   CFG.CAMERA = '';
+  plugged.add('USB2.0 HD UVC WebCam');
+  console.assert(cams(['Logitech C270', 'USB2.0 HD UVC WebCam', 'Integrated Camera']) === 'USB2.0 HD UVC WebCam,Logitech C270,Integrated Camera', 'a camera plugged in later goes first');
+  plugged.clear();
   const ring = sts => ({ slots: sts.map((st, i) => ({ m: 540 + i * 25, st })) });
   const R = [ring(['free', 'x', 'free']), ring(['x', 'x', 'x']), ring(['gone', 'free', 'free'])];
   console.assert(dialStep(R, [0, 0], 'ArrowRight') + '' === '0,2', 'dial: → skips a taken slot');

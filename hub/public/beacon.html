@@ -1,7 +1,8 @@
 <!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>NEXUS beacon</title>
-<!-- Stand-in for the puzzle 3 beacon boards until the parts arrive. Open on a phone/tablet on the booth Wi-Fi:
-       http://<hub laptop IP>:3000/beacon         the IR board (3 white lights)
-     Tap once for fullscreen. Turn the phone's auto-lock off. It gets the current code from puzzle3/game.html through the hub.
+<!-- Stand-in for the puzzle 3 beacon board. Open on a phone/tablet on the booth Wi-Fi:
+       http://<hub laptop IP>:3000/beacon         the beacon (3 blue lights)
+     Tap once for fullscreen. Turn the phone's auto-lock off. It gets the current code AND the layer's blink speed from
+     puzzle3/game.html through the hub. A phone screen only redraws every ~17 ms, so layer 3 looks rougher than the real LEDs.
      Add &debug to show the code on screen (never during a real run). -->
 <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}
 #row{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;gap:6vmin}
@@ -10,23 +11,23 @@
 #s{position:fixed;bottom:6px;left:8px;color:#222;font:11px monospace}</style>
 <div id=row></div><div id=s></div>
 <script>
-// Timing must match beacon_esp32.ino (ms)
-const T = { ON: 250, OFF: 350, LED_GAP: 1000, LOOP_GAP: 3000 };
+// Boot timing = the ESP32's (round 1). After that the game sends each layer's own (ms)
+let T = { on: 300, off: 400, gap: 1200, loop: 3000 };
 const DEBUG = new URLSearchParams(location.search).has('debug');
-const COLOR = '#e8dcff';
-let code = '314', steps, t0, total, online = false;   // default = the ESP32's boot code
+const COLOR = '#3d7bff';
+let code = '324', steps, t0, total, online = false;   // default = the ESP32's boot code
 row.innerHTML = [1, 2, 3].map(n => `<div><i></i>${n}</div>`).join('');   // numbered like the stickers on the breadboard
 const dots = [...row.querySelectorAll('i')];
 
-function build(c) {                    // [lit LED 0-2 or -1, ms]: LED 1 blinks digit 1 times, pause, LED 2 ..., long pause
+function build(c, T) {                 // [lit LED 0-2 or -1, ms]: LED 1 blinks digit 1 times, pause, LED 2 ..., long pause
   const s = [];
-  [...c].forEach((ch, i) => { for (let b = 0; b < +ch; b++) s.push([i, T.ON], [-1, b < +ch - 1 ? T.OFF : T.LED_GAP]); });
-  s[s.length - 1][1] = T.LOOP_GAP;
-  return s;
+  [...c].forEach((ch, i) => { for (let b = 0; b < +ch; b++) s.push([i, T.on], [-1, b < +ch - 1 ? T.off : T.gap]); });
+  s[s.length - 1][1] = T.loop;
+  return [s.pop(), ...s];              // a new pattern starts with the long dark pause, like the board, so the change shows
 }
-function set(c) {
-  if (!/^[1-5]{3}$/.test(c) || (c === code && steps)) return;   // same code again: don't restart mid-pattern
-  code = c; steps = build(c); total = steps.reduce((a, x) => a + x[1], 0); t0 = performance.now();
+function set(c, t = T) {
+  if (!/^[1-5]{3}$/.test(c) || (c === code && JSON.stringify(t) === JSON.stringify(T) && steps)) return;   // same again: don't restart mid-pattern
+  code = c; T = t; steps = build(c, T); total = steps.reduce((a, x) => a + x[1], 0); t0 = performance.now();
 }
 set(code);
 (function frame() {
@@ -43,12 +44,12 @@ function conn() {
                       ws.send(JSON.stringify({ t: 'evt', e: 'p3ask' })); };
   ws.onclose = () => { online = false; setTimeout(conn, 2000); };
   ws.onmessage = e => { const m = JSON.parse(e.data);
-    if (m.t === 'evt' && m.e === 'p3code') set(m.v.code); };
+    if (m.t === 'evt' && m.e === 'p3code') { const { code: c, on, off, gap, loop } = m.v; set(c, on ? { on, off, gap, loop } : T); } };
 }
 conn();
 document.body.onclick = () => document.documentElement.requestFullscreen?.().catch(() => {});
 
-// self-check: "312" = LED 0 three times, LED 1 once, LED 2 twice: the gap after each LED's last blink is LED_GAP, the very last is LOOP_GAP
-const c = build('312');
-console.assert(c.length === 12 && c[0][0] === 0 && c[5][1] === T.LED_GAP && c[6][0] === 1 && c[11][1] === T.LOOP_GAP, 'build() broken');
+// self-check: "312" = LED 0 three times, LED 1 once, LED 2 twice. It starts on the long dark pause; the gap after each LED's last blink is gap
+const c = build('312', T);
+console.assert(c.length === 12 && c[0][0] === -1 && c[0][1] === T.loop && c[1][0] === 0 && c[6][1] === T.gap && c[7][0] === 1, 'build() broken');
 </script>

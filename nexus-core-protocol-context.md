@@ -56,13 +56,13 @@ Players "upload their heads" into Aurora in order to stop her from within.
 |---|---|
 | 192.168.0.1 | the router |
 | 192.168.0.50 | P1 mask ESP32 (static, set in `secrets.h`) |
-| 192.168.0.51 | P3 hidden IR board (static) |
+| 192.168.0.51 | P3 hidden beacon board, 3 blue LEDs (static, `beacon_esp32/secrets.h`). On the walawifi backup: 192.168.1.51 |
 | 192.168.0.52 | P4 controller ESP32: knobs, fire wires, screen (static, `controller_esp32/secrets.h`). On the walawifi backup: 192.168.1.52 |
 | DHCP (was .142) | P2 Tuya bulb. No reservation: this router has none, so `bulb_bridge.py` finds the bulb by Tuya port 6668. See `puzzle2-system-power/SETUP.md` |
 | DHCP (was .125) | P2 hallway camera, Tapo C200 "NexusCam", MAC C0-06-C3-AF-97-F5. No reservation: this router has none, so `signup/camera.js` finds the camera by its ONVIF port 2020. See "Hallway camera" in `puzzle2-system-power/SETUP.md` |
 | 192.168.0.100-249 | everything else, from the router's DHCP: the 7 laptops, the phones. The hub's laptop has no fixed IP; every page finds it by searching the network |
 
-- The mask and the beacon only know NexusV (the walawifi/secretwifi backups were removed 2026-10-04, when the secrets went into the public repo). **The P4 controller is the exception** (user's request, later on 2026-10-04): NexusV first, and if it isn't connected within 4 s, **walawifi** (192.168.1.x, gateway .1.1) at **192.168.1.52**, trying each in turn (walawifi gets 10 s). game.html and the GM panel look for it at both .0.52 and .1.52. The laptops must be on the same network as the devices they use.
+- The mask only knows NexusV (the walawifi/secretwifi backups were removed 2026-10-04, when the secrets went into the public repo). **The P4 controller and the P3 beacon are the exceptions** (user's requests: P4 later on 2026-10-04, P3 on 2026-10-05): NexusV first, and if it isn't connected within 4 s, **walawifi** (192.168.1.x, gateway .1.1) at **192.168.1.52** (P3: **192.168.1.51**), trying each in turn (walawifi gets 10 s). P4's game.html and the GM panel look for the controller at both .0.52 and .1.52; P3's game.html pushes codes to both .0.51 and .1.51. The laptops must be on the same network as the devices they use.
 - `booth.bat` finds the laptop's network by itself (the first three numbers of its Wi-Fi IP; 192.168.0 if it can't tell), so pages search the right network for the hub on NexusV or walawifi. Switched Wi-Fi after starting a page: rerun its start.bat.
 - **Network → LAN** (checked 2026-10-02, leave as is): IP 192.168.0.1, mask 255.255.255.0, DHCP Server, start 100, 150 addresses (so .100-.249, clear of .50-.53), lease 1440 min.
 - **Network → Wireless, Advanced Setting** (checked 2026-10-02): bandwidth 20 MHz, channel 6, Tx power 100%, Maxassoc 256, FRAG 2346, RTS 2347, Rekey off, **Isolate off** (must stay off, or nothing can reach anything), WMM on, Shortgi on.
@@ -79,10 +79,10 @@ Players "upload their heads" into Aurora in order to stop her from within.
 No AIs (staff) involved.
 
 **Flow**
-1. Players open a video: a man says "THE PASSWORD IS BINARY" as Aurora catches him.
-2. Players open a binary translation sheet (digits 0-9 in 4 bits).
-3. Players notice the desktop wallpaper ("Think outside the box") and drag the cursor off the right edge of the screen.
-4. The cursor appears on the projected wall (laptop is in extended display mode, projector positioned to the right).
+1. The laptop shows a fake Windows desktop (`desktop.html`, decided 2026-10-04, replacing the real AURORA desktop, its video and binary sheet file). No start screen: it is just there when the team walks in.
+2. Players open its one app, **Binary Key**: the digits 0-9 in 4 bits, revealed each time it opens (a scan beam sweeps down, each row's bits scramble then lock, lit bits flash, the digit pops, then the example `0101 = 4 + 1 = 5` types out).
+3. Players notice the wallpaper ("Think outside the box", a mouse pointer pointing down) and move the cursor off the bottom edge of the screen.
+4. The cursor appears on the projected wall (extended display, projector arranged below the laptop). The two screens are separate kiosk windows; when the projector needs the keyboard and the laptop screen has it, the projector says CLICK HERE. The projector's reset also resets the desktop through the hub.
 5. Hovering the cursor over a physical mask mounted on the wall makes its LED eyes glow dim blue.
 6. Clicking the mask makes the eyes go full brightness and plays an "UPLOADING..." animation on the projection.
 7. Four random 4-bit binary groups appear (e.g., 0101 0011 1000 0010).
@@ -93,7 +93,7 @@ No AIs (staff) involved.
 **Materials (during the game)**
 - Physical mask prop
 - Printed binary sheet (backup for the digital file)
-- Files on laptop: Aurora video, binary translation sheet, "Think outside the box" wallpaper
+- Laptop screen: `desktop.html` (fake desktop, wallpaper, Binary Key app)
 - Projected HTML page: hover detection, click detection, upload animation, code check, reset function, hidden calibration mode for repositioning the hotspot over the mask
 - Mask electronics (hidden behind/inside the mask):
   - ESP32 DevKit with sketch (Wi-Fi client, PWM control on GPIO 25)
@@ -107,7 +107,7 @@ No AIs (staff) involved.
   - Diffusers (ping pong balls or translucent plastic) behind the eyeholes
 
 **Setup notes**
-- Laptop: sleep/lock disabled, no taskbar blocking the right screen edge.
+- Laptop: sleep/lock disabled, projector arranged below the laptop.
 - Mask ESP32 joins the same local router as the rest of the room.
 - Binary code is generated once per session (not re-randomized per click) so it stays in sync with the answer check.
 - Manual fallback key on laptop to force the glow+reveal sequence if click/Wi-Fi fails.
@@ -115,10 +115,10 @@ No AIs (staff) involved.
 
 **Hint ladder**
 1. "Aurora's reach goes beyond the screen."
-2. "Try moving the mouse past the edge of the desktop."
-3. "Look to the right of the laptop."
+2. "Try moving the mouse off the bottom of the screen."
+3. "Look at the wall: the mouse is on it now."
 4. "Click the mask."
-5. "Use the sheet to translate each group of 4 bits."
+5. "Open Binary Key on the laptop and match each group of 4 bits."
 
 **Still open / undecided**
 - Exact input method for the 4-digit code (on-screen box vs. physical keypad).
@@ -183,7 +183,7 @@ Replaces the old single Core Integrity % (decided 2026-09-28). Each game leaves 
 |---|---|---|---|
 | **SYNC** (higher = better) | P1 Brain Upload | 100 - 8 per wrong code - 12 per attack not mashed through in time, min 20 | `SYNC xx%` in the finale HUD drops each time a mash times out. The end line reads `SYNC xx%` |
 | **POWER** (higher = better) | P2 System Power | energy left at 30 s. Caught: energy - 15. Grid lost: 0. Every ending now advances the team | a tutorial line: "whatever power is left comes with you." The end line reads `POWER RESERVE xx%` |
-| **TRACE** (lower = better) | P3 Hidden Signal | the trace bar % at the win (bar fills over the 5:00 hunt; time-up = 100). Wrong code +5% | the AURORA TRACING YOU bar jumps on each mistake. The end line reads `TRACE xx%` |
+| **TRACE** (lower = better) | P3 Hidden Signal | the trace bar % at the win (bar fills over the 5:00 hunt, all 3 layers; time-up = 100). Wrong code +5% | the AURORA TRACING YOU bar jumps on each mistake. The end line reads `TRACE xx%` |
 | **HUMAN** (lower = better) | P4 Orbit Lock | 10 + 10 per missed shot + 0.4 per second past 30 s in each layer, max 100 | the HUMAN ERROR DETECTED meter jumps on every miss, and Aurora says "Machines don't miss." The end line reads `HUMAN xx% ▸ n MISSED` |
 
 - The hub (`hub/server.js`) keeps `{sync, power, trace, facts}` for the one team in the room. `null` = sector not played (staff skipped it).
@@ -201,7 +201,7 @@ Replaces the old single Core Integrity % (decided 2026-09-28). Each game leaves 
     - Header: HUB, SIGNUP (the GM reaches the signup server), KIOSK↔HUB (the kiosk page is in the hub roster as `signup`) and TV BOARD (optional, grey when closed). (DOSSIER is gone with room 5.)
     - P1 card: MASK. P1's 2 s eye resend reports whether the mask answered in the last 5 s (`status.mask`).
     - P2 card: BULB and CAMERA. The bulb bridge (device `strip`) probes the bulb with a read-only `status()` every 10 s when idle, and answers the hub's 1 s ping with `{t:'status', v:{bulb, ip}}`. The signup server runs `camera.js url` (it finds the camera) and pings go2rtc every 15 s, and adds `camera: {ip} | {ip: null} | {error}` to `/api/state`.
-    - P3 card: IR BEACON. P3's 3 s code push reports the board (`status.boards`: true / false / 'none'). A phone stand-in in the roster (`beacon-sim`) also counts as green.
+    - P3 card: BEACON. P3's 3 s code push reports the board (`status.boards`: true / false / 'none'). A phone stand-in in the roster (`beacon-sim`) also counts as green.
     - P4 card: CONTROLLER. The GM page pings the board itself every 2 s (`http://192.168.0.52/`, `?ctrl=` overrides), so the light works with the P4 game closed. Green = it answers on NexusV (and, if the P4 laptop is online, the game gets its readings: `status.ctrl`, over `status.ctrlVia` Wi-Fi/USB). Red = not answering (the hint says if the game is limping on the USB backup), or answering while the game gets no readings (reload the game).
   - **LINE box** (from the signup kiosk, `SIGNUP` in gm.html = `http://<hub host>:4000` by default; set the signup PC's IP if it runs elsewhere). It polls `GET /api/state` every 2 s and shows SOLD x/400, the groups left today, the group IN BOOTH with its player photos, the CALLING groups with the grace countdown, and the next 3 booked groups.
     - Buttons: CALL, SEND IN, NO-SHOW (POST `/api/status` with a text/plain body, so there's no CORS preflight; no PIN is needed).
@@ -226,32 +226,33 @@ Story thread: intercepting Aurora's hidden carrier signal (P3) exposes her heart
 ---
 
 ## PUZZLE 3: HIDDEN SIGNAL (replaces Signal Tuning)
-Quiet and observational. **5:00 hunt.** No AIs. The lateral jump: IR light is invisible to eyes but shows on phone cameras. Staff setup + wiring: `puzzle3-hidden-signal/SETUP.md`.
+Quiet and observational. **5:00 for 3 layers.** No AIs. The lateral jump (revamped 2026-10-04: the IR LEDs were too hard to see on camera, so the board now uses **blue LEDs**): the last layer blinks too fast for the eye, and only a phone's slow-motion video shows the count. Staff setup + wiring: `puzzle3-hidden-signal/SETUP.md`.
 
 **Flow** (`puzzle3-hidden-signal/game.html`, started with its `start.bat` on port 8002, same look as Puzzles 1-2)
 1. Standby "CARRIER OFFLINE ▸ AWAITING UPLINK" until Puzzle 2 sends `p2done` through the hub, then "PRESS SPACE TO START SEQUENCE".
-2. The CRT boots red. An intro terminal explains: Aurora broadcasts from inside this room; find the transmitter, 3 lights numbered 1 to 3; each light blinks its digit, one after another; 5 minutes.
-3. Aurora (green): "You'll never see it. Human eyes are so... limited." The hunt screen shows a live carrier scope, 3 code cells and an "AURORA TRACING YOU ▸ m:ss LEFT" bar that fills over 300 s.
-4. The board (3 IR LEDs in a row, labelled 1-3) is hidden. Players find it through their phone cameras. There is no decoy (dropped 2026-10-03: no spare ESP32).
-5. Pattern loop: light 1 blinks digit 1 times (250 ms on / 350 ms off), 1 s pause, light 2 blinks digit 2 times, light 3 blinks digit 3 times, then 3 s dark, repeat. Digits 1-5 only.
-6. A wrong code pushes the trace bar +5% and locks input for 2.5 s. During the hunt the screen fades much darker (`CFG.DIM` = 0.65, a black overlay) so its glow doesn't wash out the IR. Hints **glitch onto the screen** (text tears in with jitter, scrambled letters and RGB split, then vanishes, and repeats every 8-13 s): 100 s "THE DARKER IT IS, THE EASIER YOU'LL SEE", 190 s "USE YOUR FRONT CAMS".
-7. A correct code corrupts Aurora's voice, the scope turns into her green heartbeat (the lead-in to Puzzle 4), then "SIGNAL INTERCEPTED".
-8. At 5:00 time is up: "TRACE COMPLETE", TRACE = 100, and the team still moves on. Both endings send `p3done`.
-9. A new code is rolled on every reset (Ctrl+Alt+R reloads), so finished teams can't leak the answer.
+2. The CRT boots red. An intro terminal explains: Aurora broadcasts from inside this room; find the transmitter, 3 lights numbered 1 to 3; each light blinks its digit, one after another; 3 layers, each blinks faster; 5 minutes for all 3. It doesn't mention slow motion.
+3. Aurora (green): "You'll never see it. Human eyes are so... limited." The hunt screen shows a live carrier scope, `LAYER n/3` with 3 pips, 3 code cells and an "AURORA TRACING YOU ▸ m:ss LEFT" bar that fills over 300 s.
+4. The board (3 blue LEDs in a row, labelled 1-3) is hidden. There is no decoy (dropped 2026-10-03: no spare ESP32).
+5. Pattern loop: light 1 blinks digit 1 times, a gap, light 2, light 3, then a long dark pause, repeat. **Each layer has its own code and speed** (`CFG.ROUNDS`, ms on / off / gap / loop): layer 1 300/400/1200/3000 (easy to count), layer 2 100/120/1000/2500 (countable if you focus), layer 3 25/30/1000/2500 (each burst looks like one flash; 240 fps slow-mo shows each blink about 6 frames). These are starting values, to be tuned on the real LEDs. **Digits 2-5 only**, so 111 (layer 3 to the naked eye) is always wrong.
+6. A right code in layers 1-2: the cells flash green, Aurora speeds up ("Lucky. Faster, then." / "Now try counting."), a new code is rolled and pushed at once, and the board starts it after its long dark pause, so the change shows. The scope scrolls faster and its kHz readout rises each layer. Input reopens after `ROUND_MS` (2.6 s).
+7. A wrong code pushes the trace bar +5% and locks input for 2.5 s. In layer 3, **111** gets "One blink each? That's all I let you see." and brings the first hint at once (still counted as wrong). During the hunt the screen fades much darker (`CFG.DIM` = 0.65, a black overlay) so its glow doesn't wash out the lights. Hints (layer 3 only) **glitch onto the screen** (text tears in with jitter, scrambled letters and RGB split, then vanishes, and repeats every 8-13 s): 45 s into layer 3 "TOO FAST FOR HUMAN EYES", 90 s "FILM IT IN SLOW-MO".
+8. A correct layer 3 code corrupts Aurora's voice, the scope turns into her green heartbeat (the lead-in to Puzzle 4), then "SIGNAL INTERCEPTED".
+9. At 5:00 time is up: "TRACE COMPLETE", TRACE = 100, and the team still moves on. Both endings send `p3done`.
+10. New codes are rolled on every reset (Ctrl+Alt+R reloads), so finished teams can't leak the answer.
 
-**Staff keys** (Ctrl+Alt+): H help (shows code, board + hub status), U unlock, S start, K skip intro, I next hint now, F force the correct code, R reset, W replay win, M mute.
+**Staff keys** (Ctrl+Alt+): H help (shows code + layer, board + hub status), U unlock, S start, K skip intro, I next hint now, F force the win (all layers), R reset, W replay win, M mute. The GM card's ANSWER shows `code (layer/3)`.
 
-**Before the parts arrive**: open `http://<hub IP>:3000/beacon` on a phone (3 white lights). It gets the current code from game.html through the hub and blinks the same pattern as the ESP32. This uses visible light, so it tests the counting, not the camera trick.
+**Before the parts arrive**: open `http://<hub IP>:3000/beacon` on a phone (3 blue lights). It gets the current code and the layer's speed from game.html through the hub (`p3code` carries `{ code, on, off, gap, loop }`) and blinks the same pattern as the ESP32. A phone screen redraws only every ~17 ms, so layer 3 is rougher on it.
 
 **Materials**
-- 1 ESP32 (`puzzle3-hidden-signal/beacon_esp32/beacon_esp32.ino`): static IP 192.168.0.51, same network as the mask: NexusV). 3 IR LEDs (940 nm) on D32/D33/D25 sharing ONE 120R (or 2 x 120R = 60R) from their joined short legs to GND (safe because only one IR LED is ever lit), plus a red "not on Wi-Fi" LED on D27 with its own 120R, as on the mask. USB power bank.
-- game.html sends `GET /code?v=<code>` every 3 s. Without Wi-Fi the board keeps blinking its last code.
+- 1 ESP32 (`puzzle3-hidden-signal/beacon_esp32/beacon_esp32.ino`): static IP 192.168.0.51 on NexusV, or 192.168.1.51 on the walawifi backup, like the P4 controller). 3 blue 5 mm LEDs on D32/D33/D25 sharing ONE 120R (or 2 x 120R = 60R) from their joined short legs to GND (safe because only one LED is ever lit), plus a red "not on Wi-Fi" LED on D27 with its own 120R, as on the mask. USB power bank. Same wiring as the old IR board.
+- game.html sends `GET /code?v=<code>&on=&off=&gap=&loop=` every 3 s and at once on a layer change. **The timing lives only in `CFG.ROUNDS`**: the board and the phone stand-in follow whatever they're sent (the board clamps on/off 10-2000, gap 100-5000, loop 300-10000; a missing value keeps the current one), so tuning never needs a reflash. Without Wi-Fi the board keeps blinking its last pattern. It boots on 324 at layer 1 speed.
 - Before the board exists, a phone on `/beacon` stands in.
-- Camera caveat: many iPhone rear cameras filter IR; the selfie camera usually sees it. Test staff phones and keep a known-good loaner.
+- Phone caveat: players need real slow motion (iPhone SLO-MO, Android "Slow motion"). Some cheap phones fake it by blending frames. Keep a known-good staff loaner.
 
-**Hint ladder** (auto: glitched onto the screen; GM can say them too)
-1. "The darker it is, the easier you'll see."
-2. "Use your front cams."
+**Hint ladder** (auto in layer 3: glitched onto the screen; GM can say them too)
+1. "Too fast for human eyes."
+2. "Film it in slow-mo."
 
 ---
 
@@ -277,7 +278,7 @@ Screen plus **two ring controllers** (an ESP32 + one B100k pot each, each on its
 
 **HUMAN** (lower is better) = 10 + 10 per missed shot + 0.4 per second past 30 s in each layer, max 100. Live on the HUMAN ERROR DETECTED meter (bottom left).
 
-**Staff keys** (Ctrl+Alt+): H help (layer, misses, hub status, each controller's status + live mV), P pair one more ring controller, U unlock, S start, K skip intro, I this layer's hint now, N clear this layer (lines up a clean shot and fires), F force the win (jumps to the last layer's hit), R reset, W replay win, M mute. N and F work while a layer is being played. The GM panel keeps UNLOCK / FORCE WIN / RESET.
+**Staff keys** (Ctrl+Alt+): H help (layer, misses, hub status, each controller's status + live mV), P pair one more ring controller, U unlock, S start, K skip intro, I this layer's hint now, N clear this layer (lines up a clean shot and fires), F force the win (jumps to the last layer's hit), R reset, W replay win, M mute, **B jump straight to game 5's MIRRORS** (testing: starts the finale for real on every laptop and fast-forwards room 4 past the crash, the map and its SPACE; NEW TEAM or FINISH RUN ends it). N and F work while a layer is being played. The GM panel keeps UNLOCK / FORCE WIN / RESET.
 
 **Tuning knobs** (`CFG` in the page): ROUNDS (gap, drift, dogs, move, line, hint per layer), POT_DEG (match the real pots), POT_MV (pot calibration), TURN (keyboard knob speed), CHARGE_MS, COOLDOWN_MS, START, MISS_D, PAR_S, SLOW_PER_S, HINT_AT, ASSIST_AT, ASSIST_DEG, BEAT_VOL.
 
@@ -318,7 +319,7 @@ Booth layout (the user's floor plan): room 1 bottom right (entrance, projector),
    |---|---|---|---|
    | BINARY | 1 | decode each 4-bit group into its digit; the table is on screen; a wrong digit re-rolls that group | SYNC: 2 / 3 / 4 groups (70+ / 40+ / less) |
    | WORDS | 2 | 5 rounds of one really difficult word; a wrong letter is refused | POWER below 50: game 2's hardest tier, else the one below |
-   | CROSSHAIR | 4 (never moves) | outer knob = left/right, inner knob = up/down (A/D, W/S stand in); hold the crosshair on her green dot 0.9 s, 5 catches; she dodges, stalls now and then, tires after 20 s | HUMAN: her speed |
+   | MIRRORS (task id `cross`) | 4 (never moves) | opens as game 4, **still**: her heart in both rings, the laser at the bottom. The first try to fire (wires or SPACE) and Aurora says "YOU DON'T NEED THIS ANYMORE." and shatters the rings (decided 2026-10-04). Then a mirror slides in on each side: the **outer knob turns the left mirror, the inner knob the right one** (knob travel = half a mirror turn; A/D and ◄/► stand in). The laser always fires at the left mirror; bounce it off the right mirror into her core: her shield faces left, so a shot straight from the left mirror is blocked. A live laser sight shows the whole bounce path, white when it ends in her core. Hold the wires (or SPACE) 0.9 s to fire, as in game 4; the controller's screen flashes FIRE. 5 hits; each hit moves her core and both mirrors (every layout is checked to have a solution). A miss costs nothing but a taunt | HUMAN: her core and the mirrors get smaller |
    The first task finished makes her jump: **rooms 1 and 2 trade tasks** once, progress kept (`SHE'S MOVING`). A finished room goes red: `PURGED`, then `STAY HERE ▸ SHE'S STILL IN SECTOR ...`.
 6. **Regroup.** All three done: every room says `BACK TO THE MAP`. At the map: `SHE'S CORNERED ▸ EVERYONE BACK HERE ▸ THEN PRESS SPACE`.
 7. **Briefing (room 3).** Undertale box: "you can't kill me from one room." Then the players' red terminal: one person in rooms 1, 2 and 4, everyone else counts down out loud at the map, on zero SPACE (rooms 1, 4) / the big ENTER key (room 2).

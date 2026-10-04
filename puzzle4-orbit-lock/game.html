@@ -245,6 +245,7 @@ Ctrl+Alt+F  force the win (team stuck / running late)
 Ctrl+Alt+R  reset for next team (locks again)
 Ctrl+Alt+W  replay only the win screen
 Ctrl+Alt+E  skip to the ending: the fake win, then game 5 starts for real
+Ctrl+Alt+B  jump straight to game 5's MIRRORS (testing; starts the finale on every laptop, GM NEW TEAM ends it)
 Ctrl+Alt+M  mute / unmute</div>
 
 <script>
@@ -1463,6 +1464,7 @@ addEventListener('keydown', ev => {
     if (ev.code === 'KeyR') location.reload();
     if (ev.code === 'KeyW') { location.hash = 'win'; location.reload(); }
     if (ev.code === 'KeyE') { location.hash = 'end'; location.reload(); }
+    if (ev.code === 'KeyB') window.BOSS?.mirrors?.();   // game 5's MIRRORS, straight away (boss.js from the hub)
     if (ev.code === 'KeyM') { muted = !muted; store.set('muted', muted); master.gain.value = muted ? 0 : CFG.VOLUME;
       Object.values(tracks).forEach(a => a.muted = muted); }
     return;
