@@ -146,10 +146,8 @@ The effects (power-on flicker, wrong-code stutter, layer sweep, heartbeat, time-
    - Typing a digit makes the lens above it blink that number back.
 4. Right code in layers 1-2: the boxes and lenses turn green, the board sweeps and fades, Aurora speeds up ("Lucky. Faster, then." / "Now try counting."), then the next layer's banner. The board starts the new, faster code after a dark pause.
 5. Wrong code: +5% trace, 2.5 s lock, the board and the lenses stutter red, and the board starts its code over from light 1.
-6. Layer 3 hints glitch onto the screen: the text tears in for a moment (jitter, scrambled letters, RGB split), then vanishes, and keeps flashing back every 8-13 s.
-   - 0:40 into layer 3: **YOUR PHONE SEES WHAT YOU CAN'T**
-   - 1:20 into layer 3: **FILM IT IN SLOW-MO**
-   - Typing **111** in layer 3 (what it looks like to the eye) gets "One blink each? That's all I let you see." and the first hint right away. It still counts as a wrong code.
+6. Layer 3 has one hint, **MAYBE TRY A SLOW-MOTION CAMERA**. It glitches onto the screen 15 s into layer 3, or right after the first wrong code there, whichever comes first. The text tears in for a moment (jitter, scrambled letters, RGB split), then vanishes, and keeps flashing back every 8-13 s.
+   - Typing **111** in layer 3 (what it looks like to the eye) also gets "One blink each? That's all I let you see." It still counts as a wrong code.
 7. Right code in layer 3: her heartbeat comes through the scope, the lenses and the real board (5 beats), then the board goes dark and **SIGNAL INTERCEPTED**.
 8. Time up at 5:00: the board strobes, **TRACE COMPLETE**, TRACE 100%. The team still moves on to puzzle 4.
 
@@ -175,7 +173,7 @@ Timings are in `CFG` / `T` at the top of `game.html`:
 - `TUT_SPEED` = the training's demo speed (`T.goal` = how long its last card stays up);
 - `TRACE_S` = the 5:00 clock;
 - `DIM` = how dark the hunt screen gets;
-- `HINTS` / `HINT_EVERY` = when each layer 3 hint glitches in and how often it comes back.
+- `HINTS` / `HINT_EVERY` = when the layer 3 hint glitches in and how often it comes back.
 
 ## Sound files
 Drop these into `sounds/` (mp3). Any missing file is skipped. The background music (game3.mp3) is the GM panel's soundtrack, in `hub/public/sounds/`.

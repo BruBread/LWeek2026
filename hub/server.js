@@ -1,6 +1,6 @@
 // NEXUS hub: static pages + WebSocket relay. Run: node server.js
 const http = require('http'), fs = require('fs'), path = require('path'), os = require('os');
-const { execFile } = require('child_process'), { promisify } = require('util');
+const { execFile, spawn } = require('child_process'), { promisify } = require('util');
 const { WebSocketServer } = require('ws');
 const scenes = require('./scenes');
 
@@ -16,6 +16,8 @@ const server = http.createServer((req, res) => {
   // the room pages search the network for this answer to find the hub (findHub() in each page)
   if (p === '/ping') return res.writeHead(200, { 'Access-Control-Allow-Origin': '*' }).end('nexus-hub');
   if (p === '/sfx' || p === '/sfx/push') return sfx(req, res, p);
+  if (p === '/update' && req.method === 'POST') return updateAll(res);
+  if (p === '/update/bundle') return bundle(res, new URL(req.url, 'http://x').searchParams.get('have'));
   p = p === '/'? '/gm.html' : /\.\w+$/.test(p) ? p : p + '.html';
   const f = path.join(PUB, path.normalize(p));
   if (!f.startsWith(PUB)) return res.writeHead(403).end();
@@ -72,6 +74,33 @@ async function sfxPush() {
   if (await sh('git', ['rev-parse', 'HEAD']) === base) { await sh('git', ['reset', '--soft', c]); await sh('git', ['reset', '-q', '--', 'public/sfx']); }
   log(`sfx saved to GitHub (${c.slice(0, 7)})`);
   return `Saved to GitHub (${sfxList().length} sounds).`;
+}
+
+// ===== UPDATE ALL LAPTOPS: every laptop with a page on this hub copies this laptop's version of the game (its last
+// commit) through hub/updater.js, which booth.bat runs on each one. Over the booth Wi-Fi, so NexusV's lack of internet
+// doesn't matter. The updater asks /update/bundle?have=<its commit> for only the commits it lacks =====
+const UPD = +process.env.UPDATER_PORT || 3001;   // only the tests change it
+let updating = false;
+async function updateAll(res) {
+  if (updating) return json(res, 409, { msg: 'Already updating.' });
+  updating = true;
+  try {
+    const head = await sh('git', ['log', '-1', '--format=%h %s']).catch(() => { throw "This laptop's copy has no git history (a ZIP?): it can't send updates."; });
+    const at = {};
+    wss.clients.forEach(c => c.id && c.role !== 'device' && (at[c.ip] ||= []).push(c.id));   // devices = ESP32s and bridges
+    const laptops = await Promise.all(Object.entries(at).map(([ip, ids]) =>
+      fetch(`http://${ip}:${UPD}/update`, { method: 'POST', body: String(PORT) }).then(async r => [r.ok, await r.text()],
+        e => [false, `no updater answering (${e.cause?.code || e.message}): run any start.bat on it once`])
+        .then(([ok, msg]) => ({ ip, ids, ok, msg }))));
+    log(`update all: ${laptops.map(l => `${l.ip} ${l.msg}`).join('; ')}`);
+    json(res, 200, { head, laptops });
+  } catch (e) { json(res, 500, { msg: String(e) }); } finally { updating = false; }
+}
+async function bundle(res, have) {
+  const known = /^[0-9a-f]{40}$/.test(have) && await sh('git', ['cat-file', '-e', have + '^{commit}']).then(() => true, () => false);
+  if (known && await sh('git', ['merge-base', '--is-ancestor', 'HEAD', have]).then(() => true, () => false)) return res.writeHead(204).end();
+  const g = spawn('git', ['bundle', 'create', '-', 'HEAD', ...(known ? ['^' + have] : [])], { cwd: __dirname });
+  res.writeHead(200, { 'Content-Type': 'application/octet-stream' }); g.stdout.pipe(res);   // a failed bundle = an empty body, which the updater's fetch reports
 }
 
 const send = (ws, o) => ws.readyState === 1 && ws.send(JSON.stringify(o));
@@ -227,6 +256,8 @@ const addrMsg = () => ({ t: 'addr', hub: myIPs(), signup: signupIP });
 const wss = new WebSocketServer({ server, path: '/ws' });
 wss.on('connection', (ws, req) => {
   ws.alive = true; ws.on('pong', () => ws.alive = true);
+  ws.ip = req.socket.remoteAddress.replace(/^::ffff:/, '');
+  if (/^(127\.|::1$)/.test(ws.ip) || myIPs().includes(ws.ip)) ws.ip = '127.0.0.1';   // this laptop, however it connected
   ws.on('message', raw => {
     let m; try { m = JSON.parse(raw); } catch { return; }
     if (m.t === 'hello') {
@@ -236,7 +267,7 @@ wss.on('connection', (ws, req) => {
       if (ws.role === 'fin') send(ws, finMsg());
       if (ws.role === 'page') { send(ws, runMsg()); send(ws, finMsg()); send(ws, historyMsg()); if (/^gm/.test(ws.id)) Object.entries(status).forEach(([id, v]) => send(ws, { t: 'status', id, v })); }
       if (/^puzzle\d$/.test(ws.id)) unlocks().forEach(e => send(ws, { t: 'evt', id: 'hub', e }));
-      if (ws.id === 'signup') { const a = req.socket.remoteAddress.replace(/^::ffff:/, ''); signupIP = /^(127\.|::1$)/.test(a) ? null : a; toPages(addrMsg()); }
+      if (ws.id === 'signup') { signupIP = ws.ip === '127.0.0.1' ? null : ws.ip; toPages(addrMsg()); }
       else if (ws.role === 'page') send(ws, addrMsg());
       toPages(roster());
     } else if (m.t === 'status' && ws.id) { status[ws.id] = m.v; toGM({ t: 'status', id: ws.id, v: m.v }); }   // every 1 s from each room: GM only, no log line

@@ -132,7 +132,7 @@ th { color: var(--dim); font-size: 11px; } td.win { color: var(--g); }
   <div><div class="lbl" id="limit"></div><div id="clock">--:--</div><button id="go" class="white" hidden onclick="startClock()">START CLOCK NOW</button></div>
   <div id="acts">
     <div class="row"><input id="tname" placeholder="TEAM NAME" maxlength="40"><button class="pri" onclick="newTeam()">NEW TEAM</button></div>
-    <div class="row"><button onclick="finish()">FINISH RUN</button><button onclick="resetAll()" title="Save this run, mark the group done, every room back to its start, hallway light off, call the next group">RESET ALL ROOMS</button><button class="white" onclick="scene('safe')" title="Every light on, now (the hallway bulb goes white)">LIGHTS ON</button><button class="white" onclick="camShow(!camOn)" title="Game 2's hallway camera">CAMERA</button></div>
+    <div class="row"><button onclick="finish()">FINISH RUN</button><button onclick="resetAll()" title="Save this run, mark the group done, every room back to its start, hallway light off, call the next group">RESET ALL ROOMS</button><button class="white" onclick="scene('safe')" title="Every light on, now (the hallway bulb goes white)">LIGHTS ON</button><button class="white" onclick="camShow(!camOn)" title="Game 2's hallway camera">CAMERA</button><button class="white" onclick="updateAll(this)" title="Every laptop with a game page open gets this laptop's version of the game">UPDATE ALL SYSTEMS</button></div>
   </div>
 </div>
 
@@ -530,6 +530,22 @@ async function sfxSave() {
   put($('#sfxmsg'), 'SAVING TO GITHUB…');
   try { put($('#sfxmsg'), (await sfxApi('/push', { method: 'POST' })).msg.toUpperCase()); } catch (msg) { put($('#sfxmsg'), ''); alert('Not saved: ' + msg); }
 }
+// ===== UPDATE ALL SYSTEMS: every laptop with a page on the hub copies this laptop's version of the game over the booth
+// Wi-Fi (hub\updater.js, started by every start.bat). Like Update.bat on each one, but from here instead of GitHub =====
+async function updateAll(btn) {
+  const warn = run.team && run.end == null ? `\n\n${run.team} is mid-run: better between groups.` : '';
+  if (!confirm("UPDATE ALL SYSTEMS?\n\nEvery laptop with a game page open gets THIS laptop's version of the game (no internet needed). " +
+    'Edits made on those laptops are lost (camera aim too). Can take a few minutes.\n\nFor GitHub\'s newest version: run Update.bat on THIS laptop first, with internet.' + warn)) return;
+  put(btn, 'UPDATING…'); btn.disabled = true;
+  try {
+    const r = await fetch('update', { method: 'POST' }), b = await r.json();
+    if (!r.ok) throw b.msg;
+    alert(`Version sent: ${b.head}\n\n` + b.laptops.map(l => `${l.ok ? 'OK ' : 'NO '} ${l.ids.join(', ')} (${l.ip}): ${l.msg}`).join('\n') +
+      '\n\nRESET ALL ROOMS loads it in the rooms. The signup kiosk and the bridges load it when their start.bat runs again.');
+  } catch (msg) { alert('Not updated: ' + (msg.message || msg)); }
+  put(btn, 'UPDATE ALL SYSTEMS'); btn.disabled = false;
+}
+
 addEventListener('focus', loadPads);   // files copied into the folder show up when you come back to this window
 loadPads();
 

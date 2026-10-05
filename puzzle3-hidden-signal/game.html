@@ -312,11 +312,10 @@ const CFG = {
   LOCK_MS: 2500,             // input locked this long after a wrong code
   TRACE_S: 300,              // the hunt clock: the trace bar fills over this many seconds, then time is up (TRACE 100%, team moves on)
   // hints glitch onto the screen at these seconds into the LAST round (rounds 1-2 need none); Ctrl+Alt+I shows the next one early.
-  // Typing 111 there (what it looks like to the eye) brings the first one at once.
+  // A wrong code there brings the first one at once.
   // After it first appears, the latest hint glitches back every HINT_EVERY ms so nobody misses it
   HINTS: [
-    { at: 40, text: "YOUR PHONE SEES WHAT YOU CAN'T" },
-    { at: 80, text: 'FILM IT IN SLOW-MO' },
+    { at: 15, text: 'MAYBE TRY A SLOW-MOTION CAMERA' },
   ],
   HINT_EVERY: [8000, 13000],   // random gap between repeat glitches (ms)
   HINT_FIRST_MS: 2600,         // how long the first glitch of a new hint lasts...
@@ -891,13 +890,13 @@ async function check() {
   mode = 'check';
   if (entry === CODE) return round < LAST ? nextLayer() : win();
   wrong++;
-  const trap = round === LAST && entry === TRAP;   // they counted with their eyes: she gloats, and the first hint follows
+  const trap = round === LAST && entry === TRAP;   // they counted with their eyes: she gloats
   tracePen += CFG.WRONG_TRACE; renderTrace();   // she hears them: the trace jumps
   $('#bar').animate([{ color: '#fff', filter: 'brightness(2.5)' }, {}], 700); shake($('#bar'), 10, 400);
   sfx.buzz(); spike = 1.2; $('#dec').classList.add('bad'); shake(scr, 12, 420);
   fx('wrong');                                     // the board stutters, then starts its code over from light 1
   aurora(trap ? AUR.trap : any(AUR.wrong), T.auroraHold);
-  if (trap && !hintN) setTimeout(() => hintN || showHint(), 1800);
+  if (round === LAST && !hintN) setTimeout(() => hintN || showHint(), 1800);   // any mistake in the last layer: the hint, now
   await wait(450);
   $('#dec').classList.replace('bad', 'lock');
   await wait(CFG.LOCK_MS);

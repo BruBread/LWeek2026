@@ -8,6 +8,10 @@ rem Switched Wi-Fi after starting? Close the game window and run its start.bat a
 set NET=192.168.0
 for /f "usebackq delims=" %%n in (`powershell -NoProfile -Command "(Get-NetIPConfiguration | Where-Object IPv4DefaultGateway).IPv4Address.IPAddress | Where-Object { $_ -notlike '169.254.*' } | Select-Object -First 1 | ForEach-Object { ($_ -split '\.')[0..2] -join '.' }"`) do set NET=%%n
 
+rem The GM panel's UPDATE ALL SYSTEMS button reaches this laptop through this helper (hub\updater.js, keep its window open).
+rem Only one runs: the copy a second start.bat opens quits by itself.
+start "nexus-updater" /min node "%~dp0hub\updater.js"
+
 rem Keep every booth laptop awake while plugged in or on battery: a sleeping laptop drops out of the game.
 for %%s in (standby-timeout-ac standby-timeout-dc monitor-timeout-ac monitor-timeout-dc) do powercfg /change %%s 0 >nul 2>&1
 

@@ -7,7 +7,7 @@ const WebSocket = require('ws'), assert = require('assert'), { spawn } = require
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-hub-'));
 let hub;
 const startHub = () => new Promise((ok, bad) => {
-  hub = spawn(process.execPath, [path.join(__dirname, 'server.js')], { env: { ...process.env, PORT: '3999', RUNS: path.join(tmp, 'runs.jsonl'), RUN: path.join(tmp, 'run.json'), SFX: path.join(tmp, 'sfx') } });
+  hub = spawn(process.execPath, [path.join(__dirname, 'server.js')], { env: { ...process.env, PORT: '3999', RUNS: path.join(tmp, 'runs.jsonl'), RUN: path.join(tmp, 'run.json'), SFX: path.join(tmp, 'sfx'), UPDATER_PORT: '3998' } });
   hub.stdout.once('data', () => ok());
   hub.once('exit', c => bad(new Error(`hub exited (${c}). Is something already on :3999?`)));
 });
@@ -194,6 +194,24 @@ const unlocked = (w, e) => w.msgs.some(m => m.t === 'evt' && m.e === e);
   assert.strictEqual(fs.readFileSync(path.join(tmp, 'sfx', 'Air-Horn-.MP3'), 'utf8'), 'abc', 'the body is the file');
   assert.strictEqual((await sfx('?f=evil.html', { method: 'POST', body: 'x' }))[0], 400, 'only audio files');
   assert.deepStrictEqual(await sfx('?f=Air-Horn-.MP3', { method: 'DELETE' }), [200, []], 'deleted');
+
+  // UPDATE ALL SYSTEMS: an updater (on :3998, updating a temp clone one commit behind) gets the hub's version; never backwards
+  const { execFileSync } = require('child_process'), dest = path.join(tmp, 'LWeek2026'), head = d => execFileSync('git', ['-C', d, 'rev-parse', 'HEAD']).toString().trim();
+  execFileSync('git', ['clone', '-q', path.join(__dirname, '..'), dest]); execFileSync('git', ['-C', dest, 'reset', '-q', '--hard', 'HEAD~1']);
+  const upd = spawn(process.execPath, [path.join(__dirname, 'updater.js')], { env: { ...process.env, PORT: '3998', DEST: dest } });
+  await new Promise(r => upd.stdout.once('data', r));
+  await open('puzzle1', 'page'); await open('strip', 'device');   // the clone above blocked this test long enough for the hub to drop its sockets
+  const updateAll = () => fetch('http://localhost:3999/update', { method: 'POST' }).then(r => r.json());
+  let u = await updateAll();
+  assert.strictEqual(u.laptops.length, 1, 'one laptop (this one, however its pages connected); devices left out');
+  assert(u.laptops[0].ok && /^updated/.test(u.laptops[0].msg), 'updated: ' + u.laptops[0].msg);
+  assert.strictEqual(head(dest), head(__dirname), "the laptop is on the hub's version");
+  assert(/already/.test((await updateAll()).laptops[0].msg), 'a second time: nothing to send');
+  execFileSync('git', ['-C', dest, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'newer']);
+  const newer = head(dest);
+  assert(/newer/.test((u = await updateAll()).laptops[0].msg), 'a laptop ahead of the hub: ' + u.laptops[0].msg);
+  assert.strictEqual(head(dest), newer, '...is never moved backwards');
+  upd.kill();
 
   // Aurora's voice (public/voice.js): a game's text finds the script line's clip, also where the two differ
   global.window = {}; global.document = { currentScript: { src: 'http://localhost:3999/voice.js' } };
