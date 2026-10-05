@@ -82,7 +82,7 @@ input { font: inherit; color: #fff; background: #000; border: 1px solid rgba(255
 .res { display: flex; justify-content: space-between; align-items: center; gap: 8px; border-top: 1px solid rgba(255,51,68,.2); padding-top: 8px; margin-top: 4px; }
 .res b { color: #fff; }
 .keys { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.say { display: flex; gap: 6px; margin-top: 8px; } .say input { flex: 1; width: auto; min-width: 0; }
+.say { display: flex; gap: 6px; margin-top: 8px; } .say input { flex: 1; width: auto; min-width: 0; } .say select { font: inherit; color: #fff; background: #000; border: 1px solid rgba(255,51,68,.6); width: 90px; }
 .room.alarm { animation: alarm 1s steps(1) infinite; }
 @keyframes alarm { 50% { background: #4a0008; } }
 
@@ -164,30 +164,6 @@ th { color: var(--dim); font-size: 11px; } td.win { color: var(--g); }
   <div class="box"><span class="lbl">RUN HISTORY (POINT AT A ROW FOR ROOM TIMES + HINTS)</span><div id="hist"></div><span class="lbl" id="phones"></span></div>
   </div>
   <div class="box" id="line"></div>
-  <datalist id="says-puzzle3">
-    <option value="THE LIGHTS ARE IN THIS ROOM">
-    <option value="DON'T WATCH THE SCREEN. LOOK AROUND">
-    <option value="EACH LIGHT BLINKS ITS NUMBER">
-    <option value="WAIT FOR THE DARK PAUSE, THEN COUNT">
-    <option value="COUNT LIGHT 1, THEN 2, THEN 3">
-    <option value="COUNT OUT LOUD TOGETHER">
-  </datalist>
-  <datalist id="says-puzzle4">
-    <option value="POINT BOTH KNOB MARKS AT THE LASER">
-    <option value="BOTH RINGS MUST SAY LOCKED, THEN FIRE">
-    <option value="TOUCH THE WIRES AND KEEP HOLDING">
-    <option value="WAIT FOR THE WATCHDOG TO PASS">
-    <option value="SWAP WHO IS ON THE KNOBS">
-    <option value="AIM FIRST: EVERY MISS MOVES YOUR LASER">
-  </datalist>
-  <datalist id="says-puzzle1">
-    <option value="MOVE THE MOUSE DOWN">
-    <option value="CLICK THE GLOWING MASK">
-    <option value="OPEN BINARY KEY">
-    <option value="LOOK UP THE WALL'S CODE IN BINARY KEY">
-    <option value="CLICK THE WALL, TYPE THE CODE">
-    <option value="MASH ANY KEY!">
-  </datalist>
   <div class="box" id="cam" hidden><div class="hd"><span class="lbl">HALLWAY CAMERA ▸ ROOM 02</span><button class="quiet" onclick="camShow(false)">HIDE</button></div><iframe title="hallway camera"></iframe><div class="msg"></div></div>
 </div>
 
@@ -305,6 +281,12 @@ function drawFlow() {
 }
 
 // ===== One card per room. Built once and only their text changes, so a click never lands on a rebuilt button =====
+// preset messages: picking one fills the message box, where the GM can still edit it or type their own
+const SAYS = {
+  puzzle3: ["THE LIGHTS ARE IN THIS ROOM", "DON'T WATCH THE SCREEN. LOOK AROUND", "EACH LIGHT BLINKS ITS NUMBER", "WAIT FOR THE DARK PAUSE, THEN COUNT", "COUNT LIGHT 1, THEN 2, THEN 3", "COUNT OUT LOUD TOGETHER"],
+  puzzle4: ["POINT BOTH KNOB MARKS AT THE LASER", "BOTH RINGS MUST SAY LOCKED, THEN FIRE", "TOUCH THE WIRES AND KEEP HOLDING", "WAIT FOR THE WATCHDOG TO PASS", "SWAP WHO IS ON THE KNOBS", "AIM FIRST: EVERY MISS MOVES YOUR LASER"],
+  puzzle1: ["MOVE THE MOUSE DOWN", "CLICK THE GLOWING MASK", "OPEN BINARY KEY", "LOOK UP THE WALL'S CODE IN BINARY KEY", "CLICK THE WALL, TYPE THE CODE", "MASH ANY KEY!"],
+};
 $('#rooms').innerHTML = ROOMS.map((r, i) => `
   <div class="box room" id="${r.id}">
     <h3><span>SECTOR 0${i + 1} ▸ <b>${r.name}</b></span></h3>
@@ -315,7 +297,7 @@ $('#rooms').innerHTML = ROOMS.map((r, i) => `
     <div class="segs ${r.aur ? 'aur' : ''}">${'<i></i>'.repeat(25)}</div>
     <div class="code"></div>
     <div class="res"><span><span class="lbl">TO THE FINALE</span><br><b class="rv"></b></span>${r.say ? '' : `<button class="quiet" data-hint title="A hint costs the team this much">HINT ${r.hint > 0 ? '+' : ''}${r.hint} ${r.k.toUpperCase()}</button>`}</div>
-    ${r.say ? `<div class="say"><input list="says-${r.id}" maxlength="60" placeholder="MESSAGE: FLASHES 2 s ON ${r.say.length > 1 ? 'LAPTOP + WALL' : 'THEIR SCREEN'}"><button data-say title="Every message is a hint">SEND ${r.hint > 0 ? '+' : ''}${r.hint} ${r.k.toUpperCase()}</button></div>` : ''}
+    ${r.say ? `<div class="say"><select title="Fills the message box"><option value="">PRESET…</option>${SAYS[r.id].map(v => `<option>${esc(v)}</option>`).join('')}</select><input maxlength="60" placeholder="MESSAGE: FLASHES 2 s ON ${r.say.length > 1 ? 'LAPTOP + WALL' : 'THEIR SCREEN'}"><button data-say title="Every message is a hint">SEND ${r.hint > 0 ? '+' : ''}${r.hint} ${r.k.toUpperCase()}</button></div>` : ''}
     <div class="keys">${r.keys.map(([c, l]) => `<button data-key="${c}" class="${c === 'KeyR' ? 'quiet' : ''}" title="${esc(TIPS[l] || '')}">${l}</button>`).join('')}</div>
   </div>`).join('');
 ROOMS.forEach(r => $('#' + r.id).onclick = e => {
@@ -353,6 +335,7 @@ function say(r) {
   inp.value = ''; inp.placeholder = 'SENT: ' + v;
 }
 ROOMS.filter(r => r.say).forEach(r => $(`#${r.id} .say input`).onkeydown = e => e.key === 'Enter' && say(r));
+ROOMS.filter(r => r.say).forEach(r => $(`#${r.id} .say select`).onchange = e => { const inp = $(`#${r.id} .say input`); inp.value = e.target.value; e.target.value = ''; inp.focus(); });
 const WORD = { clear: 'CLEARED', off: 'OFFLINE', ready: 'READY', locked: 'LOCKED', playing: 'PLAYING' };
 function drawRooms() {
   ROOMS.forEach((r, i) => {
