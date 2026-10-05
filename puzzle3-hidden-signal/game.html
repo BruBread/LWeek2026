@@ -439,14 +439,16 @@ function counter() {
 
 // the board: the loop is pushed every PUSH_MS (that's also how the GM panel knows it's alive); effects go out once.
 // Fire-and-forget like the mask, so a dead ESP32 never stalls the game. boards.beacon = did it answer the last push
-// (true / false / 'none' = no IPs set: a phone stands in)
+// (true / false / 'old' / 'none' = no IPs set: a phone stands in). 'old' = it answers but isn't beacon_esp32.ino's /play
+// sketch: an older one ignores /play and blinks its own built-in code forever, so it must not look fine
 const boards = {};
 let loopStr = '';
 function pushBoard() {
   if (!CFG.BEACON_IPS.length) { boards.beacon = 'none'; return $('#hbeacon').textContent = 'none (phone stand-in)'; }
-  const c = new AbortController(); setTimeout(() => c.abort(), 1500);
-  Promise.any(CFG.BEACON_IPS.map(ip => fetch(`http://${ip}/play?p=${loopStr}`, { mode: 'no-cors', signal: c.signal })))
-    .then(() => { boards.beacon = true; $('#hbeacon').textContent = 'OK'; }, () => { boards.beacon = false; $('#hbeacon').textContent = 'OFFLINE'; });
+  const get = mode => Promise.any(CFG.BEACON_IPS.map(ip => fetch(`http://${ip}/play?p=${loopStr}`, { mode, signal: AbortSignal.timeout(1500) })));
+  get('cors').then(r => r.text()).then(t => t === 'ok' || Promise.reject())        // only the current sketch lets us read its "ok"
+    .catch(() => get('no-cors').then(() => 'old', () => false))
+    .then(b => { boards.beacon = b; $('#hbeacon').textContent = b === true ? 'OK' : b ? 'OLD SKETCH: upload beacon_esp32.ino again' : 'OFFLINE'; });
 }
 const sendLoop = () => hubSend({ t: 'evt', e: 'p3play', v: { p: loopStr } });   // the phone stand-in
 function setLoop(steps) { loopStr = enc(steps); pushBoard(); sendLoop(); }

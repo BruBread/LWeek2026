@@ -239,6 +239,7 @@ line the corner brackets up with the projector edges
 
 Ctrl+Alt+F  force capture (if click or mask fails)
 Ctrl+Alt+B  blink the mask eyes (hint)
+Ctrl+Alt+D  stuck hint now (DRAG THE MOUSE DOWN + red LED)
 Ctrl+Alt+R  reset for next team (new code)
 Ctrl+Alt+P  replay the sequence (timing tests)
 Ctrl+Alt+W  replay only the win / mind upload
@@ -253,6 +254,8 @@ const CFG = {
   DUST: 140,                 // particles sucked into the mask after the click; lower if the booth laptop stutters
   RAIN_CELL: 18,             // px per character in the collapse; smaller = more mask detail, bigger = faster
   NODES: 38,                 // network nodes in the finale
+  HINT_AFTER: 60,            // s after the run clock starts (the team's first click, or START CLOCK NOW): mask still not clicked ->
+                             // the laptop wallpaper glitches to DRAG THE MOUSE DOWN and the mask's red LED blinks until it is
   VOLUME: 0.8,
   MUSIC_VOLUME: 0.7,         // recorded sounds in sounds/ (0..1)
   // SYNC, carried to the finale: 100, minus this per wrong code and per attack they didn't mash through in time
@@ -335,7 +338,11 @@ async function eyes(v) {
   while (eyeSent !== eyeWant) { eyeSent = eyeWant; await mask('level?v=' + eyeSent); }
   eyeBusy = false;
 }
-setInterval(() => { eyeSent = null; eyes(eyeWant); }, 2000);
+setInterval(() => { eyeSent = null; eyes(eyeWant); mask('red?v=' + red);
+  if (red && hubWs?.readyState === 1) hubWs.send(JSON.stringify({ t: 'cmd', to: 'desk1', a: 'hint' })); }, 2000);   // a reloaded desktop gets it again
+// stuck hint: blink the mask's red LED (needs the /red sketch) and glitch the laptop's wallpaper, until the mask is clicked
+let red = 0, hintT;
+function stuckHint() { if (mode === 'idle' && !red) { red = 1; mask('red?v=1'); } }
 async function blink(n = 3, ms = 180) {          // flash the eyes against whatever they're showing, then put them back
   const b = eyeWant;
   for (let i = 0; i < n; i++) { eyes(b ? 0 : CFG.EYES_FULL); await wait(ms); eyes(b); await wait(ms); }
@@ -382,7 +389,9 @@ async function hub() {
   ws.onopen = () => { ws.send(JSON.stringify({ t: 'hello', id: 'puzzle1', role: 'page' })); hubSend([]); bossLoad(); };
   ws.onclose = () => setTimeout(hub, 2000);
   ws.onmessage = e => { const m = JSON.parse(e.data);
-    if (m.t === 'cmd' && m.a === 'key') dispatchEvent(new KeyboardEvent('keydown', { code: m.v, ctrlKey: true, altKey: true })); };
+    if (m.t === 'cmd' && m.a === 'key') dispatchEvent(new KeyboardEvent('keydown', { code: m.v, ctrlKey: true, altKey: true }));
+    if (m.t === 'run') { clearTimeout(hintT);           // m.now = hub time, like t0, so this laptop's clock doesn't matter
+      if (m.t0 && m.end == null && m.splits?.p1done == null) hintT = setTimeout(stuckHint, m.t0 + CFG.HINT_AFTER * 1000 - m.now); } };
 }
 hub();
 setInterval(() => hubWs?.readyState === 1 && hubWs.send(JSON.stringify({ t: 'status', v: { mode, code: CODE.join(''), stat: sync(), mask: Date.now() - maskAt < 5000 } })), 1000);
@@ -778,7 +787,7 @@ function log(line) {
 // ===== The sequence =====
 async function capture() {
   if (mode !== 'idle' || calib) return;
-  mode = 'capture'; humOn(false); hs.classList.remove('on'); eyes(CFG.EYES_FULL);
+  mode = 'capture'; humOn(false); hs.classList.remove('on'); eyes(CFG.EYES_FULL); red = 0; mask('red?v=0');
   hubSend([{ t: 'evt', e: 'p1start' }]);           // the run clock starts at the team's first click (this, or opening Binary Key)
 
   // beat 2: capture
@@ -1150,6 +1159,7 @@ addEventListener('keydown', e => {
     e.preventDefault();
     if (e.code === 'KeyF') capture();
     if (e.code === 'KeyB') blink(3, 300);          // staff hint: "look at the mask"
+    if (e.code === 'KeyD') stuckHint();            // the 1-minute hint now: DRAG THE MOUSE DOWN + red LED
     if (e.code === 'KeyR') { eyes(0); hubSend([{ t: 'cmd', to: 'desk1', a: 'key', v: 'KeyR' }]); setTimeout(() => location.reload(), 150); }   // the laptop's desktop.html resets too
     if (e.code === 'KeyP') { eyes(0); location.hash = 'replay'; location.reload(); }
     if (e.code === 'KeyW') { eyes(0); location.hash = 'win'; location.reload(); }

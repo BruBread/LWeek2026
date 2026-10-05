@@ -59,6 +59,16 @@ int parse(const String& s, List& L) {
   }
   return L.n;
 }
+// the code a loop spells: how many times each light switches on. Printed to Serial, to check against the game's code
+String spell(const List& L) {
+  String s;
+  for (int j = 0; j < LIGHTS; j++) {
+    int n = 0;
+    for (int i = 0; i < L.n; i++) n += L.lv[i][j] && (i == 0 || !L.lv[i - 1][j]);
+    s += n;
+  }
+  return s;
+}
 List& cur() { return inFx ? fxL : loopL; }
 void restart(bool fx) { inFx = fx; step = 0; stepAt = millis(); }
 
@@ -105,13 +115,15 @@ void setup() {
     if (p != loopSrc) {              // resent every 3 s: the same loop again doesn't restart it
       loopSrc = p; parse(p, loopL);
       if (!inFx) restart(false);     // during an effect, the new loop waits for it to end
-      Serial.printf("loop: %d steps\n", loopL.n);
+      Serial.printf("playing %s (%d steps)\n", spell(loopL).c_str(), loopL.n);
     }
+    server.sendHeader("Access-Control-Allow-Origin", "*");   // lets the game read this "ok": that's how it tells this sketch from an old one
     server.sendHeader("Connection", "close");
     server.send(200, "text/plain", "ok");
   });
   server.on("/fx", [] {
     if (parse(server.arg("p"), fxL)) restart(true);
+    server.sendHeader("Access-Control-Allow-Origin", "*");
     server.sendHeader("Connection", "close");
     server.send(200, "text/plain", "ok");
   });

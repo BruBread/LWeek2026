@@ -35,7 +35,7 @@ flowchart LR
   P1 & P2 & P3 & P4 <-->|WebSocket| HUB
   GM & DOS <-->|WebSocket| HUB
   P1 -->|"HTTP GET /level"| MASK
-  P3 -->|"HTTP GET /code"| BEACON
+  P3 -->|"HTTP GET /play"| BEACON
   KNOBS -->|"Web Serial (USB)"| P4
   P4 -->|"localhost, then Bluetooth"| STRIP
   HUB <-->|"WebSocket, device strip"| BRIDGE

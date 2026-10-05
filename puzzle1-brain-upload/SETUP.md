@@ -32,13 +32,14 @@ All pins used (GND, D25, D27) are on the same side of the ESP32 DevKit. Only the
 |---|---|
 | Red on | Not on Wi-Fi yet (router off, or wrong name/password in `NETS`) |
 | Red off | On Wi-Fi and ready |
+| Red blinking | Stuck hint: a minute into the run and the team still hasn't clicked the mask (the laptop wallpaper glitches to DRAG THE MOUSE DOWN at the same time). Stops when they click it. Needs the sketch with `/red` (reflash once) |
 | Blue eyes | On while the cursor hovers the mask area and through the click sequence (they glitch at 97%); off from the binary screen until the right code; on again after the win. They flicker while Aurora talks (not during code entry). In the finale's attacks they drop to dim, and mashing brightens them back up |
 
 The DevKit's own small blue LED (GPIO 2) is switched off by the sketch. Its red power LED is wired straight to power and can't be turned off in code: cover it with black tape.
 
 ### Test
 1. Power the mask: red lights, then goes off once it's on Wi-Fi.
-2. `curl.exe "http://192.168.0.50/level?v=255"` lights the eyes, `v=0` turns them off.
+2. `curl.exe "http://192.168.0.50/level?v=255"` lights the eyes, `v=0` turns them off. `curl.exe "http://192.168.0.50/red?v=1"` blinks the red LED, `v=0` stops it.
 3. Run `start.bat` and hover the mask area on the projector: the eyes light up.
 
 ## Each day
@@ -54,6 +55,7 @@ The keyboard types into whichever screen was clicked last. When the projector ne
 | Ctrl+Alt+H | Control panel: mask box, corner brackets, current code and this list (drag the panel to move it) |
 | Ctrl+Alt+F | Force capture (use if the click or mask fails) |
 | Ctrl+Alt+B | Blink the mask eyes 3 times (hint for a team that hasn't found the mask). Also **BLINK MASK** on the GM panel |
+| Ctrl+Alt+D | Stuck hint now, without waiting the minute: the laptop wallpaper glitches to DRAG THE MOUSE DOWN (Binary Key gets minimized) and the mask's red LED blinks until the mask is clicked. It also fires by itself `CFG.HINT_AFTER` (60) s after the run clock starts |
 | Ctrl+Alt+R | Reset for the next team (new code, eyes off). The laptop's fake desktop resets too, through the hub (Ctrl+Alt+R on the laptop screen resets only the desktop) |
 | Ctrl+Alt+P | Replay the sequence (for tuning timings) |
 | Ctrl+Alt+W | Replay only the win / mind-upload finale |

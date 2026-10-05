@@ -41,9 +41,11 @@ The phone plays exactly what the game sends the board (the code and the effects)
    - The game sends the lights to both IPs, so it works on either network.
    - The IPs are listed at the top of `game.html` (`CFG.BEACON_IPS`).
 3. Open `beacon_esp32/beacon_esp32.ino` itself (not a pasted copy).
-4. Upload. Serial Monitor (115200) prints `trying NexusV as 192.168.0.51` … `beacon ready on …`.
+4. Upload. Serial Monitor (115200) prints `trying NexusV as 192.168.0.51` … `beacon ready on …`. During the hunt it prints `playing 352` (the code it blinks): the same code as Ctrl+Alt+H in the game.
 
-You only flash it once. The board is a simple player: the game sends it every blink and every effect as a list of steps (see "Tuning the speeds"), so changing them never needs a new upload.
+You only flash it once, **but flashed before 5 October = upload again.** The older sketches (IR and the first blue one) ignore the game and blink their own built-in code (314 or 324) forever, so the lights never match the game. Tell-tale: the lights blink on their own right after power-on. Ctrl+Alt+H and the GM panel then say **OLD SKETCH**.
+
+The board is a simple player: the game sends it every blink and every effect as a list of steps (see "Tuning the speeds"), so changing them never needs a new upload.
 
 ## Wiring (only 2 or 3 resistors)
 This is the same wiring as the old IR board: only the 3 LEDs change. All the pins are next to each other on the **same edge** of the ESP32: D32, D33, D25, D27 (D26 is not used). Read the labels printed on your board. GND is a few pins further down that edge.
@@ -100,7 +102,7 @@ The DevKit's small blue LED is switched off by the sketch. Cover its red power L
 ## Test
 1. Power it from the power bank. The blue lights sweep 1-2-3 twice, then go dark. Red lights up, then goes off once it's on Wi-Fi.
    - A light that never lights in the sweep is in backwards, or its jumper is in the wrong row.
-2. Run `start.bat` and press **Ctrl+Alt+H**: `board: OK`.
+2. Run `start.bat` and press **Ctrl+Alt+H**: `board: OK`. `OLD SKETCH` = upload `beacon_esp32.ino` again.
 3. Press **Ctrl+Alt+K** (straight to the hunt). The lights flicker on, then blink layer 1's code. Ctrl+Alt+H shows the code to check against: light 1 blinks the first digit, and so on.
 4. Press **Ctrl+Alt+N** twice to jump to layer 3.
    - With your eyes, each light should look like **one flash**.

@@ -26,6 +26,27 @@ html, body { height: 100%; overflow: hidden; user-select: none; cursor: default;
 #motto svg { width: 6vw; height: 9vw; filter: drop-shadow(0 4px 14px rgba(0,0,0,.7)); animation: bob 1.4s ease-in-out infinite; }
 @keyframes bob { 50% { translate: 0 3vh; } }
 
+/* stuck hint, sent by projector.html CFG.HINT_AFTER s into the run if the mask isn't found: Aurora glitches the wallpaper */
+#motto div { position: relative; }
+#motto.stuck div { font: 700 4.4vw Consolas, "Cascadia Mono", monospace; color: var(--g); border-color: var(--g); background: rgba(0,20,10,.6);
+  text-shadow: 0 0 18px rgba(77,255,136,.7); box-shadow: 0 0 30px rgba(77,255,136,.3), inset 0 0 30px rgba(77,255,136,.15); }
+#motto.stuck svg { animation-duration: .7s; }
+#motto.stuck svg path { fill: var(--g); }
+#motto.burst div::before, #motto.burst div::after { content: attr(data-text); position: absolute; inset: 0; padding: inherit; }
+#motto.burst div::before { color: #ff2a4a; animation: gA .2s steps(2) infinite; }
+#motto.burst div::after  { color: #0ff; animation: gB .26s steps(2) infinite; }
+@keyframes gA { 0% { clip-path: inset(10% 0 70% 0); transform: translate(-9px,-2px) }
+                50% { clip-path: inset(45% 0 30% 0); transform: translate(8px,1px) }
+                100% { clip-path: inset(80% 0 4% 0); transform: translate(-4px,2px) } }
+@keyframes gB { 0% { clip-path: inset(60% 0 20% 0); transform: translate(9px,2px) }
+                50% { clip-path: inset(5% 0 80% 0); transform: translate(-6px,-1px) }
+                100% { clip-path: inset(30% 0 50% 0); transform: translate(5px,0) } }
+body.glitch #wall { animation: tear .12s steps(2) infinite; }
+@keyframes tear { from { transform: translate(-1.5vw, 0) skewX(5deg); filter: hue-rotate(90deg) contrast(1.6); }
+                  to { transform: translate(1vw, .6vh); filter: invert(1) hue-rotate(180deg); } }
+body.glitch::after { content: ""; position: fixed; inset: 0; z-index: 45; pointer-events: none;
+  background: repeating-linear-gradient(rgba(77,255,136,.14) 0 2px, transparent 2px 5px); animation: tear .09s steps(2) infinite; }
+
 /* desktop icon */
 .icon { position: absolute; left: 8px; top: 8px; width: 84px; padding: 6px 2px 8px; border: 1px solid transparent; border-radius: 4px;
   display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; text-shadow: 0 1px 3px #000, 0 0 6px #000; }
@@ -96,7 +117,7 @@ html, body { height: 100%; overflow: hidden; user-select: none; cursor: default;
 
 <div id="wall"><i></i><i></i><i></i>
   <div id="motto">
-    <div>Think outside the box</div>
+    <div data-text="Think outside the box">Think outside the box</div>
     <!-- a mouse pointer, turned to point straight down -->
     <svg viewBox="0 -1 16 23"><path transform="rotate(202 6 9.5)" d="M0 0V16L4 12.2 6.8 18.6 9.4 17.5 6.6 11.2H11.6Z"
       fill="#fff" stroke="#000" stroke-width="1.1" stroke-linejoin="round"/></svg>
@@ -152,6 +173,13 @@ const sfx = {
   tick() { tone('square', 2200, 1300, .05, .05); },
   key()  { tone('square', 900, 0, .015, .03); },
   done() { tone('sine', 1320, 0, .25, .1); tone('sine', 1760, 0, .35, .08, .08); },
+  glitch() {
+    const n = AC.createBufferSource(), b = AC.createBuffer(1, AC.sampleRate * .9, AC.sampleRate), d = b.getChannelData(0), g = AC.createGain();
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    n.buffer = b; g.gain.setValueAtTime(.3, AC.currentTime); g.gain.exponentialRampToValueAtTime(.001, AC.currentTime + .9);
+    n.connect(g).connect(master); n.start();
+    tone('sawtooth', 140, 35, .9, .2); tone('square', 2400, 180, .4, .06);
+  },
 };
 
 // ===== Binary Key: the rows 0-9, revealed with a scan beam every time the app opens =====
@@ -182,6 +210,22 @@ async function reveal() {
   await wait(450);
   for (const ch of EX) { if (me !== tok) return; ex.textContent += ch; if (ch !== ' ') sfx.key(); await wait(45); }
   rows[5].classList.add('hl'); sfx.done();       // the example's own row lights up
+}
+
+// ===== Stuck hint: projector.html sends it CFG.HINT_AFTER s into the run while the mask is still unclicked =====
+let stuck = false;
+function burst(ms) { const m = $('#motto'); m.classList.add('burst'); setTimeout(() => m.classList.remove('burst'), ms); }
+async function stuckHint() {
+  if (stuck) return;
+  stuck = true;
+  if (!win.hidden && !win.dataset.min) minimize();   // Aurora shoves Binary Key out of the way so the wallpaper shows
+  const t = $('#motto div');
+  document.body.classList.add('glitch'); burst(1300); sfx.glitch();
+  await wait(550);
+  t.textContent = t.dataset.text = 'DRAG THE MOUSE DOWN'; $('#motto').classList.add('stuck');
+  await wait(650);
+  document.body.classList.remove('glitch');
+  setInterval(() => burst(300), 5000);               // keeps twitching so it gets noticed
 }
 
 // ===== Window: open / minimize / maximize / close / drag, like Windows =====
@@ -252,7 +296,9 @@ async function hub() {
   const ws = hubWs = new WebSocket('ws://' + await findHub() + ':3000/ws');
   ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', id: 'desk1', role: 'page' }));
   ws.onclose = () => setTimeout(hub, 2000);
-  ws.onmessage = e => { const m = JSON.parse(e.data); if (m.t === 'cmd' && m.a === 'key' && m.v === 'KeyR') location.reload(); };
+  ws.onmessage = e => { const m = JSON.parse(e.data);
+    if (m.t === 'cmd' && m.a === 'key' && m.v === 'KeyR') location.reload();
+    if (m.t === 'cmd' && m.a === 'hint') stuckHint(); };
 }
 hub();
 </script>

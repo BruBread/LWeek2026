@@ -1,5 +1,6 @@
 // NEXUS Puzzle 1 - mask. The projector page calls GET /level?v=0..255 to light the eyes (on hover).
-// Red LED: on while the mask is not on Wi-Fi, off once it's connected.
+// Red LED: on while the mask is not on Wi-Fi, off once it's connected. GET /red?v=1 makes it blink (the projector's
+// stuck hint: the team hasn't clicked the mask a minute into the run), /red?v=0 stops it.
 // Needs ESP32 Arduino core 3.x (ledcAttach). On core 2.x use ledcSetup(0,5000,8) + ledcAttachPin(EYES_PIN,0) + ledcWrite(0,v).
 #include <WiFi.h>
 #include <WebServer.h>
@@ -15,10 +16,12 @@ const unsigned long TRY_MS = 10000;
 const int EYES_PIN  = 25;            // -> 120R -> blue LED -> GND, once per eye (each eye has its own resistor)
 const int RED_PIN   = 27;            // -> 120R -> red LED -> GND
 const int BOARD_LED = 2;             // the DevKit's own blue LED: kept off so it doesn't give the mask away
+const unsigned long BLINK_MS = 250;  // red LED on/off time while the stuck hint blinks it
 
 WebServer server(80);
 unsigned long tryStart = 0;
 bool wasOnline = false;
+bool redBlink = false;
 int net = 0;
 
 void join(int i) {
@@ -47,6 +50,12 @@ void setup() {
     server.sendHeader("Connection", "close");   // one request per connection, so commands can't queue up behind each other
     server.send(200, "text/plain", "ok");
   });
+  server.on("/red", [] {
+    redBlink = server.arg("v").toInt();
+    Serial.printf("red blink %d\n", redBlink);
+    server.sendHeader("Connection", "close");
+    server.send(200, "text/plain", "ok");
+  });
   server.begin();
 }
 
@@ -59,5 +68,5 @@ void loop() {
   if (online && !wasOnline) Serial.printf("mask ready on %s at http://%s/level?v=255\n", NETS[net].ssid, WiFi.localIP().toString().c_str());
   wasOnline = online;
 
-  digitalWrite(RED_PIN, !online);    // red = not connected
+  digitalWrite(RED_PIN, !online || (redBlink && millis() / BLINK_MS % 2));   // solid = not connected, blinking = stuck hint
 }

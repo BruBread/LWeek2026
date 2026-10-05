@@ -217,6 +217,7 @@ const hubUp = () => ws?.readyState === 1, linked = id => rost.pages.includes(id)
 const via = (room, f) => !hubUp() ? [null, 'the hub is down'] : !online(room) ? [null, `can't tell: the ${room} laptop is offline`] : f(status[room]);
 const beacon = () => hubUp() && linked('beacon-sim') ? [true, 'a phone stands in (/beacon)'] :
   via('puzzle3', s => s.boards?.beacon === undefined ? [null, 'checking…'] : s.boards.beacon === true ? [true, 'ESP32 board answering (.51)'] :
+    s.boards.beacon === 'old' ? [false, "beacon ESP32 runs an OLD sketch: it blinks its own code, not the game's. Upload beacon_esp32.ino again"] :
     [false, 'beacon ESP32 not answering (.0.51 / .1.51), and no phone on /beacon. Switched on? On NexusV or walawifi?']);
 // the P4 controller ESP32 (knobs + fire wires + screen): on NexusV, or walawifi as a backup (same list as game.html's
 // CFG.CTRL_IPS). ?ctrl=<ip> replaces the list
@@ -434,8 +435,8 @@ function musicCheck() {
 }
 
 // ===== The booth soundtrack (hub/public/sounds/): follows the team like the flow bar, from the run's splits and the
-// finale, so it needs a team's run (NEW TEAM / SEND IN). A staff test without one only gets the hum.
-// LEVEL = 0..1 of MUSIC_VOL per file (game4.mp3 is ~3 dB louder than the rest); tune them by ear on the booth speaker
+// finale. With no team's run (a staff test) it follows the last of these moments a room sent instead, until that room
+// is back at its start screen. LEVEL = 0..1 of MUSIC_VOL per file (game4.mp3 is ~3 dB louder than the rest); tune by ear
 const SOUNDTRACK = [   // [any of these moments reached, file]: the last row reached plays
   [['p1done'], 'walk-to-2.mp3'],          // game 1 cleared: the walk to game 2
   [['p2start'], 'game2.mp3'],             // game 2's SPACE to its end; LOOK BEHIND YOU pauses it for the scream
@@ -444,11 +445,13 @@ const SOUNDTRACK = [   // [any of these moments reached, file]: the last row rea
 ];
 const BOSS = 'bossfight.mp3', HUM = 'hum.mp3', SCREAM = 'scream.mp3', HUM_WAIT = 3000;   // the hum fills any silence longer than this
 const LEVEL = { 'game4.mp3': .7, [HUM]: .45 }, lvl = f => LEVEL[f] ?? 1;
-const wanted = () => !run.t0 || run.end != null ? null
+let live = null;   // no team: the last soundtrack moment a room sent { e, room, at }
+const wanted = () => run.end != null ? null
   : F?.phase ? (/^(crash|end)$/.test(F.phase) ? null : BOSS)   // the boss theme from the takeover to the kill; her talking and her death get silence
-  : SOUNDTRACK.findLast(([at]) => at.some(k => run.splits[k] != null))?.[1] ?? null;
+  : SOUNDTRACK.findLast(([at]) => at.some(k => run.t0 ? run.splits[k] != null : live?.e === k))?.[1] ?? null;
 let bgNow = null, screaming = null, quietAt = 0, humOn = false;
 function soundtrack() {
+  if (live && Date.now() - live.at > 2500 && /^(idle|standby)$/.test(status[live.room]?.mode)) live = null;   // that room reloaded
   const w = wanted();
   if (w !== bgNow) {
     if (bgNow) music(null, { f: bgNow, to: 0, ms: F?.phase ? 300 : 1500 });
@@ -622,7 +625,7 @@ function conn() {
   ws.onmessage = e => {
     const m = JSON.parse(e.data);
     if (m.t === 'status') { status[m.id] = m.v; seen[m.id] = Date.now(); return; }   // 5 a second: the 500 ms redraw picks them up
-    if (m.t === 'run') { run = m; skew = m.now - Date.now(); }
+    if (m.t === 'run') { if (m.team !== run.team || m.t0 !== run.t0 || m.end !== run.end) live = null; run = m; skew = m.now - Date.now(); }   // live: a new team, start, finish or reset
     if (m.t === 'fin') F = m;
     if (m.t === 'addr') SIGNUP = 'http://' + (m.signup || location.hostname) + ':4000';   // signup null = the kiosk runs on the hub laptop
     if (m.t === 'addr') put($('#phones'), m.hub.length ? `PHONES OPEN ▸ BEACON ${m.hub[0]}:3000/beacon` +
@@ -630,6 +633,7 @@ function conn() {
     if (m.t === 'evt' && /^p\ddone$/.test(m.e)) { tone(880, .15); tone(1320, .3, .15); }
     if (m.t === 'evt' && m.e === 'music') return music(m.id, m.v || {});
     if (m.t === 'evt' && m.e === 'p2scare') scream();
+    if (m.t === 'evt' && SOUNDTRACK.some(([at]) => at.includes(m.e))) live = { e: m.e, room: m.id, at: Date.now() };
     if (m.t === 'roster') rost = m;
     if (m.t === 'history') $('#hist').innerHTML = `<table><tr><th>TEAM</th><th>TIME</th><th>FINALE</th><th>SYNC</th><th>POWER</th><th>TRACE</th><th>HUMAN</th></tr>` +
       m.runs.slice().reverse().map(x => `<tr title="${esc(runInfo(x))}"><td>${esc(x.team)}</td><td class="${x.end <= LIMIT_MIN * 60000 ? 'win' : ''}">${mmss(x.end)}${x.end <= LIMIT_MIN * 60000 ? ' ✓' : ''}</td>` +
