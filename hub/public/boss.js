@@ -32,6 +32,11 @@ const C = {
   MIRROR: { hits: 5, core: [.09, .055], mirror: [.12, .085], keySpeed: .35, chargeMs: 900, coolMs: 1300 },
   ARROW: '',                 // room 4's lockout: e.g. '◄' if that points at room 3 from where the players stand
   KILL_KEYS: ['Space', 'Enter', 'NumpadEnter'],   // any of these counts in every kill room (the screens name one)
+  COUNT_MS: 1000,            // the map's 3 · 2 · 1 · NOW! (SPACE in room 3 during the kill switch): ms per number
+  // the team's lives (how many: FIN.LIVES in server.js). A failed kill switch always costs one; these task mistakes too
+  LIFE: { binary: true, words: false, cross: true },   // a wrong digit, a typo, a missed shot
+  LIFE_MS: 2600,             // how long -1 LIFE fills every screen
+  INTRO_MS: 4500,            // the takeover's "YOUR TEAM HAS 5 LIVES" card
 };
 // Aurora's lines (green, Undertale box). [text, face]: face picks img/aurora-<face>.png if it exists, and 'angry'
 // also switches to her angry voice. Lower case is how she talks.
@@ -47,6 +52,8 @@ const SAY = {
   purged: ['NO-', 'GET OUT OF MY ROOM', 'that was MINE', 'fine. i have others.'],
   fail: ['ha. sloppy.', 'humans. no rhythm.', 'close. not close enough.', 'again? adorable.'],
   rings: [["YOU DON'T NEED THIS ANYMORE.", 'angry']],   // room 4: the first try to fire, before she breaks game 4's rings
+  // the team ran out of lives: on every screen, then YOU LOST (all recorded lines from the other games)
+  lost: [['...heh.', 'smug'], ["That's the last of it."], ['Every mistake teaches me something.', 'smug'], ['Bring your friends. I have room.']],
 };
 // her last words, the same on every screen: the worst thing she saw in this run (the dossier's facts), or a clean run
 function lastWords(r) {
@@ -66,6 +73,13 @@ const WORD_LISTS = [         // game 2's two hardest tiers
   'hexadecimal asynchronous pseudorandom electroencephalogram superconductivity photolithography microarchitecture counterintelligence incomprehensibility electromagnetism thermodynamics deoxyribonucleic'.split(' '),
 ];
 const NAME = { binary: 'BINARY', words: 'WORDS', cross: 'MIRRORS' };
+const OOPS = { binary: 'A WRONG DIGIT', words: 'A TYPO', cross: 'A MISSED SHOT' };   // what costs a life in each task
+const KILL_STEPS = [         // the map's kill switch instructions, top to bottom
+  'SEND ONE PLAYER TO SECTOR 01, ONE TO 02 AND ONE TO 04',
+  'EACH OF THEM PRESSES THEIR KEY ONCE ▸ THEIR LIGHT TURNS ON',
+  'EVERYONE HERE: PRESS SPACE AND SHOUT 3 · 2 · 1 · NOW!',
+  'ON "NOW!" ALL THREE PRESS AT THE SAME TIME',
+];
 
 // ===== Helpers =====
 const $ = s => document.getElementById(s);
@@ -140,10 +154,11 @@ const sfx = {
   purged()   { tone('sine', 95, 28, 1.3, .9); noise(.7, .5, 420); tone('sawtooth', 220, 55, .9, .2); [392, 494, 587].forEach((f, i) => tone('triangle', f, 0, 1.1, .1, .05 + i * .06)); },
   fail()     { tone('sawtooth', 120, 90, .5, .35); tone('square', 123, 95, .5, .15); noise(.3, .3, 600); },
   end()      { tone('sine', 110, 28, 2.8, 1); noise(.5, .5, 180); [523, 659, 784, 1046].forEach((f, i) => tone('triangle', f, 0, 2.4, .16, i * .12)); },
+  lost()     { tone('sine', 80, 20, 2.8, 1); noise(1.2, .4, 300); [220, 233, 330].forEach((f, i) => tone('sawtooth', f, f / 4, 2.4, .1, i * .15)); },
 };
 // recorded sounds: drop files with these names into hub/public/sounds/ (every room plays them from the hub).
 // A missing file falls back to the synth. siren and fight loop; the rest play once
-const ONE = ['crash', 'takeover', 'purged', 'fail', 'end'], LOOP = ['siren', 'fight'], bufs = {};
+const ONE = ['crash', 'takeover', 'purged', 'fail', 'end', 'lost'], LOOP = ['siren', 'fight'], bufs = {};
 [...ONE, ...LOOP, 'aurora-voice'].forEach(k => fetch(`${BASE}sounds/${k}.mp3`).then(r => r.ok ? r.arrayBuffer() : null)
   .then(b => b && AX.decodeAudioData(b)).then(b => { if (b) bufs[k] = b; }).catch(() => {}));
 function one(k) {
@@ -363,6 +378,41 @@ html.boss-on { background: #000; }
 #boss .fail { min-height: 1.4em; font-size: 2.4vw; color: #fff; letter-spacing: .2em; }
 #boss .term { min-width: 56vw; padding: 1.6vw 2.2vw; border: 1px solid currentColor; background: rgba(8,0,2,.9); text-align: left;
   font-size: 1.45vw; line-height: 1.8; white-space: pre-wrap; }
+#boss .kmid { gap: 1.8vh; padding-top: 5vw; }
+#boss .steps { width: 80vw; padding: 1vw 2vw; border: 1px solid currentColor; background: rgba(8,0,2,.85); text-align: left;
+  list-style: none; counter-reset: st; font-size: 1.6vw; line-height: 1.75; }
+#boss .steps li { counter-increment: st; opacity: .45; }
+#boss .steps li::before { content: counter(st) ". "; }
+#boss .steps li.cur { opacity: 1; color: #fff; text-shadow: 0 0 10px #ff3344; }
+#boss .steps li.cur::before { content: "▶ " counter(st) ". "; }
+#boss .steps li.ok { opacity: .75; }
+#boss .steps li.ok::before { content: "✓ " counter(st) ". "; }
+#boss .big.count { transform: scale(1.5); }   /* transform: the screen doesn't jump */
+
+/* the team's lives: red hearts (they're the players'), top centre on every screen from the takeover to the kill */
+#boss .hearts { display: flex; gap: .6vw; justify-content: center; }
+#boss .hearts i { display: block; width: 2.6vw; color: #ff3344; filter: drop-shadow(0 0 .4vw rgba(255,51,68,.8)); }
+#boss .hearts svg { display: block; width: 100%; fill: currentColor; }
+#boss .hearts i.gone { color: #3a1a1e; filter: none; }
+#boss .hearts i.broke { animation: bbroke .7s steps(7) both; }
+@keyframes bbroke { 0% { transform: scale(1.8); color: #fff } 50% { transform: scale(1.3) rotate(-14deg); color: #ff3344 } }
+#boss .hearts.pop i { animation: bpop .35s steps(4) both; animation-delay: calc(var(--i) * .2s); }
+@keyframes bpop { from { transform: scale(0) } }
+#boss .hearts.huge i { width: 5.4vw; }
+#blives { position: absolute; z-index: 42; top: 1.2vw; left: 50%; transform: translateX(-50%); display: none; flex-direction: column;
+  align-items: center; gap: .45vw; pointer-events: none; white-space: nowrap; }
+#boss.lv #blives { display: flex; }
+#boss:has(#bstage.on) #blives { display: none; }
+#blives .row { display: flex; align-items: center; gap: 1vw; color: #fff; }
+#blives .row > span { font-size: 1.3vw; letter-spacing: .3em; }
+#blives .row > b { font-size: 1.6vw; }
+#blives em { max-width: 24vw; white-space: normal; text-align: center; line-height: 1.5; font-style: normal; font-size: 1.1vw;
+  letter-spacing: .2em; color: #fff; opacity: .85; }   /* max-width: clear of the header on the left */
+#blives.last .row > span, #blives.last em { color: #ff3344; opacity: 1; }
+#blives.last .hearts i:not(.gone) { animation: bpulse .35s ease-in-out infinite alternate; }
+#bminus { position: absolute; inset: 0; z-index: 44; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2.6vh; background: rgba(24,0,4,.95); color: #fff; text-align: center; pointer-events: none; opacity: 0; --c: #ff3344; }
+#bminus .big { font-size: 9vw; }
 #bfocus { position: absolute; z-index: 45; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
   gap: 2vh; background: rgba(0,0,0,.85); color: #fff; text-align: center; }
 #boss.unfocused #bfocus { display: flex; }
@@ -382,6 +432,7 @@ function wake() {
     '<div id="bstage"><i class="glow"></i><img class="f0" alt="" crossorigin="anonymous"><img class="f1" alt=""><img class="f2" alt=""></div>' +
     '<div id="bdlg"><div class="pf"><img alt=""></div><div class="tx"></div></div>' +
     '<div id="bfocus"><div class="big">CLICK HERE</div><div class="sub">MOVE THE MOUSE OFF THE BOTTOM EDGE OF THE LAPTOP, ONTO THIS WALL, AND CLICK</div></div>' +
+    '<div id="blives"></div><div id="bminus"></div>' +
     '<div id="bflash"></div><div id="bscan"></div><div id="bvig"></div><div id="bflick"></div><div id="bhelp"></div>';
   document.documentElement.append(B);   // outside <body>, so hiding the page doesn't hide us
   B.classList.add('on');
@@ -391,8 +442,41 @@ function wake() {
   raf(frame);
 }
 function hidePage() { document.documentElement.classList.add('boss-on'); silencePage(); }
-const main = html => $('bmain').innerHTML = html;
+const main = html => { $('bmain').innerHTML = html; drawLives(); };
 const theme = t => B.classList.toggle('red', t === 'red');
+
+// ===== The team's lives (the hub counts them): a bar on every screen, and -1 LIFE on every screen when one goes =====
+const HEART = '<svg viewBox="0 0 7 6" shape-rendering="crispEdges"><path d="M1 0h2v1h1V0h2v1h1v2H6v1H5v1H4v1H3V5H2V4H1V3H0V1h1z"/></svg>';
+const hearts = (n, cls = '', broke = -1) => `<div class="hearts ${cls}">` +
+  Array.from({ length: S.maxLives }, (_, i) => `<i class="${i >= n ? 'gone' : ''} ${i === broke ? 'broke' : ''}" style="--i:${i}">${HEART}</i>`).join('') + '</div>';
+let livesShown = false;   // the takeover's lives card has played (or was skipped)
+function rule() {         // under the bar: what costs a life on this screen right now
+  const costs = Object.keys(C.LIFE).filter(k => C.LIFE[k]).map(k => OOPS[k]);
+  if (phase === 'kill') return 'OUT OF SYNC = -1 LIFE';
+  if (phase === 'fight' && cur) return C.LIFE[cur.name] ? `${OOPS[cur.name]} = -1 LIFE` : 'SHARED BY THE WHOLE TEAM';
+  if (phase === 'fight' && costs.length) return `${costs.join(' OR ')} = -1 LIFE`;
+  return 'SHARED BY THE WHOLE TEAM ▸ LOSE THEM ALL AND SHE WINS';
+}
+function drawLives() {
+  if (!B || !S) return;
+  const on = /^(fight|regroup|brief|kill)$/.test(phase) || phase === 'takeover' && livesShown, el = $('blives');
+  B.classList.toggle('lv', on);
+  if (!on) return;
+  const h = `<div class="row"><span>${S.lives === 1 ? 'LAST LIFE' : 'LIVES'}</span>${hearts(S.lives)}<b>${S.lives}/${S.maxLives}</b></div><em>${rule()}</em>`;
+  if (el._h !== h) el.innerHTML = el._h = h;   // DOM only when it changes
+  el.classList.toggle('last', S.lives === 1);
+}
+function lifeLost(ev) {
+  one('fail'); flash(.55, 450, '#ff3344'); shake(B, 16, 500);
+  const why = ev.k === 'fail' ? 'KILL SWITCH ▸ ' + (ev.missing?.length ? `SECTOR ${ev.missing.map(r => '0' + r).join(' · ')} NEVER PRESSED` : 'OUT OF SYNC')
+    : `${SEC(ev.room)} ▸ ${OOPS[ev.task]}`;
+  const m = $('bminus');
+  m.innerHTML = `<div class="sub">${why}</div><div class="big">-1 LIFE</div>${hearts(ev.lives, 'huge', ev.lives)}` +
+    `<div class="sub">${ev.lives > 1 ? ev.lives + ' LIVES LEFT' : ev.lives ? 'LAST LIFE ▸ ONE MORE MISTAKE AND SHE WINS' : 'NO LIVES LEFT'}</div>`;
+  m.getAnimations().forEach(a => a.cancel());
+  m.animate([{ opacity: 0 }, { opacity: 1, offset: .06 }, { opacity: 1, offset: .82 }, { opacity: 0 }], { duration: C.LIFE_MS });
+}
+const mistake = () => cur && C.LIFE[cur.name] && send({ t: 'fin', a: 'mistake', task: cur.name });   // the hub decides if it costs a life
 function flash(o, ms, bg = '#fff') { const f = $('bflash'); f.style.background = bg; f.animate([{ opacity: o }, { opacity: 0 }], { duration: ms, easing: 'ease-out' }); }
 function shake(el, px, ms) {
   const kf = Array.from({ length: 12 }, () => ({ transform: `translate(${rand(-px, px)}px,${rand(-px, px) / 2}px)` }));
@@ -540,16 +624,17 @@ function apply(s) {
   if (!s.phase) { if (live) location.reload(); return; }   // FINISH RUN / NEW TEAM: back to this room's own game
   if (s.phase === 'crash' && ROOM !== 4) return;           // the crash is room 4's; the others wake at the takeover
   const ev = s.ev && s.ev.at !== evAt ? s.ev : null; evAt = s.ev?.at;
-  if (s.phase !== phase) { const from = phase; phase = s.phase; enter(from); }
+  if (s.phase !== phase) { const from = phase; phase = s.phase; enter(from, !was); }
   else changed();
   if (ev && was) onEvent(ev);
+  drawLives();
 }
-function enter(from) {
-  const g = ++gen, restore = from == null;   // restore = this laptop (re)loaded mid-finale: no intros
+function enter(from, restore) {               // restore = this laptop (re)loaded mid-finale: no intros
+  const g = ++gen;
   wake();
   if (phase !== 'crash') { hidePage(); B.classList.remove('see', 'black'); hideDlg(); }   // a skipped scene leaves no box behind
   ({ crash: () => crash(restore || jump), takeover: () => takeover(g, restore || jump), fight: () => fight(g, from), regroup: () => regroup(g, restore),
-     brief: () => brief(g), kill: () => kill(g), end: () => theEnd(g, restore) })[phase]?.();
+     brief: () => brief(g), kill: () => kill(g), end: () => theEnd(g, restore), lost: () => theLost(g, restore) })[phase]?.();
 }
 function changed() {
   if (phase === 'fight' && ROOM === 3) drawMap();
@@ -572,6 +657,7 @@ function onEvent(ev) {
   }
   if (ev.k === 'ready') { sfx.ready(); }
   if (ev.k === 'fail') failed(ev);
+  if (ev.k === 'fail' || ev.k === 'life') lifeLost(ev);
 }
 const mine = () => Object.entries(S.tasks).find(([, t]) => t.room === ROOM && !t.clear);
 
@@ -618,7 +704,12 @@ async function takeover(g, restore) {
     main(`<div class="mid"><div class="big" id="btk"></div><div class="sub">IS IN EVERY ROOM</div></div>`);
     await resolveText($('btk'), 'AURORA', 70); stamp($('btk'));
     await wait(1500); if (g !== gen) return;
+    main(`<div class="mid"><div class="note">YOUR TEAM HAS</div><div class="big">${S.lives} LIVES</div>${hearts(S.lives, 'huge pop')}` +
+      `<div class="sub">SHARED BY EVERYONE, IN EVERY ROOM</div><div class="note">MISTAKES COST LIVES ▸ LOSE ALL ${S.lives} AND SHE WINS</div></div>`);
+    for (let i = 0; i < S.lives; i++) setTimeout(() => sfx.ready(), i * 200);
+    await wait(C.INTRO_MS); if (g !== gen) return;
   }
+  livesShown = true;
   if (ROOM === 3) {
     setRain(.35); loop('siren', true);
     main(hd('SECTOR 03 ▸ <span style="color:#fff">SIGNAL SOURCE</span>') +
@@ -725,7 +816,7 @@ function binaryTask() {
     key(e) {
       if (!/^[0-9]$/.test(e.key)) return;
       if (+e.key === digits[at]) { at++; sfx.ok(); draw(); step(at); }
-      else { sfx.bad(); shake(B.querySelector('.grp.cur') || B, 10, 300); digits[at] = rand(0, 10) | 0; setTimeout(draw, 200); }
+      else { sfx.bad(); mistake(); shake(B.querySelector('.grp.cur') || B, 10, 300); digits[at] = rand(0, 10) | 0; setTimeout(draw, 200); }
     },
     stop() { clearInterval(tease); },
   };
@@ -752,7 +843,7 @@ function wordsTask() {
         sfx.key(); el.className = 'on'; i++;
         if ($('bwd').children[i]) $('bwd').children[i].className = 'nx';
         if (i >= word.length) { w++; i = 0; sfx.ok(); flash(.25, 200, '#4dff88'); const more = w < cur.need; step(w); if (more) setTimeout(draw, 250); }
-      } else { sfx.bad(); el.className = 'nx bad'; shake($('bwd'), 8, 260); setTimeout(() => el.className === 'nx bad' && (el.className = 'nx'), 260); }
+      } else { sfx.bad(); mistake(); el.className = 'nx bad'; shake($('bwd'), 8, 260); setTimeout(() => el.className === 'nx bad' && (el.className = 'nx'), 260); }
     },
     stop() {},
   };
@@ -853,7 +944,7 @@ function crossTask() {
     strip(hit ? 'hit' : 'miss'); flash(.25, 150, hit ? '#4dff88' : '#ff3344');
     for (let k = 0; k < (hit ? 70 : 30); k++) { const an = rand(0, TAU), sp = rand(20, hit ? 130 : 80);
       parts.push({ x: ex, y: ey, vx: Math.cos(an) * sp, vy: Math.sin(an) * sp, t: rand(.3, .9), c: hit ? any(['#fff', '#4dff88', '#b8ffd0']) : any(['#fff', '#ff3344', '#ff8a96']) }); }
-    if (!hit) { sfx.bad(); $('bxa').textContent = taunt(); return; }
+    if (!hit) { sfx.bad(); $('bxa').textContent = taunt(); mistake(); return; }
     hits++; sfx.catch(); $('bxa').textContent = ''; step(hits);
     if (hits < n) setTimeout(() => { if (task === me && stage === 'play') { place(); stage = 'enter'; t0 = performance.now(); sfx.glitch(); } }, 900);
   }
@@ -1012,9 +1103,10 @@ async function brief(g) {
   const lines = [
     'kill switch: she only dies if three rooms hit her at the same moment.',
     'one of you in sector 01. one in sector 02. one in sector 04.',
-    'everyone else stays here and counts down out loud.',
-    'on zero: SPACE in 01 and 04. the big ENTER key in 02.',
+    'everyone else stays here, presses SPACE and shouts the count.',
+    'on "NOW!": SPACE in 01 and 04. the big ENTER key in 02.',
     `the three presses must land within ${S.win} s (TRACE ${res('trace')}% ▸ from sector 03).`,
+    `out of sync = one life gone. ${S.lives === 1 ? 'this is your LAST life' : `you have ${S.lives} lives left`}.`,
     'go.',
   ];
   for (const l of lines) {
@@ -1026,10 +1118,10 @@ async function brief(g) {
 }
 function kill() {
   briefing = false; pressed = false; quiet(); theme('red'); scene = null; clearFx();
-  if (ROOM === 3) {
+  if (ROOM === 3) {                           // the map spells it out, step by step, and runs the count
     loop('fight', true);
-    main(hd('SECTOR 03 ▸ KILL SWITCH') + `<div class="mid"><div class="lights big" id="bli"></div><div class="big" id="bkb"></div>` +
-      `<div class="sub" id="bks"></div><div class="fail" id="bkf"></div><div class="note" id="bkw"></div><div class="aur" id="bka"></div></div>`);
+    main(hd('SECTOR 03 ▸ KILL SWITCH') + `<div class="mid kmid"><ol class="steps" id="bsteps"></ol><div class="lights" id="bli"></div>` +
+      `<div class="big" id="bkb"></div><div class="sub" id="bks"></div><div class="fail" id="bkf"></div><div class="note" id="bkw"></div><div class="aur" id="bka"></div></div>`);
   } else {
     main(hd(SEC(ROOM) + ' ▸ KILL SWITCH') + `<div class="mid"><div class="note">KILL SWITCH ▸ ${SEC(ROOM)}</div>` +
       `<div class="key" id="bkey">${ROOM === 2 ? 'ENTER' : 'SPACE'}</div>${ROOM === 2 ? '<div class="note">THE BIG ONE</div>' : ''}` +
@@ -1041,28 +1133,44 @@ function drawKill() {
   if (!$('bli')) return;
   const ready = S.ready || {}, rooms = [1, 2, 4], all = rooms.every(r => ready[r]), missing = rooms.filter(r => !ready[r]).map(r => '0' + r);
   $('bli').innerHTML = rooms.map(r => `<span class="${ready[r] ? 'on' : ''}">0${r}</span>`).join('');
-  $('bkw').textContent = `THE THREE PRESSES MUST LAND WITHIN ${S.win} s ▸ TRACE ${res('trace')}%`;
+  $('bkw').textContent = `ALL THREE PRESSES WITHIN ${S.win} s (TRACE ${res('trace')}%) ▸ OUT OF SYNC COSTS 1 LIFE`;
+  const resting = hubNow() < S.safe;          // a life just went: the hub ignores presses until the next count
   if (ROOM === 3) {
-    $('bkb').textContent = all ? 'COUNT IT DOWN' : 'GET IN POSITION';
-    $('bks').textContent = all ? '3 · 2 · 1 · NOW' : `WAITING FOR SECTOR ${missing.join(' · ')}`;
-    $('bkb').classList.toggle('pulse', all);
+    const [lo, hi] = !all ? [0, 1] : counting ? [3, 3] : [2, 2];
+    $('bsteps').innerHTML = KILL_STEPS.map((t, i) => `<li class="${i < lo ? 'ok' : i <= hi ? 'cur' : ''}">${t}</li>`).join('');
+    const [b, s] = !all ? ['GET IN POSITION', `WAITING FOR SECTOR ${missing.join(' · ')} TO PRESS ONCE`] : counting ? [counting, counting === 'NOW!' ? 'THEY PRESS NOW!' : 'SHOUT IT!']
+      : resting ? ['GET READY', 'YOU COUNT AGAIN IN A MOMENT'] : ['PRESS SPACE', 'THEN SHOUT THE COUNT'];
+    $('bkb').textContent = b; $('bks').textContent = s;
+    $('bkb').classList.toggle('pulse', all && !counting && !resting); $('bkb').classList.toggle('count', !!counting);
     return;
   }
-  $('bks').textContent = !ready[ROOM] ? "PRESS IT ONCE WHEN YOU'RE HERE" : !all ? `READY ▸ WAITING FOR SECTOR ${missing.join(' · ')}` :
-    pressed ? 'PRESSED' : 'LISTEN TO THE MAP ▸ ON ZERO, PRESS';
-  $('bkey').classList.toggle('go', all && !pressed);
+  $('bks').textContent = !ready[ROOM] ? "PRESS IT ONCE NOW ▸ IT TELLS THE MAP YOU'RE HERE" : !all ? `READY ▸ WAITING FOR SECTOR ${missing.join(' · ')}` :
+    resting ? 'WAIT ▸ SECTOR 03 COUNTS AGAIN' : pressed ? 'PRESSED' : 'LISTEN TO SECTOR 03 ▸ PRESS ON "NOW!"';
+  $('bkey').classList.toggle('go', all && !pressed && !resting);
+}
+let counting = '';                            // room 3's count on screen: '3' '2' '1' 'NOW!', '' = not counting
+async function countdown() {
+  if (counting || ![1, 2, 4].every(r => S.ready?.[r]) || hubNow() < S.safe) return;
+  const g = gen;
+  for (const n of ['3', '2', '1', 'NOW!']) {
+    if (g !== gen) return;
+    counting = n; drawKill();
+    if (n === 'NOW!') { tone('square', 1320, 0, .6, .25); flash(.3, 200); } else tone('square', 660, 0, .18, .2);
+    await wait(n === 'NOW!' ? 1800 : C.COUNT_MS);
+  }
+  counting = ''; if (g === gen) drawKill();
 }
 function press() {
   if (ws?.readyState !== 1) return;          // a press that can't arrive now would only count late
   const all = [1, 2, 4].every(r => S.ready?.[r]);
-  if (all) { if (pressed) return; pressed = true; }
+  if (all) { if (pressed || hubNow() < S.safe) return; pressed = true; }
   send({ t: 'fin', a: 'press', ts: hubNow() });
   sfx.press(); const k = $('bkey'); if (k) { k.classList.add('hit'); setTimeout(() => k.classList.remove('hit'), 140); }
   drawKill();
 }
 async function failed(ev) {
-  pressed = false; drawKill();
-  one('fail'); flash(.45, 400, '#ff3344'); shake(B, 14, 400);
+  pressed = false; drawKill();                // the sound, flash and -1 LIFE: lifeLost()
+  setTimeout(drawKill, Math.max(0, S.safe - hubNow()) + 50);   // the rest is over: the next count
   const f = $('bkf'); if (!f) return;
   f.textContent = ev.missing?.length ? `SECTOR ${ev.missing.map(r => '0' + r).join(' · ')} NEVER PRESSED` : `OUT OF SYNC ▸ ${ev.spread.toFixed(2)} s APART`;
   if ($('bka')) $('bka').textContent = taunt();
@@ -1099,6 +1207,22 @@ async function theEnd(g, restore) {
   if (!restore) { one('end'); strip('win'); flash(1, 900); await resolveText($('bfin'), 'TERMINATED', 70); stamp($('bfin')); }
   else $('bfin').textContent = 'TERMINATED';
 }
+// ===== Out of lives: she wins. The -1 LIFE banner plays, then every screen goes black together, she gloats, YOU LOST =====
+async function theLost(g, restore) {
+  task?.stop(); task = cur = null; view = ''; counting = '';
+  if (!restore) { await until(S.at); if (g !== gen) return; }
+  quiet(); scene = null; clearFx(); main(''); B.classList.add('black'); theme('green');
+  if (!restore) {
+    one('lost'); strip('miss'); await wait(1400); if (g !== gen) return;
+    await talk(SAY.lost, { auto: true, hold: 1800, rain: .4, cancel: () => g !== gen });
+    if (g !== gen) return;
+  }
+  B.classList.remove('black'); setRain(1);
+  main(`<div class="mid"><div class="note">ALL ${S.maxLives} LIVES GONE</div><div class="big" id="bfin"></div>` +
+    `<div class="sub">AURORA V ▸ STILL ONLINE</div><div class="note">THANK YOU FOR PLAYING ▸ EXIT THROUGH SECTOR 04</div></div>`);
+  if (!restore) { flash(1, 700, '#4dff88'); shake(B, 14, 600); await resolveText($('bfin'), 'YOU LOST', 70); stamp($('bfin')); }
+  else $('bfin').textContent = 'YOU LOST';
+}
 
 // ===== Keys: while the finale runs, this file gets them first; the page only still gets Ctrl+Alt+R and M =====
 function staff(code) {
@@ -1116,10 +1240,11 @@ function staff(code) {
 function key(e) {
   if (dlgKey && (e.code === 'Space' || e.code === 'Enter' || e.code === 'NumpadEnter')) return dlgKey();
   if (e.repeat && phase !== 'fight') return;
-  if (phase === 'takeover' && ROOM === 3 && e.code === 'Space') { loop('siren', false); return send({ t: 'fin', a: 'trace' }); }
+  if (phase === 'takeover' && ROOM === 3 && e.code === 'Space' && livesShown) { loop('siren', false); return send({ t: 'fin', a: 'trace' }); }
   if (phase === 'fight' && ROOM !== 3) { if (!armed && mine()) return e.code === 'Space' && arm(); return task?.key(e); }
   if (phase === 'regroup' && ROOM === 3 && e.code === 'Space') return send({ t: 'fin', a: 'brief' });
   if (phase === 'kill' && ROOM !== 3 && C.KILL_KEYS.includes(e.code)) return press();
+  if (phase === 'kill' && ROOM === 3 && e.code === 'Space') return countdown();
 }
 function onKey(e) {
   if (!live || (!phase && ROOM !== 4)) return;
@@ -1139,7 +1264,7 @@ setInterval(() => {                            // room 1's game runs on the proj
 }, 500);
 function helpPanel() {
   B.classList.toggle('help');
-  $('bhelp').textContent = `GAME 5 · THE FINALE\nroom ${ROOM}   phase ${phase}   hub ${ws?.readyState === 1 ? 'connected' : 'DOWN'}   clock ±${Math.round(best / 2)} ms\n\n` +
+  $('bhelp').textContent = `GAME 5 · THE FINALE\nroom ${ROOM}   phase ${phase}   lives ${S?.lives}   hub ${ws?.readyState === 1 ? 'connected' : 'DOWN'}   clock ±${Math.round(best / 2)} ms\n\n` +
     'Ctrl+Alt+F  skip this step (the GM panel\'s FORCE key does the same)\nCtrl+Alt+R  reload this laptop (it rejoins the finale)\n' +
     (ROOM === 4 ? 'Ctrl+Alt+B  jump to MIRRORS (testing)\n' : '') +
     'Ctrl+Alt+M  mute / unmute\nCtrl+Alt+H  hide this\n\nFINISH RUN or NEW TEAM on the GM panel ends the finale on every laptop.';

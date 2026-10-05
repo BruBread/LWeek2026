@@ -125,8 +125,9 @@ Every speed is in `CFG.ROUNDS` at the top of `game.html`, one line per layer, in
 Blinks of 80 ms or more fade in and out; faster ones are a crisp full-on, so slow motion counts them cleanly. The game turns all this into steps for the board, so you only edit `game.html`. To try a change: save, Ctrl+Alt+R, Ctrl+Alt+K, then Ctrl+Alt+N to reach the layer. No new upload.
 
 Layer 3 is the one to get right:
-- **People can count it with their eyes?** Make it faster: lower `on` and `off` (for example 20 and 25).
-- **The blinks merge together in slow motion?** Make it slower: raise them (for example 35 and 40).
+It starts at 50 and 60: a flicker you can see but can't count.
+- **People can count it with their eyes?** Make it faster: lower `on` and `off` (for example 35 and 40).
+- **It looks like one flash, not a flicker?** Make it slower: raise them (for example 65 and 75). Keep `on` under 80 so the blinks stay crisp, and keep it faster than layer 2.
 - Don't go below about 15 ms.
 
 The effects (power-on flicker, wrong-code stutter, layer sweep, heartbeat, time-up strobe) are in `FX` in `game.html`. The board takes up to 160 steps of 1-10000 ms each; the game's longest list is about 60.
@@ -160,6 +161,7 @@ The effects (power-on flicker, wrong-code stutter, layer sweep, heartbeat, time-
 | Ctrl+Alt+K | Skip the intro and the training, straight to the hunt |
 | Ctrl+Alt+N | Skip to the next layer (testing the speeds / team stuck) |
 | Ctrl+Alt+I | Glitch the next hint onto the screen now |
+| Ctrl+Alt+L | Lights slower: each press makes the blinks 1.5x longer, for the rest of the run (also SLOWER on the GM panel) |
 | Ctrl+Alt+F | Force the win, all layers (board dead / team stuck / no slow-mo phone) |
 | Ctrl+Alt+R | Reset for the next team (new codes, locks again) |
 | Ctrl+Alt+W | Replay only the win screen |

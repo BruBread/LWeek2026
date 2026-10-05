@@ -95,6 +95,7 @@ input { font: inherit; color: #fff; background: #000; border: 1px solid rgba(255
 .hd { display: flex; justify-content: space-between; gap: 8px; }
 #fph { font-size: 22px; font-weight: 700; letter-spacing: .1em; color: var(--dim); margin: 6px 0 2px; }
 #fin.on #fph { color: var(--g); } #fin.done #fph { color: var(--g); }
+#fin.lost { border-left-color: var(--hud); } #fin.lost #fph { color: var(--hud); }
 #fdo { color: #fff; min-height: 2.9em; }
 #ftasks { display: none; grid-template-columns: auto auto 1fr auto auto; gap: 6px 12px; align-items: center; margin-top: 10px; }
 #fin.fight #ftasks { display: grid; }
@@ -175,7 +176,7 @@ let SIGNUP = 'http://' + location.hostname + ':4000';
 const ROOMS = [
   { id: 'puzzle1', name: 'BRAIN UPLOAD',  k: 'sync',  stat: 'SYNC',   hint: -5, devs: ['mask'], keys: [['KeyF', 'FORCE CAPTURE', 'Force the mask capture?'], ['KeyB', 'BLINK MASK'], ['KeyR', 'RESET', 'Reset room 1?']] },
   { id: 'puzzle2', name: 'SYSTEM POWER',  k: 'power', stat: 'ENERGY', hint: -5, devs: ['bulb', 'camera'], keys: [['KeyU', 'UNLOCK'], ['KeyX', 'CAUGHT', 'Team caught? (-15 POWER, they advance)'], ['KeyR', 'RESET', 'Reset room 2?']] },
-  { id: 'puzzle3', name: 'HIDDEN SIGNAL', k: 'trace', stat: 'TRACE',  aur: 1, hint: 5,  devs: ['beacon'], keys: [['KeyU', 'UNLOCK'], ['KeyF', 'FORCE WIN', 'Force the win?'], ['KeyR', 'RESET', 'Reset room 3?']] },
+  { id: 'puzzle3', name: 'HIDDEN SIGNAL', k: 'trace', stat: 'TRACE',  aur: 1, hint: 5,  devs: ['beacon'], keys: [['KeyU', 'UNLOCK'], ['KeyL', 'SLOWER'], ['KeyF', 'FORCE WIN', 'Force the win?'], ['KeyR', 'RESET', 'Reset room 3?']] },
   { id: 'puzzle4', name: 'CORE GATE',     k: 'human', stat: 'HUMAN',  aur: 1, hint: 5,  devs: ['ctrl'], keys: [['KeyU', 'UNLOCK'], ['KeyF', 'FORCE WIN', 'Force the win?'], ['KeyR', 'RESET', 'Reset room 4?']] },
 ];
 
@@ -194,7 +195,7 @@ const key = (id, v) => send({ t: 'cmd', to: id, a: 'key', v });
 // reset's reload). Not from the 1 s reports alone: a hidden, silent tab (a finished room) slows its timers to once a minute
 const online = id => hubUp() && (linked(id) || Date.now() - (seen[id] || 0) < 3000);
 // the run clock: from room 1's first click to the kill switch (or FINISH / RESET). waiting = a team is in, no click yet
-const clock = () => run.end ?? run.splits.p5done ?? (run.t0 ? Date.now() + skew - run.t0 : null);
+const clock = () => run.end ?? run.splits.p5done ?? run.splits.p5lost ?? (run.t0 ? Date.now() + skew - run.t0 : null);
 const waiting = () => run.team && !run.t0 && run.end == null;
 // when the team started room i (0-3, 4 = the finale), in run-clock ms: rooms 2-4 report their start (pNstart),
 // otherwise it's when the room before was cleared
@@ -324,11 +325,12 @@ const PHASES = {
   null:     ['WAITING FOR GAME 4', 'Starts by itself when game 4\'s fake win stalls at 97%.', ''],
   crash:    ['SHE\'S TALKING', 'Her dialogue plays on the room 4 screen. Then the team walks back to room 3.', 'SKIP HER DIALOGUE'],
   takeover: ['GO TO THE MAP', 'Every screen is green. The team presses SPACE at the map in room 3.', 'SKIP: START HER TASKS'],
-  fight:    ['HER TASKS', 'Split up: rooms 1, 2 and 4, SPACE when there. The first task done makes rooms 1 and 2 swap.', ''],
+  fight:    ['HER TASKS', 'Split up: rooms 1, 2 and 4, SPACE when there. The first task done makes rooms 1 and 2 swap. A wrong BINARY digit or a missed MIRRORS shot costs a life.', ''],
   regroup:  ['BACK TO THE MAP', 'Everyone returns to room 3 and presses SPACE there.', 'SKIP: START THE BRIEFING'],
   brief:    ['BRIEFING', 'The map in room 3 explains the kill switch.', 'SKIP THE BRIEFING'],
-  kill:     ['KILL SWITCH', 'One player each in rooms 1, 2 and 4 presses once to be ready. The rest count down at the map; all press on zero.', 'FORCE THE KILL'],
+  kill:     ['KILL SWITCH', 'One player each in rooms 1, 2 and 4 presses once to be ready. The rest press SPACE at the map and read its 3-2-1 out loud; all press on NOW. Out of sync costs a life.', 'FORCE THE KILL'],
   end:      ['SHE\'S DEAD ✓', 'Her last words play on every screen. Then FINISH RUN.', ''],
+  lost:     ['SHE WON ✗', 'The team ran out of lives. She gloats on every screen, then YOU LOST. Then FINISH RUN.', ''],
 };
 $('#ftasks').innerHTML = TASKS.map(([k, n]) => `<b>${n}</b><span class="lbl" id="tr-${k}"></span><span class="tbar"><i id="tb-${k}"></i></span>` +
   `<span id="tn-${k}"></span><button class="quiet" data-skip="${k}">DONE</button>`).join('');
@@ -342,7 +344,7 @@ function drawFinale() {
   const ph = F?.phase ?? null, [title, todo, skip] = PHASES[ph] || PHASES.null;
   cls($('#fin'), `box ${ph === 'end' ? 'done' : ph ? 'on' : ''} ${ph || ''}`);
   put($('#fph'), title); put($('#fdo'), todo);
-  put($('#fwin'), F && ph ? `KILL WINDOW ${F.win} s ▸ TRACE ${F.run?.trace ?? 50}%` : '');
+  put($('#fwin'), F && ph ? `LIVES ${F.lives}/${F.maxLives} ▸ KILL WINDOW ${F.win} s ▸ TRACE ${F.run?.trace ?? 50}%` : '');
   $('#fskip').hidden = !skip; put($('#fskip'), skip);   // no button when there's nothing to skip (the tasks have their own DONE)
   if (ph === 'fight') TASKS.forEach(([k]) => {
     const t = F.tasks[k];
@@ -363,7 +365,7 @@ function render() { drawFlow(); drawRooms(); drawFinale(); drawAI(); drawPics();
   const ms = clock(), lim = LIMIT_MIN * 60000, w = waiting();
   put($('#limit'), w ? "RUN CLOCK ▸ STARTS AT ROOM 1'S FIRST CLICK" : `RUN CLOCK ▸ LIMIT ${LIMIT_MIN}:00`);
   put($('#clock'), w ? 'READY' : mmss(ms)); $('#go').hidden = !w;
-  cls($('#clock'), w ? 'wait' : ms == null ? '' : run.end != null || run.splits.p5done != null ? 'fin' : ms > lim ? 'over' : ms > lim * .75 ? 'warn' : 'ok');
+  cls($('#clock'), w ? 'wait' : ms == null ? '' : run.end != null || run.splits.p5done != null || run.splits.p5lost != null ? 'fin' : ms > lim ? 'over' : ms > lim * .75 ? 'warn' : 'ok');
   put($('#who'), run.team || 'NO TEAM'); cls($('#who'), run.team ? '' : 'none');
 }
 
@@ -447,7 +449,7 @@ const BOSS = 'bossfight.mp3', HUM = 'hum.mp3', SCREAM = 'scream.mp3', HUM_WAIT =
 const LEVEL = { 'game4.mp3': .7, [HUM]: .45 }, lvl = f => LEVEL[f] ?? 1;
 let live = null;   // no team: the last soundtrack moment a room sent { e, room, at }
 const wanted = () => run.end != null ? null
-  : F?.phase ? (/^(crash|end)$/.test(F.phase) ? null : BOSS)   // the boss theme from the takeover to the kill; her talking and her death get silence
+  : F?.phase ? (/^(crash|end|lost)$/.test(F.phase) ? null : BOSS)   // the boss theme from the takeover to the kill; her talking, her death and her win get silence
   : SOUNDTRACK.findLast(([at]) => at.some(k => run.t0 ? run.splits[k] != null : live?.e === k))?.[1] ?? null;
 let bgNow = null, screaming = null, quietAt = 0, humOn = false;
 function soundtrack() {
@@ -653,7 +655,7 @@ function conn() {
     if (m.t === 'roster') rost = m;
     if (m.t === 'history') $('#hist').innerHTML = `<table><tr><th>TEAM</th><th>TIME</th><th>FINALE</th><th>SYNC</th><th>POWER</th><th>TRACE</th><th>HUMAN</th></tr>` +
       m.runs.slice().reverse().map(x => `<tr title="${esc(runInfo(x))}"><td>${esc(x.team)}</td><td class="${x.end <= LIMIT_MIN * 60000 ? 'win' : ''}">${mmss(x.end)}${x.end <= LIMIT_MIN * 60000 ? ' ✓' : ''}</td>` +
-        `<td class="${x.splits?.p5done != null ? 'win' : ''}">${x.splits?.p5done != null ? '✓' : '-'}</td>` +
+        `<td class="${x.splits?.p5done != null ? 'win' : ''}">${x.splits?.p5done != null ? '✓' : x.splits?.p5lost != null ? '✗ LOST' : '-'}</td>` +
         ['sync', 'power', 'trace', 'human'].map(k => `<td>${x[k] ?? '-'}</td>`).join('') + '</tr>').join('') + '</table>';
     render();
   };

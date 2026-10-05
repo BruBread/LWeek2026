@@ -138,7 +138,8 @@ const fresh = (team = '', code = '') => ({ sync: null, power: null, trace: null,
 // ===== Game 5, the finale: hub/public/boss.js on every room laptop. The hub owns its state, so the 4 screens agree,
 // a reloaded laptop rejoins, and the synced moments (takeover, blackout) land at one hub time on every screen.
 // Room 3 = the map. Rooms 1, 2, 4 = her tasks. Phases: crash (room 4's fake win breaks, Aurora talks) > takeover (every
-// screen goes green) > fight (the tasks) > regroup (back to the map) > brief > kill (rooms 1, 2, 4 press together) > end
+// screen goes green) > fight (the tasks) > regroup (back to the map) > brief > kill (rooms 1, 2, 4 press together) > end.
+// The team shares LIVES through all of it: a failed kill switch or a task mistake (boss.js C.LIFE) costs one; none left = lost
 const FIN = {
   LEAD: 600,             // ms from a synced event to the moment every screen shows it (covers Wi-Fi delay)
   SCAN: 4200,            // the map's trace sweep: the task rooms light up when it ends
@@ -146,15 +147,18 @@ const FIN = {
   WIN: [1.0, 0.4],       // kill switch: how far apart (s) the 3 presses may land, at TRACE 0 and at TRACE 100
   WIDEN: 0.3,            // + this per miss after the 2nd
   WAIT: 1500,            // after a try's first press, the other rooms get the window + this long
+  LIVES: 5,              // shared by the whole team for the whole finale
+  GRACE: +process.env.FIN_GRACE || 2500,   // ms after a lost life: mistakes are free and kill presses don't count (only the tests change it)
+  LOST: 2600,            // ms from the last life to her win on every screen (the -1 LIFE banner plays first)
   BULB: { takeover: '#4dff88', end: '#ffffff' },   // the hallway bulb: her green while she's loose, white when she dies
 };
 const TASK_ROOMS = { binary: 1, words: 2, cross: 4 }, KILL_ROOMS = [1, 2, 4];
 function finFresh() {
-  return { phase: null, at: 0, seq: 0, swapped: false, ready: {}, fails: 0, ev: null,
+  return { phase: null, at: 0, seq: 0, swapped: false, ready: {}, fails: 0, ev: null, lives: FIN.LIVES, safe: 0,
     tasks: Object.fromEntries(Object.entries(TASK_ROOMS).map(([k, room]) => [k, { room, done: 0, clear: false }])) };
 }
 const killWin = () => +(FIN.WIN[0] + (FIN.WIN[1] - FIN.WIN[0]) * (run.trace ?? 50) / 100 + FIN.WIDEN * Math.max(0, run.fin.fails - 1)).toFixed(2);
-const finMsg = () => ({ t: 'fin', ...run.fin, win: killWin(), now: Date.now(),
+const finMsg = () => ({ t: 'fin', ...run.fin, win: killWin(), maxLives: FIN.LIVES, now: Date.now(),
   run: { sync: run.sync, power: run.power, trace: run.trace, human: run.human, facts: run.facts } });
 let presses = {}, judgeT = null;          // the kill switch's current try (not saved: after a hub restart they just press again)
 function fin(ws, m, room = +String(ws.id).replace(/\D/g, '')) {   // room: fin1..fin4 = room 1..4
@@ -175,6 +179,7 @@ function fin(ws, m, room = +String(ws.id).replace(/\D/g, '')) {   // room: fin1.
       if (Object.values(f.tasks).every(t => t.clear)) go('regroup', FIN.REGROUP);
       break;
     }
+    case 'mistake': if (f.phase !== 'fight' || task?.room !== room || task.clear || now < f.safe) return; loseLife({ k: 'life', task: m.task, room }); break;
     case 'brief': if (f.phase !== 'regroup') return; go('brief'); break;
     case 'kill': if (f.phase !== 'brief') return; go('kill'); f.ready = {}; presses = {}; break;
     case 'force': if (f.phase !== 'kill') return; return judge(true);
@@ -184,7 +189,7 @@ function fin(ws, m, room = +String(ws.id).replace(/\D/g, '')) {   // room: fin1.
         if (f.ready[room]) return;
         f.ready[room] = true; f.ev = { k: 'ready', room, at: now }; break;
       }
-      if (presses[room] != null) return;
+      if (presses[room] != null || now < f.safe) return;   // just lost a life: the map counts again first
       presses[room] = Math.abs(m.ts - now) < 3000 ? +m.ts : now;   // its own (hub-corrected) clock, so Wi-Fi delay doesn't count
       if (Object.keys(presses).length === 1) judgeT = setTimeout(judge, killWin() * 1000 + FIN.WAIT);
       if (KILL_ROOMS.every(r => presses[r] != null)) return judge();
@@ -203,9 +208,17 @@ function judge(forced) {
     f.phase = 'end'; f.at = now + FIN.LEAD; f.ev = { k: 'kill', spread: forced ? null : +spread.toFixed(2), at: now };
     if (run.t0 && run.end == null && run.splits.p5done == null) run.splits.p5done = now - run.t0;
     log('finale end'); cmd('strip', 'solid', FIN.BULB.end);
-  } else { f.fails++; f.ev = { k: 'fail', spread: missing.length ? null : +spread.toFixed(2), missing, at: now }; }
+  } else { f.fails++; loseLife({ k: 'fail', spread: missing.length ? null : +spread.toFixed(2), missing }); }
   finChanged();
   if (f.phase === 'end') toPages(runMsg());   // the GM's run card gets the p5done split
+}
+function loseLife(ev) {        // one of the team's lives gone; the last one and she wins
+  const f = run.fin, now = Date.now();
+  f.lives--; f.safe = now + FIN.GRACE; f.ev = { ...ev, lives: f.lives, at: now };
+  log(`finale life lost (${ev.task || 'kill switch'}) ▸ ${f.lives} left`);
+  if (f.lives > 0) return;
+  f.phase = 'lost'; f.at = now + FIN.LOST; log('finale lost');
+  if (run.t0 && run.end == null && run.splits.p5lost == null) { run.splits.p5lost = now - run.t0; toPages(runMsg()); }   // the GM's clock stops
 }
 function finChanged() { run.fin.seq++; save(); finOut(); }
 const finOut = () => { const m = finMsg(); toFin(m); toPages(m); };   // boss.js on the room laptops, and the GM panel's game 5 card
@@ -218,7 +231,7 @@ function finSkip(task) {
 }
 let run = fresh();
 try { run = { ...run, ...JSON.parse(fs.readFileSync(RUN, 'utf8')) }; } catch {}
-if (!run.t0 || run.end != null) run.fin = finFresh();   // a saved finale only comes back mid-run (not a staff test's leftover)
+run.fin = !run.t0 || run.end != null ? finFresh() : { ...finFresh(), ...run.fin };   // a saved finale only comes back mid-run (not a staff test's leftover)
 const save = () => { try { fs.writeFileSync(RUN, JSON.stringify(run)); } catch (e) { log('could not save run: ' + e.message); } };
 const clamp = v => Math.max(0, Math.min(100, Math.round(v)));
 const runMsg = () => { const { fin: _, ...r } = run; return { t: 'run', ...r, now: Date.now() }; };   // now: lets the GM clock ignore its own device's clock; fin goes to boss.js only
@@ -233,7 +246,7 @@ function startClock(why) {   // the team is in room 1 and touched something: the
 function closeRun() {        // stop the clock and add the run to the history, once (FINISH RUN, or RESET ALL ROOMS mid-run)
   clearTimeout(judgeT); presses = {};
   if (!run.t0 || run.end != null) return;
-  run.end = run.splits.p5done ?? Date.now() - run.t0;   // a team that killed her: her death time, not when staff got to the button
+  run.end = run.splits.p5done ?? run.splits.p5lost ?? Date.now() - run.t0;   // a team that killed her (or ran out of lives): that moment, not when staff got to the button
   const { fin: _, ...done } = run, line = { ...done, at: new Date().toISOString() };
   fs.appendFile(RUNS, JSON.stringify(line) + '\n', e => e && log('could not save run: ' + e.message));
   history = [...history, line].slice(-30);

@@ -1,13 +1,13 @@
 // smoke test: device receives finale_red, gets state replayed after reconnect; carried resources store, clamp, merge facts, hints;
 // GM panel protocol (status, staff keys, run clock from room 1's first click, room starts, finish, reset for the next group);
 // unlocks resent on hello; the run surviving a hub restart;
-// game 5's finale state (phases in order, task swap, kill switch judging).
+// game 5's finale state (phases in order, task swap, kill switch judging, the team's lives).
 // Starts its own hub on :3999 with temp run files, so it runs next to the real hub and never lands in runs.jsonl.
 const WebSocket = require('ws'), assert = require('assert'), { spawn } = require('child_process'), fs = require('fs'), os = require('os'), path = require('path');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-hub-'));
 let hub;
 const startHub = () => new Promise((ok, bad) => {
-  hub = spawn(process.execPath, [path.join(__dirname, 'server.js')], { env: { ...process.env, PORT: '3999', RUNS: path.join(tmp, 'runs.jsonl'), RUN: path.join(tmp, 'run.json'), SFX: path.join(tmp, 'sfx'), UPDATER_PORT: '3998' } });
+  hub = spawn(process.execPath, [path.join(__dirname, 'server.js')], { env: { ...process.env, PORT: '3999', RUNS: path.join(tmp, 'runs.jsonl'), RUN: path.join(tmp, 'run.json'), SFX: path.join(tmp, 'sfx'), UPDATER_PORT: '3998', FIN_GRACE: '300' } });
   hub.stdout.once('data', () => ok());
   hub.once('exit', c => bad(new Error(`hub exited (${c}). Is something already on :3999?`)));
 });
@@ -130,6 +130,10 @@ const unlocked = (w, e) => w.msgs.some(m => m.t === 'evt' && m.e === e);
   F(f1, { a: 'press', ts: t }); F(f2, { a: 'press', ts: t + 2000 }); F(f4, { a: 'press', ts: t }); await wait(100);
   s = fin(f3);
   assert(s.phase === 'kill' && s.fails === 1 && s.ev.k === 'fail' && s.ev.spread === 2, '2 s apart: OUT OF SYNC, try again');
+  assert(s.lives === 4 && s.ev.lives === 4 && s.maxLives === 5, 'a failed kill switch costs the team a life');
+  F(f1, { a: 'press', ts: Date.now() }); await wait(100);
+  assert.strictEqual(fin(f3).fails, 1, 'right after a lost life, presses wait for the next count');
+  await wait(300);
   t = Date.now();
   F(f1, { a: 'press', ts: t }); F(f2, { a: 'press', ts: t + 300 }); F(f4, { a: 'press', ts: t + 100 }); await wait(100);
   s = fin(f3);
@@ -185,6 +189,25 @@ const unlocked = (w, e) => w.msgs.some(m => m.t === 'evt' && m.e === e);
   F(await open('fin4', 'fin'), { a: 'crash' }); await wait(200);
   hub.kill(); await wait(300); await startHub(); gm = await open('gm1', 'page');
   assert.strictEqual(fin(await open('fin3', 'fin')).phase, null, "a staff test's finale is dropped on restart");
+  g({ t: 'newteam' }); await wait(100);
+
+  // out of lives: a task mistake counts from its own room, never twice in a row, and the last life lost = she wins
+  g({ t: 'newteam', team: 'Team Three' }); g({ t: 'start' }); await wait(100);
+  const f4b = await open('fin4', 'fin'), gf = () => gm.msgs.filter(m => m.t === 'fin').pop();
+  F(f4b, { a: 'crash' }); g({ t: 'finskip' }); g({ t: 'finskip' }); await wait(100);
+  assert.strictEqual(gf().lives, 5, 'the team starts the finale with 5 lives');
+  F(f4b, { a: 'mistake', task: 'binary' }); await wait(100);
+  assert.strictEqual(gf().lives, 5, "a mistake only counts from the task's own room");
+  F(f4b, { a: 'mistake', task: 'cross' }); F(f4b, { a: 'mistake', task: 'cross' }); await wait(100);
+  s = gf();
+  assert(s.lives === 4 && s.ev.k === 'life' && s.ev.room === 4 && s.ev.task === 'cross', 'a missed shot costs one life, not two in a row');
+  for (let i = 0; i < 4; i++) { await wait(350); F(f4b, { a: 'mistake', task: 'cross' }); }
+  await wait(100); s = gf();
+  assert(s.phase === 'lost' && s.lives === 0 && s.at > s.now, 'no lives left: she wins, a moment later on every screen');
+  assert(last(gm).splits.p5lost >= 0, 'the loss sets the p5lost split');
+  g({ t: 'finish' }); await wait(200);
+  const lost = runs()[runs().length - 1];
+  assert(lost.team === 'Team Three' && lost.end === lost.splits.p5lost, 'a lost run is saved, timed at the loss');
   g({ t: 'newteam' }); await wait(100);
 
   // the GM's sound effect pads: upload, list, rename to a safe name, refuse other files, delete

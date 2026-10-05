@@ -284,6 +284,7 @@ Ctrl+Alt+S  start now, even if locked
 Ctrl+Alt+K  skip the intro and the training, straight to the hunt
 Ctrl+Alt+N  skip to the next layer (testing the speeds / team stuck)
 Ctrl+Alt+I  show the next hint now (it glitches onto the screen)
+Ctrl+Alt+L  lights slower: blinks x1.5 longer per press, rest of the run
 Ctrl+Alt+F  force the win, all layers (beacon dead / team stuck)
 Ctrl+Alt+R  reset for next team (new codes, locks again)
 Ctrl+Alt+W  replay only the win screen
@@ -300,13 +301,13 @@ const CFG = {
   // 3 rounds ("layers"), each a new code blinked faster. This page turns them into the board's steps, so tune here:
   // no reflash. ms: on = one blink, off = between blinks of the same light, gap = before the next light,
   // loop = the dark pause before it all repeats. Blinks of 80 ms or more fade in and out; faster ones stay crisp.
-  // The last round must look like ONE flash per light to the eye and still split into separate blinks in slow motion
+  // The last round is a visible flicker, too quick to count by eye, that splits cleanly into blinks in slow motion
   ROUNDS: [
     { on: 300, off: 400, gap: 1200, loop: 3000, name: 'CARRIER',      sub: 'FIND HER TRANSMITTER IN THIS ROOM' },   // easy to count
     { on: 100, off: 120, gap: 1000, loop: 2500, name: 'OVERCLOCK',    sub: 'SHE SPED UP' },                          // countable if they focus
-    { on: 25,  off: 30,  gap: 1000, loop: 2500, name: 'BEYOND SIGHT', sub: 'TOO FAST FOR HUMAN EYES' },              // 240 fps slow-mo shows each blink ~6 frames
+    { on: 50,  off: 60,  gap: 1000, loop: 2500, name: 'BEYOND SIGHT', sub: 'TOO FAST FOR HUMAN EYES' },              // ~9 Hz: 240 fps slow-mo shows each blink ~12 frames
   ],
-  EYE_HZ: 10,                // the blink-rate gauge's HUMAN EYE LIMIT line (display only)
+  EYE_HZ: 8,                 // the blink-rate gauge's HUMAN EYE LIMIT line (display only; below the last layer so it reads "beyond")
   // TRACE, carried to the finale = the trace bar when they crack it (lower is better). Mistakes push the bar forward:
   WRONG_TRACE: 5,            // % per wrong code
   LOCK_MS: 2500,             // input locked this long after a wrong code
@@ -359,12 +360,15 @@ const any = a => a[Math.random() * a.length | 0];
 const store = { get(k) { try { return JSON.parse(localStorage.getItem(k)) } catch { return null } },
                 set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} } };
 
-// a new code every layer, digits 2-5: no zeros, nothing too long to count, and no 1s, so 111 (the last layer to the
-// naked eye) is always wrong. Reset reloads the page, which rolls new ones
+// a new code every layer, digits 2-5: no zeros, nothing too long to count, and no 1s, so 111 (one blink each, a
+// guess at the last layer's flicker) is always wrong. Reset reloads the page, which rolls new ones
 const LIGHTS = 3;            // digits in the code = lights on the beacon (must match LED_PINS in beacon_esp32.ino)
 const LAST = CFG.ROUNDS.length - 1, TRAP = '1'.repeat(LIGHTS);
 const roll = () => Array.from({ length: LIGHTS }, () => 2 + (Math.random() * 4 | 0)).join('');
 let round = 0, CODE = roll();
+// staff (Ctrl+Alt+L, or SLOWER on the GM panel) stretch the blinks x1.5 per press, for the rest of this run
+let slow = 1;
+const cur = () => { const R = CFG.ROUNDS[round]; return { ...R, on: R.on * slow, off: R.off * slow }; };
 const DEMO = '243';           // the training's demo code
 
 let mode = 'standby';        // standby | intro | tut | trans | hunt | check | won | lost | end
@@ -516,7 +520,7 @@ async function hub() {
 }
 // the GM panel presses this page's Ctrl+Alt staff keys remotely, and sees its state once a second
 const staffKey = code => dispatchEvent(new KeyboardEvent('keydown', { code, ctrlKey: true, altKey: true }));
-setInterval(() => hubSend({ t: 'status', v: { mode, unlocked, code: `${CODE} (${round + 1}/${LAST + 1})`, stat: trace, boards } }), 1000);
+setInterval(() => hubSend({ t: 'status', v: { mode, unlocked, code: `${CODE} (${round + 1}/${LAST + 1})${slow > 1 ? ` slow x${+slow.toFixed(2)}` : ''}`, stat: trace, boards } }), 1000);
 
 // ===== Sound (synthesized, same set as puzzle 2) =====
 const AC = new AudioContext();
@@ -658,7 +662,7 @@ const HZ = [1, 30], hzX = hz => Math.min(1, Math.max(0, Math.log(hz / HZ[0]) / M
 const hzOf = R => 1000 / (R.on + R.off);
 $('#track').style.setProperty('--eye', hzX(CFG.EYE_HZ) * 100 + '%');
 $('#ticks').innerHTML = [1, 2, 5, 10, 20, 30].map(h => `<span style="left:${hzX(h) * 100}%">${h}${h === 1 ? ' Hz' : ''}</span>`).join('');
-function renderRate(R = CFG.ROUNDS[round]) {
+function renderRate(R = cur()) {
   const hz = hzOf(R), x = hzX(hz);
   $('#hz').textContent = hz.toFixed(1) + ' Hz';
   $('#needle').style.left = x * 100 + '%'; $('#fill').style.transform = `scaleX(${x})`;
@@ -868,7 +872,7 @@ async function hunt() {
   $('#term').textContent = ''; $('#tut').classList.remove('on');
   entry = ''; counts = null; onLens = null; lenses.loop([]);
   renderCells(); renderHud(); renderLayers(); renderRate();
-  setLoop(pattern(CODE, CFG.ROUNDS[round])); fx('boot'); sfx.boot();   // her transmitter wakes up somewhere in the room
+  setLoop(pattern(CODE, cur())); fx('boot'); sfx.boot();   // her transmitter wakes up somewhere in the room
   await banner();
   if (mode !== 'trans') return;
   huntT0 = lastT0 = performance.now(); mode = 'hunt'; renderCells(); microGlitch();
@@ -910,7 +914,7 @@ async function nextLayer() {
   aurora(AUR.next[round] || AUR.next.at(-1), T.auroraHold);
   const prev = CODE;
   do CODE = roll(); while (CODE === prev);
-  round++; showCode(); setLoop(pattern(CODE, CFG.ROUNDS[round]));
+  round++; showCode(); setLoop(pattern(CODE, cur()));
   await wait(1300);
   if (mode !== 'check') return;                   // staff forced the win meanwhile
   $('#dec').classList.remove('ok'); entry = ''; renderCells(); renderLayers(); renderRate(); renderHud();
@@ -985,6 +989,7 @@ addEventListener('keydown', e => {
     if (e.code === 'KeyK') { location.hash = 'game'; location.reload(); }
     if (e.code === 'KeyN' && mode === 'hunt') { entry = CODE; mode = 'check'; round < LAST ? nextLayer() : win(); }
     if (e.code === 'KeyI' && hunting) showHint();
+    if (e.code === 'KeyL' && hunting) { slow *= 1.5; setLoop(pattern(CODE, cur())); renderRate(); }
     if (e.code === 'KeyF' && hunting) { entry = CODE; win(); }
     if (e.code === 'KeyR') location.reload();
     if (e.code === 'KeyW') { location.hash = 'win'; location.reload(); }
