@@ -17,7 +17,7 @@ html, body { height: 100%; background: #000; overflow: hidden; cursor: none; use
 body.traced #vignette { background: radial-gradient(ellipse at center, transparent 45%, rgba(120,0,12,.75) 100%);
   animation: lowPulse 1.6s ease-in-out infinite alternate; }
 @keyframes lowPulse { to { opacity: .55 } }
-#flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 60; }
+#flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 68; }
 .txt { text-shadow: -1.5px 0 rgba(255,40,80,.5), 1.5px 0 rgba(40,200,255,.5), 0 0 10px currentColor; }
 
 /* standby: locked until puzzle 2 is finished, then waits for space */
@@ -175,11 +175,16 @@ body.hunt #entry, body.won #entry, body.tut #entry { display: flex; animation: b
 .spd { display: flex; gap: 1.8vw; align-items: flex-end; }
 .spd div { display: flex; flex-direction: column; align-items: center; gap: .5vw; font-size: .8vw; letter-spacing: .2em; color: #fff; }
 
-/* hints leak through as glitches: the text tears onto the screen for a moment, then it's gone again */
-#ghintWrap { position: absolute; inset: 0; z-index: 4; display: none; align-items: center; justify-content: center; pointer-events: none; }
-#ghintWrap.on { display: flex; }
-#ghint { position: relative; font-size: 3vw;   /* 3vw fits the longest hint on one line */ font-weight: 700; letter-spacing: .08em; color: #fff; white-space: nowrap;
-  text-shadow: -4px 0 rgba(0,255,255,.7), 4px 0 rgba(255,0,255,.7); }
+/* caught: I CAUGHT YOU slams in over the whole screen, which fills with the same line strobing black/red (game 2's
+   LOOK BEHIND YOU). Above #dim, so the hunt's darkening doesn't mute it */
+#big { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%); z-index: 67; white-space: nowrap;
+  font-size: 10vw; font-weight: 700; letter-spacing: .06em; color: #fff; text-shadow: 0 0 30px var(--g), 0 0 90px var(--g); }
+#big.jit { animation: jit .07s steps(1) infinite; }
+@keyframes jit { 0% { translate: -8px 4px } 25% { translate: 7px -5px; scale: 1.02 } 50% { translate: -4px -3px } 75% { translate: 9px 5px; scale: .99 } }
+#scareBg { position: fixed; inset: 0; z-index: 66; display: none; overflow: hidden; padding: 1vw; word-break: break-all; background: #000;
+  color: var(--g); font-size: 1.3vw; font-weight: 700; line-height: 1.25; opacity: .5; animation: scareFlick .09s steps(2) infinite; }
+body.scare #scareBg { display: block; }
+@keyframes scareFlick { 50% { opacity: .25; background: #300; } }
 /* the screen darkens a little during the hunt so its glow doesn't wash out the beacon's lights.
    A plain black layer, not a filter: cheap on the booth laptop */
 #dim { position: fixed; inset: 0; z-index: 65; background: #000; opacity: 0; pointer-events: none; transition: opacity 2s; }
@@ -243,7 +248,6 @@ body.help #help { display: block; }
   <div id="standby">CARRIER OFFLINE ▸ AWAITING UPLINK</div>
   <div id="screen">
     <div id="grain"></div><div class="rollbar"></div><div id="flick"></div>
-    <div id="ghintWrap"><div id="ghint" class="glitch"></div></div>
     <div class="hud"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i></div>
     <div id="title" class="txt"><b>AURORA//CORE</b>SECTOR 03 ▸ CARRIER SIGNAL<br><span id="hex"></span></div>
     <div id="stats" class="txt"></div>
@@ -273,6 +277,7 @@ body.help #help { display: block; }
 </div>
 <div id="flash"></div>
 <div id="dim"></div>
+<div id="scareBg"></div><div id="big" class="glitch" data-text="I CAUGHT YOU" hidden>I CAUGHT YOU</div>
 <div id="help">STAFF SHORTCUTS
 code <b id="hcode"></b>
 board: <span id="hbeacon">...</span>   hub: <span id="hubst">...</span>
@@ -283,7 +288,6 @@ Ctrl+Alt+U  unlock by hand (if puzzle 2's signal never came)
 Ctrl+Alt+S  start now, even if locked
 Ctrl+Alt+K  skip the intro and the training, straight to the hunt
 Ctrl+Alt+N  skip to the next layer (testing the speeds / team stuck)
-Ctrl+Alt+I  show the next hint now (it glitches onto the screen)
 Ctrl+Alt+L  lights slower: blinks x1.5 longer per press, rest of the run
 Ctrl+Alt+F  force the win, all layers (beacon dead / team stuck)
 Ctrl+Alt+R  reset for next team (new codes, locks again)
@@ -301,27 +305,19 @@ const CFG = {
   // 3 rounds ("layers"), each a new code blinked faster. This page turns them into the board's steps, so tune here:
   // no reflash. ms: on = one blink, off = between blinks of the same light, gap = before the next light,
   // loop = the dark pause before it all repeats. Blinks of 80 ms or more fade in and out; faster ones stay crisp.
-  // The last round is a visible flicker, too quick to count by eye, that splits cleanly into blinks in slow motion
+  // Every layer can be counted by eye (day 1: 9 Hz was too fast for players, and slow-mo isn't needed any more)
   ROUNDS: [
-    { on: 300, off: 400, gap: 1200, loop: 3000, name: 'CARRIER',      sub: 'FIND HER TRANSMITTER IN THIS ROOM' },   // easy to count
-    { on: 100, off: 120, gap: 1000, loop: 2500, name: 'OVERCLOCK',    sub: 'SHE SPED UP' },                          // countable if they focus
-    { on: 50,  off: 60,  gap: 1000, loop: 2500, name: 'BEYOND SIGHT', sub: 'TOO FAST FOR HUMAN EYES' },              // ~9 Hz: 240 fps slow-mo shows each blink ~12 frames
+    { on: 400, off: 400, gap: 1500, loop: 3000, name: 'CARRIER',   sub: 'FIND HER LIGHTS IN THIS ROOM' },   // 1.25 Hz: easy
+    { on: 250, off: 300, gap: 1500, loop: 3000, name: 'OVERCLOCK', sub: 'SHE SPED UP' },                    // 1.8 Hz
+    { on: 150, off: 200, gap: 1500, loop: 3000, name: 'REDLINE',   sub: 'HER FASTEST. STAY FOCUSED' },      // 2.9 Hz: count out loud together
   ],
-  EYE_HZ: 8,                 // the blink-rate gauge's HUMAN EYE LIMIT line (display only; below the last layer so it reads "beyond")
+  EYE_HZ: 8,                 // the blink-rate gauge's HUMAN EYE LIMIT line (display only; every layer stays under it)
   // TRACE, carried to the finale = the trace bar when they crack it (lower is better). Mistakes push the bar forward:
   WRONG_TRACE: 5,            // % per wrong code
   LOCK_MS: 2500,             // input locked this long after a wrong code
-  TRACE_S: 300,              // the hunt clock: the trace bar fills over this many seconds, then time is up (TRACE 100%, team moves on)
-  // hints glitch onto the screen at these seconds into the LAST round (rounds 1-2 need none); Ctrl+Alt+I shows the next one early.
-  // A wrong code there brings the first one at once.
-  // After it first appears, the latest hint glitches back every HINT_EVERY ms so nobody misses it
-  HINTS: [
-    { at: 15, text: 'MAYBE TRY A SLOW-MOTION CAMERA' },
-  ],
-  HINT_EVERY: [8000, 13000],   // random gap between repeat glitches (ms)
-  HINT_FIRST_MS: 2600,         // how long the first glitch of a new hint lasts...
-  HINT_MS: 1100,               // ...and each repeat
-  TUT_SPEED: { on: 350, off: 350, gap: 1100, loop: 1600 },   // training: the lenses' demo codes blink at this speed
+  TRACE_S: 300,              // the hunt clock: the trace bar fills over this many seconds (each wrong code takes WRONG_TRACE % of
+                             // it), and a full bar = I CAUGHT YOU (TRACE 100%, team moves on). Hints = the GM panel's INCOMING TRANSMISSION
+  TUT_SPEED: { on: 250, off: 250, gap: 700, loop: 800 },   // training: the lenses' demo codes blink at this speed
   VOLUME: 0.8,
   MUSIC_VOLUME: 0.7,
 };
@@ -329,11 +325,12 @@ const T = {                  // ms
   dot: 380, line: 460, open: 750, ghost: 1300,   // CRT boot, same as puzzles 1-2
   termChar: 32,              // intro terminal typing speed
   typeChar: 45,              // Aurora's typing speed
-  after: 1200,               // pause after each intro line
+  after: 500,                // pause after each intro line
   auroraHold: 4000,          // how long Aurora's taunts stay up during the hunt
-  tutOk: 900,                // the ✔ pause after each training step
-  goal: 5200,                // training: the last card stays up this long
+  tutOk: 500,                // the ✔ pause after each training step
+  goal: 3000,                // training: the last card stays up this long
   banner: 1300,              // a new layer's name stays up this long
+  caught: 2600,              // I CAUGHT YOU stays up this long
 };
 const INTRO = [              // the players' side (red terminal). The training shows the rest
   'sector 03: aurora\'s carrier signal.',
@@ -345,10 +342,9 @@ const AUR = {                // Aurora (green)
   next: ['Lucky. Faster, then.', 'Now try counting.'],   // after layer 1, after layer 2
   trap: "One blink each? That's all I let you see.",     // 111 in the last layer
   wrong: ['Wrong frequency.', "That's not me.", 'Keep looking. Or don\'t.', 'Static. Just like your thinking.', 'Colder.'],
-  traced: 'I see you. All of you.',
   caught: 'No. That frequency is-',
   win: "...that's my heart. don't you dare.",
-  timeUp: 'Found you. Go on, then. I let you through.',
+  lost: 'Found you. Go on, then. I let you through.',
 };
 
 // ===== Setup =====
@@ -372,7 +368,7 @@ const cur = () => { const R = CFG.ROUNDS[round]; return { ...R, on: R.on * slow,
 const DEMO = '243';           // the training's demo code
 
 let mode = 'standby';        // standby | intro | tut | trans | hunt | check | won | lost | end
-let unlocked = false, entry = '', huntT0 = 0, lastT0 = 0, hintN = 0, traced = false;
+let unlocked = false, entry = '', huntT0 = 0;
 let tracePen = 0, trace = 0, wrong = 0, huntS = 0, replay = false;   // trace = bar %, frozen on the win
 let counts = null, countCells = false;   // training: blinks counted under each lens (and in the cells too, in step 1)
 
@@ -383,7 +379,7 @@ const lv = (i, v = 9) => Array.from({ length: LIGHTS }, (_, j) => j === i ? v : 
 const all = v => String(v).repeat(LIGHTS), DARK = all(0);
 const anyLight = () => Math.random() * LIGHTS | 0;
 const enc = steps => steps.map(([l, ms]) => `${l}:${Math.max(1, Math.round(ms))}`).join(',');
-// slow blinks fade in and out (they look alive); fast ones stay a crisp full-on, so slow-mo counts them cleanly
+// slow blinks fade in and out (they look alive); very fast ones stay a crisp full-on
 const blinkSteps = (i, on) => on < 80 ? [[lv(i), on]] : [[lv(i, 4), on / 5], [lv(i), on * 3 / 5], [lv(i, 4), on / 5]];
 function pattern(code, R) {  // the dark pause first (so a new code shows), then light 1 blinks digit 1 times, gap, light 2...
   const s = [[DARK, R.loop]];
@@ -401,7 +397,7 @@ const FX = {
   // her heartbeat, in step with the screen's 5 beats (lub-dub every 900, 780, 660... ms), then a last glow fading out
   win: () => [0, 1, 2, 3, 4].flatMap(i => [[all(9), 110], [all(2), 130], [all(7), 100], [DARK, 900 - i * 120 - 340]])
     .concat([[all(9), 400], [all(5), 250], [all(2), 300], [DARK, 200]]),
-  timeUp: () => [...Array.from({ length: 12 }, () => [[all(9), 40], [DARK, 40]]).flat(), [all(9), 900], [all(4), 200], [DARK, 100]],
+  caught: () => [...Array.from({ length: 12 }, () => [[all(9), 40], [DARK, 40]]).flat(), [all(9), 2000], [all(4), 200], [DARK, 100]],   // strobe, then she holds the room lit
   type: (i, d) => Array.from({ length: d }, () => [[lv(i), 60], [DARK, 70]]).flat(),   // this screen only: the lens of a typed digit
 };
 // plays a loop + one-shot effects into show(levels, step index, playing an effect?); tick() runs every frame
@@ -501,7 +497,8 @@ async function findHub() {
 function bossLoad() {
   if (window.BOSS) return;
   window.BOSS = 1;
-  for (const f of ['boss.js', 'voice.js']) {      // voice.js: Aurora's recorded lines (no hub = she blips instead)
+  for (const f of ['boss.js', 'voice.js', 'transmission.js', 'runclock.js']) {   // voice.js: Aurora's recorded lines (no hub =
+    // she blips instead); transmission.js: the GM panel's hints, as INCOMING TRANSMISSION; runclock.js: the team's TIME LEFT
     const s = document.createElement('script');
     s.src = hubWs.url.replace(/^ws(.*)\/ws$/, `http$1/${f}?`) + Date.now(); s.dataset.room = 3;
     document.head.append(s);
@@ -513,6 +510,8 @@ async function hub() {
   ws.onclose = () => { $('#hubst').textContent = 'DOWN (Ctrl+Alt+U to unlock by hand)'; setTimeout(hub, 2000); };
   ws.onmessage = e => { const m = JSON.parse(e.data);
     if (m.t === 'cmd' && m.a === 'key') staffKey(m.v);
+    if (m.t === 'cmd' && m.a === 'msg') window.transmit?.(m.v);
+    if (m.t === 'run') window.RUN = m;            // runclock.js reads it
     if (m.t !== 'evt') return;
     if (m.e === CFG.UNLOCK_EVT) unlock();
     if (m.e === 'p3ask') sendLoop();            // a beacon stand-in just opened and wants the lights
@@ -557,7 +556,6 @@ const sfx = {
   boom()   { tone('sine', 70, 22, 1.8, 1); noise(.6, .7, 160); },
   blip()   { tone('sine', rand(2400, 3400), 0, .04, .02); },   // the carrier's radar chirp while hidden
   pip()    { tone('sine', 2600, 0, .05, .05); },              // a lens blinking in the training
-  glitch() { noise(.08, .18, rand(1500, 5000)); tone('square', rand(200, 900), rand(80, 300), .08, .05); },   // hint tearing onto the screen
   boot()   { for (let k = 0; k < 6; k++) noise(.04, .25, rand(2000, 6000), k * rand(.05, .12)); tone('sawtooth', 60, 220, 1, .08, .5); },   // her transmitter powers on
   sweep()  { tone('sawtooth', 300, 2400, .9, .06); tone('sine', 1200, 4800, .9, .05, .1); },   // a layer cracked: it winds up faster
   beat()   { tone('sine', 75, 38, .22, .9); noise(.05, .25, 120); tone('sine', 68, 34, .25, .6, .24); },
@@ -669,10 +667,11 @@ function renderRate(R = cur()) {
   B.classList.toggle('fast', hz > CFG.EYE_HZ);
 }
 
-// ===== The carrier scope: a scrolling pulse train, faster every layer. Spikes on wrong codes, a heartbeat once won =====
+// ===== The carrier scope: scrolling static, faster every layer. Spikes on wrong codes, a heartbeat once won.
+// No regular pulse: on day 1 players counted it instead of the room's lights =====
 const cv = $('#wave'), ctx = cv.getContext('2d');
-const samples = new Array(320).fill(0), PERIOD = [34, 13, 4];   // scope pulse length in samples, per layer
-let spike = 0, beatAt = -1e9, ph = 0;
+const samples = new Array(320).fill(0);
+let spike = 0, beatAt = -1e9;
 // one heartbeat (ECG) in ms since the beat: small dip, tall spike, deep drop, back to flat
 function ecg(ms) {
   if (ms < 60)  return -ms / 60 * .2;
@@ -688,12 +687,11 @@ function drawWave() {
   if (!B.classList.contains('hunt') && mode !== 'won') return;
   const w = cv.clientWidth, h = cv.clientHeight;
   if (cv.width !== w) { cv.width = w; cv.height = h; }
-  const won = mode === 'won', per = PERIOD[Math.min(round, PERIOD.length - 1)];
+  const won = mode === 'won';
   spike *= .93;
   for (let i = 0; i < (won ? 1 : round + 1); i++) {   // the trace scrolls faster every layer
-    samples.shift(); ph += 1 / per;
-    samples.push(won ? ecg(now - beatAt) + rand(-.02, .02)
-                     : (ph % 1 < .45 ? .36 : -.2) + rand(-1, 1) * (.05 + spike) + (Math.random() < .01 ? rand(-.4, .4) : 0));
+    samples.shift();
+    samples.push(won ? ecg(now - beatAt) + rand(-.02, .02) : rand(-1, 1) * (.15 + spike) + (Math.random() < .02 ? rand(-.5, .5) : 0));
   }
   ctx.clearRect(0, 0, w, h);
   ctx.strokeStyle = 'rgba(255,51,68,.15)'; ctx.lineWidth = 1;          // grid
@@ -726,7 +724,7 @@ function renderHud() {
 function renderLayers() {
   const won = mode === 'won' || mode === 'end';
   if (mode === 'tut') return $('#entry .lbl').textContent = $('#lay').innerHTML = '';
-  $('#entry .lbl').textContent = won ? 'ALL LAYERS CRACKED' : `LAYER ${round + 1}/${LAST + 1} ▸ ENTER CARRIER CODE`;
+  $('#entry .lbl').textContent = won ? 'ALL LAYERS CRACKED' : `LAYER ${round + 1}/${LAST + 1} ▸ COUNT THE LIGHTS IN THE ROOM`;
   $('#lay').innerHTML = CFG.ROUNDS.map((_, i) => `<i class="${won || i < round ? 'on' : i === round ? 'cur' : ''}"></i>`).join('');
 }
 async function termLine(text, cls = '') {
@@ -743,30 +741,6 @@ async function aurora(text, hold = 0) {
   a.dataset.text = text; a.classList.add('glitch'); shake(a, 8, 300);
   setTimeout(() => a.classList.remove('glitch'), 600);
   if (hold) { await wait(hold); if (me === aurTok && mode !== 'won') a.textContent = ''; }
-}
-// hints: the text tears onto the screen for a moment (jitter, scrambled letters, RGB split, flicker), then vanishes
-let hintText = null, nextGlitch = 0, glitching = false;
-function showHint() {
-  if (hintN >= CFG.HINTS.length) return;
-  hintText = CFG.HINTS[hintN++].text;
-  glitchHint(CFG.HINT_FIRST_MS);
-}
-async function glitchHint(ms) {
-  if (glitching || !hintText) return;
-  glitching = true;
-  const w = $('#ghintWrap'), g = $('#ghint'), text = hintText, pool = '▓▒░#%&@$/\\', t0 = performance.now();
-  g.dataset.text = text; w.classList.add('on'); spike = 1; sfx.glitch(); shake(scr, 10, 200);
-  scr.querySelector('.rollbar').animate([{ top: '-20%' }, { top: '110%' }], 320);
-  while (performance.now() - t0 < ms && (mode === 'hunt' || mode === 'check')) {
-    g.textContent = Math.random() < .3 ? [...text].map(c => c !== ' ' && Math.random() < .35 ? any(pool) : c).join('') : text;
-    g.style.opacity = Math.random() < .15 ? 0 : 1;             // it flickers out for a frame now and then
-    g.style.transform = `translate(${rand(-14, 14)}px,${rand(-6, 6)}px) skewX(${rand(-10, 10)}deg)`;
-    if (Math.random() < .2) sfx.glitch();
-    await wait(rand(50, 110));
-  }
-  w.classList.remove('on'); g.style.transform = '';
-  nextGlitch = performance.now() + rand(...CFG.HINT_EVERY);
-  glitching = false;
 }
 // rollbar + tiny screen jumps now and then, like puzzle 1's code screen
 async function microGlitch() {
@@ -807,9 +781,9 @@ const TUT = [
       while (mode === 'tut' && performance.now() - t0 < total + 300) { prog((performance.now() - t0) / total); await wait(50); }
       onLens = null;
       $('#tutS').innerHTML = `that light code is <b style="color:#fff">${DEMO}</b>.`;
-      $('#dec').classList.add('ok'); await wait(1200); $('#dec').classList.remove('ok');
+      $('#dec').classList.add('ok'); await wait(800); $('#dec').classList.remove('ok');
     } },
-  { title: 'FIND THE REAL ONE', sub: "it's hidden in this room. count it, type it.<br>3 layers. each one faster. 5 minutes.",
+  { title: 'FIND THE REAL ONE', sub: 'the real lights are in this room,<br><b style="color:#fff">not on this screen.</b><br>3 layers. each one faster. 5 minutes.',
     art: () => '<div class="spd">' + CFG.ROUNDS.map((R, i) => `<div><i class="mini sp" style="--d:${Math.max(.05, (R.on + R.off) / 500).toFixed(2)}s"></i>${i + 1}</div>`).join('') + '</div>',
     async run(prog) {
       const t0 = performance.now();
@@ -853,11 +827,11 @@ async function banner() {
   b.classList.remove('on');
 }
 
-// the trace bar: time plus whatever their mistakes added. Returns 0..1
+// the trace bar: time plus whatever their mistakes added, so the clock shows what's left of both. Returns 0..1
 let closeShown = '';
 function renderTrace() {
   const s = (performance.now() - huntT0) / 1000, k = Math.min(1, s / CFG.TRACE_S + tracePen / 100);
-  const left = Math.max(0, Math.ceil(CFG.TRACE_S - s));
+  const left = Math.ceil(CFG.TRACE_S * (1 - k));
   trace = Math.round(k * 100);
   $('#bp').textContent = trace + '%';
   $('#tl').textContent = `${left / 60 | 0}:${String(left % 60).padStart(2, '0')}`;
@@ -875,18 +849,13 @@ async function hunt() {
   setLoop(pattern(CODE, cur())); fx('boot'); sfx.boot();   // her transmitter wakes up somewhere in the room
   await banner();
   if (mode !== 'trans') return;
-  huntT0 = lastT0 = performance.now(); mode = 'hunt'; renderCells(); microGlitch();
+  huntT0 = performance.now(); mode = 'hunt'; renderCells(); microGlitch();
   aurora(AUR.intro, T.auroraHold);
   loop = setInterval(() => {
     if (mode !== 'hunt' && mode !== 'check') return;
-    const s = (performance.now() - huntT0) / 1000, k = renderTrace();
+    const k = renderTrace();
     if (Math.random() < .08) { sfx.blip(); renderHud(); }
-    if (round === LAST)   // hints follow plain time in the last layer, not the trace
-      while (hintN < CFG.HINTS.length && (performance.now() - lastT0) / 1000 >= CFG.HINTS[hintN].at) showHint();
-    if (hintText && mode === 'hunt' && performance.now() > nextGlitch) glitchHint(CFG.HINT_MS);   // the latest hint keeps leaking back
-    // mistakes filled the bar before time is up (at time-up, timeUp() says the line instead)
-    if (k >= 1 && !traced && s < CFG.TRACE_S) { traced = true; B.classList.add('traced'); sfx.alarm(); aurora(AUR.traced, T.auroraHold); }
-    if (s >= CFG.TRACE_S && mode === 'hunt') timeUp();   // mid-check, the wrong-code screen finishes first
+    if (k >= 1 && mode === 'hunt') caught();       // mid-check, the code being checked finishes first
   }, 100);
 }
 
@@ -894,13 +863,13 @@ async function check() {
   mode = 'check';
   if (entry === CODE) return round < LAST ? nextLayer() : win();
   wrong++;
-  const trap = round === LAST && entry === TRAP;   // they counted with their eyes: she gloats
-  tracePen += CFG.WRONG_TRACE; renderTrace();   // she hears them: the trace jumps
+  const trap = round === LAST && entry === TRAP;   // a guess at one blink each: she gloats
+  tracePen += CFG.WRONG_TRACE;                     // she hears them: the trace jumps
+  if (renderTrace() >= 1) return caught();
   $('#bar').animate([{ color: '#fff', filter: 'brightness(2.5)' }, {}], 700); shake($('#bar'), 10, 400);
   sfx.buzz(); spike = 1.2; $('#dec').classList.add('bad'); shake(scr, 12, 420);
   fx('wrong');                                     // the board stutters, then starts its code over from light 1
   aurora(trap ? AUR.trap : any(AUR.wrong), T.auroraHold);
-  if (round === LAST && !hintN) setTimeout(() => hintN || showHint(), 1800);   // any mistake in the last layer: the hint, now
   await wait(450);
   $('#dec').classList.replace('bad', 'lock');
   await wait(CFG.LOCK_MS);
@@ -921,13 +890,12 @@ async function nextLayer() {
   await banner();
   if (mode !== 'check') return;
   mode = 'hunt'; renderCells();
-  if (round === LAST) lastT0 = performance.now();
 }
 async function win() {
   renderTrace(); huntS = (performance.now() - huntT0) / 1000;   // freeze TRACE before mode leaves the hunt
   mode = 'won'; entry = CODE; renderCells(); renderHud(); renderLayers();
   clearInterval(loop); B.classList.remove('traced', 'dark'); B.classList.add('won');
-  $('#dec').classList.remove('bad', 'lock'); $('#dec').classList.add('ok'); hintText = null;
+  $('#dec').classList.remove('bad', 'lock'); $('#dec').classList.add('ok');
   setLoop([]);                                    // the signal is cut: after her heartbeat, the board goes dark
   sfx.ok();
   // Aurora's voice corrupts mid-word, then her heartbeat comes through the carrier and the lights
@@ -945,27 +913,35 @@ async function win() {
   await crtOff();
   ending();
 }
-// 5:00 ran out: she found them. TRACE 100%, and the team still moves on to puzzle 4 (no one gets stuck in a room)
-async function timeUp() {
-  mode = 'lost'; clearInterval(loop); huntS = CFG.TRACE_S; trace = 100;
-  hintText = null; B.classList.remove('dark');
-  setLoop([]); fx('timeUp');
-  sfx.alarm(); spike = 2; shake(scr, 16, 600);
-  $('#flash').animate([{ opacity: .7, background: '#ff3344' }, { opacity: 0 }], 500);
-  const aur = $('#aur'); aurTok++;
-  await type(aur, AUR.traced, T.typeChar, VOICES.aurora);
-  await wait(1200);
+// the trace bar filled (5:00 of hunting, sooner after wrong codes): I CAUGHT YOU slams in like game 2's LOOK BEHIND YOU,
+// her lights strobe then hold the room lit, and the GM laptop screams on the booth speaker ('p3caught'). TRACE 100%,
+// and the team still moves on to puzzle 4 (no one gets stuck in a room)
+async function caught() {
+  mode = 'lost'; clearInterval(loop); huntS = (performance.now() - huntT0) / 1000; trace = 100;
+  B.classList.remove('dark'); B.classList.add('traced', 'scare'); aurTok++; $('#aur').textContent = '';
+  setLoop([]); fx('caught'); hubSend({ t: 'evt', e: 'p3caught' });
+  $('#scareBg').textContent = 'I CAUGHT YOU '.repeat(500);
+  const big = $('#big'); big.hidden = false; big.classList.add('jit');
+  big.animate([{ transform: 'translate(-50%,-50%) scale(3)', opacity: 0 },
+               { transform: 'translate(-50%,-50%) scale(.92)', opacity: 1, offset: .5 },
+               { transform: 'translate(-50%,-50%) scale(1)', opacity: 1 }], { duration: 180, easing: 'ease-out' });
+  $('#flash').animate([{ opacity: 1, background: '#fff' }, { opacity: 0 }, { opacity: 1, background: '#f00' }, { opacity: 0 },
+                       { opacity: 1, background: '#fff' }, { opacity: 0 }, { opacity: .8, background: '#f00' }, { opacity: 0 }],
+                      { duration: 520, easing: 'steps(8)' });
+  sfx.alarm(); sfx.boom(); spike = 2; shake(app, 26, 1400);
+  await wait(T.caught);
+  big.hidden = true; big.classList.remove('jit'); B.classList.remove('scare');
   await crtOff();
   ending(false);
 }
 async function ending(won = true) {
   mode = 'end';
-  const f = $('#final'), ft = $('#ft'), line = won ? AUR.win : AUR.timeUp;
+  const f = $('#final'), ft = $('#ft'), line = won ? AUR.win : AUR.lost;
   f.classList.toggle('lost', !won);
   if (won) { $('#flash').animate([{ opacity: 1 }, { opacity: 1, offset: .2 }, { opacity: 0 }], { duration: 1400, easing: 'ease-out' }); sfx.drop(); play('win'); }
   else sfx.boom();
   B.classList.add('final');
-  $('#fk').textContent = won ? `SECTOR 03 ▸ CARRIER INTERCEPTED ▸ TRACE ${trace}% ▸ LINK SEVERED` : 'SECTOR 03 ▸ TRACE 100% ▸ TIME UP';
+  $('#fk').textContent = won ? `SECTOR 03 ▸ CARRIER INTERCEPTED ▸ TRACE ${trace}% ▸ LINK SEVERED` : 'SECTOR 03 ▸ TRACE 100% ▸ CAUGHT';
   await wait(350);
   await resolveText(ft, won ? 'SIGNAL INTERCEPTED' : 'TRACE COMPLETE', 70);
   ft.dataset.text = ft.textContent; ft.classList.add('glitch'); sfx.stamp(); shake(app, 10, 400);
@@ -988,7 +964,6 @@ addEventListener('keydown', e => {
     if (e.code === 'KeyS') start();
     if (e.code === 'KeyK') { location.hash = 'game'; location.reload(); }
     if (e.code === 'KeyN' && mode === 'hunt') { entry = CODE; mode = 'check'; round < LAST ? nextLayer() : win(); }
-    if (e.code === 'KeyI' && hunting) showHint();
     if (e.code === 'KeyL' && hunting) { slow *= 1.5; setLoop(pattern(CODE, cur())); renderRate(); }
     if (e.code === 'KeyF' && hunting) { entry = CODE; win(); }
     if (e.code === 'KeyR') location.reload();
@@ -1018,12 +993,11 @@ if (location.search === '?test') {
   console.assert(CFG.ROUNDS.every((r, i) => !i || r.on < CFG.ROUNDS[i - 1].on), 'every layer blinks faster');
   console.assert(AUR.next.length >= LAST, 'a line for every layer change');
   console.assert(ecg(0) === 0 && ecg(100) > 1 && ecg(500) === 0, 'heartbeat shape: flat, spike, flat');
-  console.assert(CFG.HINTS.every((h, i) => !i || h.at > CFG.HINTS[i - 1].at), 'hints are in time order');
   const starts = s => { const n = [0, 0, 0]; let p = DARK; s.forEach(([v]) => { [...v].forEach((c, j) => { if (c !== '0' && p[j] === '0') n[j]++; }); p = v; }); return n.join(''); };
   const slow = pattern('312', CFG.ROUNDS[0]), quick = pattern('352', CFG.ROUNDS[LAST]);
   console.assert(slow[0][0] === DARK && slow[0][1] === CFG.ROUNDS[0].loop && slow.at(-1)[0] !== DARK, 'pattern: dark pause first, ends on a blink');
   console.assert(starts(slow) === '312' && starts(quick) === '352', 'pattern: each light blinks its digit');
-  console.assert(quick.every(([v, ms]) => v === DARK || ms === CFG.ROUNDS[LAST].on), 'fast blinks are one crisp full-on step');
+  console.assert(CFG.ROUNDS.every(R => hzOf(R) < CFG.EYE_HZ), 'every layer stays countable by eye (under the gauge line)');
   console.assert(FX.win().slice(0, 4).reduce((a, s) => a + s[1], 0) === 900, "her heartbeat's first beat lasts 900 ms, like the screen's");
   console.assert(/^(\d{3}:\d+,)*\d{3}:\d+$/.test(enc(FX.boot())), 'steps encode as abc:ms,abc:ms');
   console.assert(Math.max(...Object.keys(FX).filter(k => k !== 'type').map(k => FX[k]().length), pattern('555', CFG.ROUNDS[0]).length) <= 160, 'lists fit the board (MAX_STEPS 160)');

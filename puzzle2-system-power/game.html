@@ -290,21 +290,23 @@ const CFG = {
   RESCUE: [{ word: 'reroute', boost: 25 }, { word: 'overclock', boost: 10 }],   // one per chance, in order; then no more
   CAUGHT: 15,                // POWER carried to the finale = energy left; getting caught costs this much of it (grid lost = 0)
   FAKE_WORDS: [2, 3],        // the fake start lasts this many words (picked at random)...
-  LIGHT_KEY: ['Enter', 'NumpadEnter'],   // KeyboardEvent.code(s) that hold the lights on. The plush key sends NumpadEnter
+  LIGHT_KEY: ['NumpadEnter'],   // KeyboardEvent.code(s) that hold the lights on. The plush key sends NumpadEnter; the laptop's
+                                // Enter does nothing. A laptop numpad's Enter also sends NumpadEnter: tape it over
+  REMIND_AFTER: 2,           // real game: this many words in a row typed with the lights off, then a reminder phrase (PHRASES)
   LIGHT_LABEL: 'ENTER',      // what the tutorial tells players to hold
   FAST_CPS: 3,               // letters per second (from word shown to word done) that counts as fast...
   SLOW_CPS: 1.4,             // ...and as slow
   MANY_BS: 3,                // this many backspaces in one word counts as struggling
-  TUT_HELP_S: 15,            // training: s on one step before its extra help line shows...
-  TUT_SKIP_S: 30,            // ...and before it moves on by itself, so no team gets stuck
+  TUT_HELP_S: 10,            // training: s on one step before its extra help line shows... (day 2: 15/30 -> 10/20, runs went long)
+  TUT_SKIP_S: 20,            // ...and before it moves on by itself, so no team gets stuck
   VOLUME: 0.8,
 };
 const T = {                  // ms
   dot: 380, line: 460, open: 750, ghost: 1300,   // CRT boot, same as puzzle 1
   typeChar: 45,              // Aurora's typing speed
-  after: 900,                // the ✔ pause after each training step
-  holdNeed: 1500,            // training: how long they must hold the light key
-  goal: 4500,                // training: the last card (the goal) stays up this long while the power charges
+  after: 600,                // the ✔ pause after each training step
+  holdNeed: 1000,            // training: how long they must hold the light key
+  goal: 3500,                // training: the last card (the goal) stays up this long while the power charges
   fakeMax: 9000,             // the fake start lasts at most this long, then the jumpscare
   dread: 1100,               // the fake game rots before the cut: word scrambles, lights stutter, whine rises
   scareGap: 600,             // dead black and silence between the cut and LOOK BEHIND YOU
@@ -330,6 +332,9 @@ const TIERS = [
   'cryptography semiconductor oscilloscope microcontroller authentication configuration decompression infrastructure virtualization cybersecurity synchronization neuroplasticity'.split(' '),
   'hexadecimal asynchronous pseudorandom electroencephalogram superconductivity photolithography microarchitecture counterintelligence incomprehensibility electromagnetism thermodynamics deoxyribonucleic'.split(' '),
 ];
+// day 1: scared teams forgot the light key. Typing in the dark makes them type one of these, one word at a time, in turn
+const PHRASES = ['keep the lights on', 'hold the enter key', 'light keeps them away', 'they move in the dark',
+  'do not let go', 'hold enter stay alive', 'the dark is not safe'];
 
 // ===== Setup =====
 const $ = s => document.querySelector(s);
@@ -390,7 +395,8 @@ async function findHub() {
 function bossLoad() {
   if (window.BOSS) return;
   window.BOSS = 1;
-  for (const f of ['boss.js', 'voice.js']) {      // voice.js: Aurora's recorded lines (no hub = she blips instead)
+  for (const f of ['boss.js', 'voice.js', 'runclock.js']) {   // voice.js: Aurora's recorded lines (no hub = she blips
+                                                  // instead); runclock.js: the team's TIME LEFT
     const s = document.createElement('script');
     s.src = hubWs.url.replace(/^ws(.*)\/ws$/, `http$1/${f}?`) + Date.now(); s.dataset.room = 2;
     document.head.append(s);
@@ -400,7 +406,8 @@ async function hub() {
   const ws = hubWs = new WebSocket('ws://' + await findHub() + ':3000/ws');
   ws.onopen = () => { ws.send(JSON.stringify({ t: 'hello', id: 'puzzle2', role: 'page' })); hubSend(); bossLoad(); lights(light); $('#hubst').textContent = 'connected'; };
   ws.onclose = () => { $('#hubst').textContent = 'DOWN (Ctrl+Alt+U to unlock by hand)'; setTimeout(hub, 2000); };
-  ws.onmessage = e => { const m = JSON.parse(e.data); if (m.t === 'evt' && m.e === CFG.UNLOCK_EVT) unlock(); if (m.t === 'cmd' && m.a === 'key') staffKey(m.v); };
+  ws.onmessage = e => { const m = JSON.parse(e.data); if (m.t === 'evt' && m.e === CFG.UNLOCK_EVT) unlock(); if (m.t === 'cmd' && m.a === 'key') staffKey(m.v);
+    if (m.t === 'run') window.RUN = m; };         // runclock.js reads it
 }
 // the GM panel presses this page's Ctrl+Alt staff keys remotely, and sees its state once a second
 const staffKey = code => dispatchEvent(new KeyboardEvent('keydown', { code, ctrlKey: true, altKey: true }));
@@ -567,6 +574,7 @@ setInterval(() => $('#hex').textContent = Array.from({ length: 6 }, () => (Math.
 // ===== Words: one at a time, difficulty follows the last word =====
 let rescues = 0, rescuing = false, rescueOk = false, graceUntil = 0;   // last-chance boosts
 let word = null, tier = 0, done = 0, adaptive = false, stats = { chars: 0, keys: 0, good: 0, t0: 0 }, best = '', replay = false;
+let darkRun = 0, phrase = [], phraseN = 0;   // words in a row typed in the dark; the reminder words still to come
 
 // next word's tier from how the last one went: {cps: letters per second, bs: backspaces}. One step at a time.
 function nextTier(tier, w) {
@@ -575,10 +583,18 @@ function nextTier(tier, w) {
   return tier;
 }
 function newWord(text) {
+  let ph = false;
+  if (!text && mode === 'game') {                // typing in the dark: the next words spell a reminder phrase
+    if (!phrase.length && darkRun >= CFG.REMIND_AFTER) {
+      phrase = PHRASES[phraseN++ % PHRASES.length].split(' '); darkRun = 0;
+      sfx.buzz(); shake(scr, 10, 300);
+    }
+    text = phrase.shift(); ph = !!text;
+  }
   if (!text) { do text = any(TIERS[tier]); while (word && text === word.text); }
   word?.el.remove();
   const el = document.createElement('div'); el.className = 'w pop';
-  word = { text, typed: '', el, bs: 0, shown: performance.now() };
+  word = { text, typed: '', el, bs: 0, shown: performance.now(), phrase: ph };
   wordsEl.append(el); drawWord(); moveCaret();
 }
 function drawWord() {
@@ -617,7 +633,8 @@ function wordDone(w) {
   energy = Math.min(100, energy + CFG.GAIN[Math.max(0, t)]);
   $('#bp').animate([{ color: '#fff', textShadow: '0 0 30px #fff' }, {}], 300);
   renderBar();
-  if (adaptive) tier = nextTier(tier, { cps: w.text.length / Math.max(.2, (performance.now() - w.shown) / 1000), bs: w.bs });
+  if (lit) darkRun = 0; else if (mode === 'game' && !w.phrase) darkRun++;   // the phrase itself doesn't count
+  if (adaptive && !w.phrase) tier = nextTier(tier, { cps: w.text.length / Math.max(.2, (performance.now() - w.shown) / 1000), bs: w.bs });
   if (mode === 'tut' && !tutMore) { typing = false; return; }  // training: one word at a time, unless the step wants more
   newWord();
 }
@@ -751,7 +768,7 @@ async function start() {
   energy = 3; renderBar(); renderHud(); lights('off');
   await crtOn();
   if (location.hash === '#game') { history.replaceState(null, '', location.pathname + location.search); return game(false); }
-  await wait(600);
+  await wait(300);
   await training();
 
   // the fake start: looks exactly like the real game, then cuts to the jumpscare after a few words
@@ -834,7 +851,7 @@ function game(fake) {
 // last chance: time freezes and an emergency word appears. Typed in time = a boost; too slow = the chance is gone
 async function rescue() {
   const R = CFG.RESCUE[rescues++], b = $('#boost'), label = b.querySelector('b');
-  rescuing = true; rescueOk = false;
+  rescuing = true; rescueOk = false; phrase = [];   // the emergency cancels a reminder phrase
   sfx.alarm(); lights('low'); shake(scr, 10, 300);
   b.className = 'on'; label.textContent = 'EMERGENCY ▸ TYPE IT TO REROUTE POWER';
   newWord(R.word); word.rescue = true; word.el.classList.add('rescue');
@@ -937,7 +954,7 @@ if (location.search === '?test') {
   console.assert(nextTier(0, { cps: 5, bs: 0 }) === 1, 'fast + clean: up one');
   console.assert(nextTier(TIERS.length - 1, { cps: 5, bs: 0 }) === TIERS.length - 1, 'capped at the top tier');
   console.assert(TIERS.length === CFG.GAIN.length && TIERS.length === CFG.DRAIN_MULT.length, 'every tier has a GAIN and DRAIN_MULT value');
-  console.assert(TIERS.flat().concat(CFG.RESCUE.map(r => r.word)).every(w => /^[a-z]+$/.test(w)), 'words are lowercase letters only (typeable)');
+  console.assert(TIERS.flat().concat(CFG.RESCUE.map(r => r.word), PHRASES.join(' ').split(' ')).every(w => /^[a-z]+$/.test(w)), 'words are lowercase letters only (typeable)');
   console.assert(CFG.RESCUE.every(r => r.boost > CFG.BOOST_AT), 'each boost lifts them clear of the trigger, so it cannot re-fire at once');
   console.assert(nextTier(1, { cps: 5, bs: 1 }) === 1, 'fast but one backspace: holds');
   console.assert(nextTier(2, { cps: 1, bs: 0 }) === 1, 'slow: down one');

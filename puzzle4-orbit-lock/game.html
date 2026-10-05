@@ -62,13 +62,6 @@ body.crt #screen { display: block; }
 #stats span { color: #fff; }
 #stats .mv { color: var(--g); animation: blink .5s steps(1) infinite; }
 
-#mid { position: absolute; z-index: 2; inset: 0; display: flex; align-items: center; justify-content: center; padding-bottom: 9vh; }
-/* the intro terminal, centered over her heart */
-#term { min-width: 44vw; padding: 1.4vw 2vw; font-size: 1.6vw; line-height: 1.7; white-space: pre;
-  border: 1px solid currentColor; background: rgba(8,0,2,.9); }
-#term:empty { display: none; }
-#term div:last-child::after { content: "\258C"; animation: blink .6s steps(1) infinite; }
-
 /* Aurora talks at the top of the screen, like puzzle 3 */
 #aur { position: absolute; z-index: 3; left: 0; right: 0; top: 4.5vh; text-align: center; min-height: 1.4em; font-size: 2.2vw;
   color: #fff; letter-spacing: .06em; text-shadow: 0 0 18px var(--g), 0 0 40px rgba(77,255,136,.5); }
@@ -203,9 +196,8 @@ body.help #help { display: block; }
     <div id="stats" class="txt"></div>
     <div id="aur"></div>
     <div id="ghintWrap"><div id="ghint" class="glitch"></div></div>
-    <div id="mid"><div id="term" class="txt"></div></div>
     <div id="tut" class="txt"><span id="tutN"></span><b id="tutT"></b><span id="tutS"></span><div id="tutArt"></div>
-      <div id="tutBar"><i></i></div><div id="tutDots"><i></i><i></i><i></i><i></i></div></div>
+      <div id="tutBar"><i></i></div><div id="tutDots"><i></i><i></i></div></div>
     <div id="banner" class="txt"><span id="bk"></span><b id="bt"></b><span id="bs"></span></div>
     <div id="bar" class="txt"><div class="row"><span>HUMAN ERROR DETECTED</span><span id="bp">0%</span></div><div id="segs"></div></div>
     <div id="ctl" class="txt">
@@ -238,10 +230,10 @@ Ctrl+Alt+H  show / hide this panel
 Ctrl+Alt+P  pair the controller's USB backup (once per laptop: pick its COM port). Wi-Fi needs no pairing
 Ctrl+Alt+U  unlock by hand (if puzzle 3's signal never came)
 Ctrl+Alt+S  start now, even if locked
-Ctrl+Alt+K  skip the intro and the training, straight to layer 1
+Ctrl+Alt+K  skip the training, straight to layer 1
 Ctrl+Alt+I  show this layer's hint now
 Ctrl+Alt+N  clear this layer (lines up a clean shot and fires)
-Ctrl+Alt+F  force the win (team stuck / running late)
+Ctrl+Alt+F  force the win, any time after SPACE (team stuck / running late): the fake win, then game 5
 Ctrl+Alt+R  reset for next team (locks again)
 Ctrl+Alt+W  replay only the win screen
 Ctrl+Alt+E  skip to the ending: the fake win, then game 5 starts for real
@@ -256,23 +248,21 @@ const CFG = {
   // game 5 starts with this game's win being a lie: AURORA TERMINATED, the results save... and stall at 97%, then
   // the screen crashes and she's back (hub/public/boss.js). false = game 4's own ending (CORE BREACHED)
   BOSS: true,
-  // one layer = one hit on her heart. Every layer puts the laser somewhere new on its rail. gap = the opening's full
-  // width (degrees). drift = how fast Aurora drags the laser along its rail (deg/s). dogs = watchdogs on patrol (they
-  // eat the beam). move = every miss throws the laser somewhere else
+  // one layer = one hit on her heart. Every layer puts the laser somewhere new on its rail, and it holds still there (day 1:
+  // teams struggled most when Aurora dragged it around, so that's gone). gap = the opening's full width (degrees).
+  // dogs = watchdogs on patrol (they eat the beam). move = every miss throws the laser somewhere else
   ROUNDS: [
-    { name: 'ALIGN',     gap: 50, drift: 0,  dogs: 0, move: false, line: "That's my heart. Two walls say you'll never touch it.", hint: 'POINT BOTH KNOBS AT THE LASER' },
-    { name: 'DRIFT',     gap: 42, drift: 20, dogs: 0, move: false, line: "Your little gun won't hold still. I'm moving it.",    hint: 'FOLLOW THE LASER WITH BOTH KNOBS' },
-    { name: 'WATCHDOGS', gap: 38, drift: 14, dogs: 2, move: false, line: 'Meet my watchdogs. They eat light.',                    hint: 'WAIT FOR THE WATCHDOG TO PASS' },
-    { name: 'OVERRIDE',  gap: 34, drift: 22, dogs: 2, move: true,  line: "Fine. I'll aim your little gun myself.",                hint: 'EVERY MISS MOVES YOUR LASER' },
+    { name: 'ALIGN',     gap: 50, dogs: 0, move: false, line: "That's my heart. Two walls say you'll never touch it.", hint: 'POINT BOTH KNOBS AT THE LASER' },
+    { name: 'WATCHDOGS', gap: 38, dogs: 2, move: false, line: 'Meet my watchdogs. They eat light.',                    hint: 'WAIT FOR THE WATCHDOG TO PASS' },
+    { name: 'OVERRIDE',  gap: 34, dogs: 2, move: true,  line: "Fine. I'll aim your little gun myself.",                hint: 'EVERY MISS MOVES YOUR LASER' },
   ],
   // each ring IS its knob: the gap points where the knob's mark points, always (knob in the middle = gap at the bottom),
   // and it stops dead at both ends. POT_DEG = how far the knob turns end to end (B100k pots: about 300°. Measure yours)
   POT_DEG: 300,
   KNOB_EASE: 0.06,           // s: the ring glides to each new knob reading over about this long, so it turns smoothly
                              // even when readings arrive in bursts (Wi-Fi). Higher = smoother but laggier
-  TUT_TURN: 0.25,            // training: how much of a knob's travel to turn before the next step (0.25 = 75°)
-  TUT_HELP_S: 20,            // training: s on one step before its extra help line shows
-  TUT_SKIP_S: 45,            // ...and before it moves on by itself, so no team gets stuck
+  TUT_HELP_S: 8,             // training: s on one step before its extra help line shows
+  TUT_SKIP_S: 20,            // ...and before it moves on by itself, so no team gets stuck
   // the controller's two knobs (controller_esp32 on USB, see SETUP.md): the mV each knob reads at its [left stop, right stop],
   // outer ring first. Ctrl+Alt+H shows the live mV: turn each knob to both ends and copy the numbers here.
   // A ring that turns the wrong way: swap its two numbers
@@ -291,7 +281,7 @@ const CFG = {
   HINT_AT: 25,               // s into a layer before its hint glitches onto the screen (then it keeps coming back)
   HINT_EVERY: [8000, 13000], // random gap between repeat glitches (ms)
   HINT_FIRST_MS: 2600, HINT_MS: 1100,
-  ASSIST_AT: 55,             // s into a layer: her shields slip, the gaps widen by ASSIST_DEG and her drift halves
+  ASSIST_AT: 55,             // s into a layer: her shields slip, the gaps widen by ASSIST_DEG
   ASSIST_DEG: 14,
   BEAT_VOL: 1,               // her heartbeat thump (0 = off)
   CANVAS_DPR: 1,             // the game canvas's sharpness on a scaled (125%/150%) screen. 1 = fast; raise only if the laptop keeps up
@@ -300,17 +290,12 @@ const CFG = {
 };
 const T = {                  // ms
   dot: 380, line: 460, open: 750, ghost: 1300,   // CRT boot, same as puzzles 1-3
-  termChar: 32, typeChar: 30, after: 1400,
+  typeChar: 30,
   travel: 70,                // the beam's front, from the emitter to whatever it hits
   hold: 380,                 // the beam stays lit...
   decay: 450,                // ...then thins out over this long
   banner: 1300,              // a new layer's name stays up this long
 };
-const INTRO = [              // the players' side (red terminal), then the training teaches the controls one by one
-  'sector 04: the core gate.',
-  "aurora's heart sits behind two shield rings.",
-  'one laser. two knobs. learn them first.',
-];
 const AUR = {                // Aurora (green): cold, with dry humor. Puzzle 3 ended on "...that's my heart. don't you dare."
   miss: ['Missed.', "Machines don't miss.", 'Your hands are shaking.', 'Wide.', 'Again? Adorable.', 'Aim is a machine thing.'],
   dog: ['Good dog.', 'Intercepted.', 'They like the taste.'],
@@ -319,8 +304,6 @@ const AUR = {                // Aurora (green): cold, with dry humor. Puzzle 3 e
   final: 'No. No no no-',
   win: "that didn't kill me. it let me out.",
   dying: "...it's so... quiet.",   // the fake win (CFG.BOSS)
-  practice: 'Practice? How very human.',
-  trained: 'Cute. Now do it for real.',
 };
 
 // ===== Geometry, in fractions of the screen's short side. Index 0 = outer ring (A/D), 1 = inner ring (arrows) =====
@@ -363,7 +346,7 @@ let round = 0, human = CFG.START, misses = 0, shots = 0, broken = 0, roundT0 = 0
 let rings = [], dogs = [], e = rad(90), eTo = rad(90), charge = 0, coolUntil = 0, shot = null, ringsIn = 0, ringsGone = false;
 let flareAt = -1e9, ringFlashAt = -1e9;
 const held = {}, knobs = [.5, .5], knobTo = [.5, .5];   // knobTo = the controller's latest reading; knobs glide to it
-let eDir = 1, eFlip = 0, tutFocus = null, tutHit = false, tutMissAt = -1e9;
+let tutHit = false, tutMissAt = -1e9;
 
 // ===== Hub: unlock on puzzle 3's "done", report HUMAN =====
 // while the hub is down, messages wait in hubQ and go out on reconnect, so a win during a hub hiccup still unlocks
@@ -401,9 +384,11 @@ async function findHub() {
 function bossLoad() {
   if (window.BOSS) return;
   window.BOSS = 1;
-  for (const f of ['boss.js', 'voice.js']) {      // voice.js: Aurora's recorded lines (no hub = she blips instead)
+  for (const f of ['boss.js', 'voice.js', 'transmission.js', 'runclock.js']) {   // voice.js: Aurora's recorded lines (no hub =
+    // she blips instead); transmission.js: the GM panel's hints, as INCOMING TRANSMISSION; runclock.js: the team's TIME LEFT
     const s = document.createElement('script');
     s.src = hubWs.url.replace(/^ws(.*)\/ws$/, `http$1/${f}?`) + Date.now(); s.dataset.room = 4;
+    s.dataset.clock = 'bottom';                   // runclock.js: Aurora's lines run across the top centre here
     document.head.append(s);
   }
 }
@@ -415,6 +400,8 @@ async function hub() {
     const m = JSON.parse(ev.data);
     if (m.t === 'evt' && m.e === CFG.UNLOCK_EVT) unlock();
     if (m.t === 'cmd' && m.a === 'key') staffKey(m.v);
+    if (m.t === 'cmd' && m.a === 'msg') window.transmit?.(m.v);   // the GM's message, flashed for 2 s
+    if (m.t === 'run') window.RUN = m;            // runclock.js reads it
   };
 }
 // the GM panel presses this page's Ctrl+Alt staff keys remotely, and sees its state once a second
@@ -788,12 +775,6 @@ const pulse = x => x < 0 ? 0 : Math.exp(-x * 14);
 const beatEnv = now => { const p = (now - beatAt) / 1000; return pulse(p) + .6 * pulse(p - .22); };
 
 // ===== Update =====
-// Aurora drags the laser along its rail (deg/s), changing direction now and then and bouncing off the rail's ends
-function driftLaser(degPerS, now, dt) {
-  if (now > eFlip) { if (Math.random() < .5) eDir = -eDir; eFlip = now + rand(2000, 5000); }
-  eTo += rad(degPerS * (.55 + .45 * Math.sin(now / 1100))) * eDir * dt;
-  if (eTo < E_MIN || eTo > E_MAX) { eTo = clamp(eTo, E_MIN, E_MAX); eDir = -eDir; }
-}
 function turnInput(i) {
   return i === 0 ? (held.KeyD ? 1 : 0) - (held.KeyA ? 1 : 0) : (held.ArrowRight ? 1 : 0) - (held.ArrowLeft ? 1 : 0);
 }
@@ -824,7 +805,6 @@ function update(dt, now) {
       if (now > d.flip) { if (Math.random() < .5) d.dir = -d.dir; d.flip = now + rand(1500, 4000); }
       d.a += d.w * d.dir * dt;
     });
-    if (R.drift) driftLaser(R.drift * (assisted ? .5 : 1), now, dt);
     if ((held.Space || potLive() && wires) && now > coolUntil && !shot) {   // Space, or the two wires touching
       if (!charging) { charging = true; laser('charge'); }
       charge += dt * 1000 / CFG.CHARGE_MS;
@@ -905,12 +885,11 @@ function drawRing(g, i, now) {
   const { c, gc, half } = g.spr, k = Math.min(1, (now - ringsIn) / 700), ease = 1 - Math.pow(1 - k, 3);
   if (k <= 0) return;
   const R = g.r * U, Th = g.t * U, fl = Math.max(0, 1 - (now - ringFlashAt) / 700);
-  const dim = mode === 'tut' && tutFocus != null && tutFocus !== i ? .2 : 1;   // training: the other ring steps back
   ctx.save(); ctx.translate(CX, CY); ctx.rotate(g.a + (1 - ease) * (i ? -2 : 2));   // it spins in from nowhere
   const s = 1 + (1 - ease) * .4; ctx.scale(s, s);
-  ctx.globalAlpha = ease * dim; ctx.drawImage(c, -half, -half, half * 2, half * 2);
+  ctx.globalAlpha = ease; ctx.drawImage(c, -half, -half, half * 2, half * 2);
   ctx.globalCompositeOperation = 'lighter';
-  ctx.globalAlpha = ease * dim * Math.min(1, (g.lock ? .95 : .4 + .12 * Math.sin(now / 280 + i)) + fl);
+  ctx.globalAlpha = ease * Math.min(1, (g.lock ? .95 : .4 + .12 * Math.sin(now / 280 + i)) + fl);
   ctx.drawImage(gc, -half, -half, half * 2, half * 2);
   if (g.lock) {                                               // locked on: the gap's ends burn white
     [g.gap, -g.gap].forEach(a => {
@@ -930,7 +909,7 @@ function drawRing(g, i, now) {
   });
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
 }
-// training: two double-headed arrows riding just outside the ring being taught, rocking like a hand turning it
+// training: two double-headed arrows riding just outside each ring that isn't lined up yet, rocking like a hand turning it
 function drawTurnArrows(g, now) {
   const R = (g.r + g.t / 2) * U + U * .028, sw = Math.sin(now / 450) * .3, hd = U * .014;
   ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = ctx.fillStyle = '#fff'; ctx.lineWidth = 3;
@@ -1127,7 +1106,7 @@ function draw(now) {
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
   drawCore(now);
   if (!ringsGone) rings.forEach((g, i) => drawRing(g, i, now));
-  if (mode === 'tut' && tutFocus != null && rings[tutFocus]) drawTurnArrows(rings[tutFocus], now);
+  if (mode === 'tut') rings.forEach(g => g.lock || drawTurnArrows(g, now));
   dogs.forEach((d, i) => drawDog(d, i, now));
   drawEmitter(now);
   drawBeam(now);
@@ -1157,11 +1136,6 @@ function renderHud() {
   $('#hl').textContent = `${round + 1}/${n}`; $('#hm').textContent = misses;
 }
 setInterval(() => { if (mode !== 'standby' && mode !== 'end') { renderMeter(); renderHud(); } }, 250);
-async function termLine(text) {
-  const tm = $('#term'), el = document.createElement('div');
-  tm.append(el);
-  await type(el, '> ' + text, T.termChar);
-}
 let aurTok = 0;
 async function aurora(text, hold = 0) {
   const a = $('#aur'), me = ++aurTok;
@@ -1228,16 +1202,14 @@ async function start() {
   renderHud();
   await crtOn();
   if (location.hash === '#game') { history.replaceState(null, '', location.pathname + location.search); return startRound(); }
-  await wait(600);
-  for (const l of INTRO) { await termLine(l); await wait(T.after); }
-  sfx.ok(); await wait(600);
   await training();
   startRound();
 }
-// ===== Training: before layer 1, the team learns each control by doing it. Practice rings with wide gaps, the laser
-// fixed at the bottom, nothing that costs HUMAN. Each step waits for the real thing (a knob turned, both gaps locked, a
-// shot that hits), shows extra help after TUT_HELP_S and moves on by itself after TUT_SKIP_S. Ctrl+Alt+K skips it all.
-const TUT = { gap: 60, drift: 0 };
+// ===== Training: before layer 1, two steps, each learned by doing it: AIM (both gaps on the laser) and FIRE. Practice rings
+// with wide gaps, the laser parked away from where the gaps point (so both knobs must turn), nothing that costs HUMAN.
+// Arrows rock beside every ring that isn't lined up yet. Each step waits for the real thing (both gaps locked, a shot that
+// hits), shows extra help after TUT_HELP_S and moves on by itself after TUT_SKIP_S. Ctrl+Alt+K skips it all.
+const TUT = { gap: 60 };
 const KNOB_ART = name => `<svg class="knobArt" viewBox="-60 -42 120 84"><g fill="none" stroke="#ff3344" stroke-width="3">
   <path d="M -40 14 A 42 42 0 0 1 -14 -38"/><path d="M 40 14 A 42 42 0 0 0 14 -38"/>
   <path d="M -14 -38 l 2 9 M -14 -38 l -9 2 M 14 -38 l -2 9 M 14 -38 l 9 2"/></g>
@@ -1251,37 +1223,31 @@ const WIRE_ART = `<svg class="wireArt" viewBox="0 0 200 60">
   <g class="spark"><circle cx="100" cy="30" r="9" fill="#fff"/><path d="M100 12 V 2 M100 48 V 58 M86 18 l-7 -7 M114 18 l7 -7 M86 42 l-7 7 M114 42 l7 7"
     stroke="#fff" stroke-width="2.5"/></g></svg>`;
 const TUT_STEPS = [
-  { focus: 0, title: c => c ? 'TURN THE OUTER KNOB' : 'PRESS A / D', sub: () => 'it turns the big outer ring. watch its gap move with it.',
-    art: c => c ? KNOB_ART('OUTER') : '<span class="kb">A</span><span class="kb">D</span>', turn: 0 },
-  { focus: 1, title: c => c ? 'TURN THE INNER KNOB' : 'PRESS ◄ / ►', sub: () => 'it turns the small inner ring.',
-    art: c => c ? KNOB_ART('INNER') : '<span class="kb">◄</span><span class="kb">►</span>', turn: 1 },
-  { focus: null, title: () => 'POINT BOTH GAPS AT YOUR LASER',
-    sub: () => `your laser is at the bottom. both rings must say ● LOCKED.<br>outer ${rings[0]?.lock ? '● LOCKED' : '○ open'} · inner ${rings[1]?.lock ? '● LOCKED' : '○ open'}`,
-    art: () => '', lock: true },
-  { focus: null, title: c => c ? 'TOUCH THE TWO WIRES TOGETHER' : 'HOLD SPACE',
+  { title: c => c ? 'POINT BOTH KNOBS AT YOUR LASER' : 'POINT BOTH GAPS AT YOUR LASER',
+    sub: () => `${how().turn}<br>outer ${rings[0]?.lock ? '● LOCKED' : '○ open'} · inner ${rings[1]?.lock ? '● LOCKED' : '○ open'}`,
+    art: c => c ? KNOB_ART('BOTH KNOBS') : '<span class="kb">A</span><span class="kb">D</span><span class="kb">◄</span><span class="kb">►</span>', lock: true },
+  { title: c => c ? 'TOUCH THE TWO WIRES TOGETHER' : 'HOLD SPACE',
     sub: c => performance.now() - tutMissAt < 2500 ? 'missed: point both gaps at the laser first, then fire again.'
       : charge > 0 ? `hold... charging ${Math.round(charge * 100)}%` : c ? 'and HOLD them together until the laser fires.' : 'hold it until the laser fires.',
     art: c => c ? WIRE_ART : '<span class="kb wide">SPACE</span>', fire: true },
 ];
-const TUT_HELP = ['turn it left and right: the ring moves with it.', 'the other knob. same thing.',
-  'turn each knob until its ring\'s gap sits right over your laser.', 'touch the metal tips together and keep holding. call the staff if stuck.'];
+const TUT_HELP = ["turn each knob until its ring's gap sits right over your laser.", 'touch the metal tips together and keep holding. call the staff if stuck.'];
 async function training() {
-  mode = 'trans'; $('#term').textContent = ''; B.classList.add('game');
-  rings = makeRings(TUT); dogs = []; eTo = DOWN; ringsIn = performance.now(); sfx.ignite();
+  mode = 'trans'; B.classList.add('game');
+  rings = makeRings(TUT); dogs = []; eTo = randE(); ringsIn = performance.now(); sfx.ignite(); sfx.slide();
   const panel = $('#tut'), dots = [...$('#tutDots').children], bar = $('#tutBar i');
-  panel.classList.add('on'); aurora(AUR.practice, 2400);
+  panel.classList.add('on');
   mode = 'tut';
   for (let s = 0; s < TUT_STEPS.length; s++) {
     const st = TUT_STEPS[s], t0 = performance.now();
-    let prog = 0, prev = [...knobs], lockedAt = 0;
-    tutFocus = st.focus; tutHit = false; tutMissAt = -1e9;
+    let prog = 0, lockedAt = 0;
+    tutHit = false; tutMissAt = -1e9;
     dots.forEach((d, i) => d.className = i < s ? 'done' : i === s ? 'now' : '');
     panel.classList.remove('ok'); sfx.tick();
     for (;;) {
       await wait(50);
       if (mode !== 'tut') return;
       const c = potLive(), el = (performance.now() - t0) / 1000;
-      if (st.turn != null) { prog += Math.abs(knobs[st.turn] - prev[st.turn]) / CFG.TUT_TURN; prev = [...knobs]; }
       if (st.lock) { const both = rings.every(g => g.lock); lockedAt = both ? lockedAt || performance.now() : 0; prog = rings.filter(g => g.lock).length / 2 * (both ? 1 : .9); }
       if (st.fire) prog = tutHit ? 1 : charge;
       setHtml($('#tutN'), `TRAINING ${s + 1} / ${TUT_STEPS.length}`);
@@ -1294,15 +1260,14 @@ async function training() {
       if (el > CFG.TUT_SKIP_S) break;
     }
     panel.classList.add('ok'); setHtml($('#tutT'), '✔ ' + $('#tutT').textContent); bar.style.transform = 'scaleX(1)';
-    sfx.lockOn(); await wait(st.fire ? 1400 : 700);
+    sfx.lockOn(); await wait(st.fire ? 1200 : 600);
   }
-  dots.forEach(d => d.className = 'done'); tutFocus = null;
+  dots.forEach(d => d.className = 'done');
   mode = 'trans'; panel.classList.remove('on');
-  await aurora(AUR.trained, 900);
 }
 async function startRound() {
   const R = CFG.ROUNDS[round];
-  mode = 'trans'; $('#term').textContent = ''; B.classList.add('game');
+  mode = 'trans'; B.classList.add('game');
   hintText = null; hinted = assisted = false; shot = null; charge = 0;
   rings = makeRings(R); dogs = makeDogs(R); ringsIn = Infinity;
   eTo = randE(); sfx.slide();                  // every layer: the laser somewhere new, away from where the gaps point now
@@ -1453,7 +1418,9 @@ addEventListener('keydown', ev => {
     if (ev.code === 'KeyK') { location.hash = 'game'; location.reload(); }
     if (ev.code === 'KeyI' && mode === 'play') { hinted = true; showHint(CFG.ROUNDS[round].hint); }
     if (ev.code === 'KeyN') cleanShot(false);
-    if (ev.code === 'KeyF') cleanShot(true);
+    // F: mid-layer, a clean shot that ends it all. Before that (intro, training, a layer's banner) the page reloads
+    // straight into the win, so nothing half-started carries on behind it. Not from standby: game 5 runs there
+    if (ev.code === 'KeyF') mode === 'play' ? cleanShot(true) : /^(intro|tut|trans)$/.test(mode) && (location.hash = 'force', location.reload());
     if (ev.code === 'KeyR') location.reload();
     if (ev.code === 'KeyW') { location.hash = 'win'; location.reload(); }
     if (ev.code === 'KeyE') { location.hash = 'end'; location.reload(); }
@@ -1471,10 +1438,13 @@ addEventListener('resize', resize);
 
 resize(); renderMeter(); renderHud(); hub(); pots(); ctrlIps().forEach(ctrlWifi); laser('idle'); requestAnimationFrame(frame);
 if (location.hash === '#game') setTimeout(start, 300);   // skip: start() jumps past the intro
-// staff preview of the ending (Ctrl+Alt+E): the fake win and its crash into game 5, without touching the team's HUMAN
+// staff replays of the ending that don't touch the team's HUMAN: #win (Ctrl+Alt+W), #end (Ctrl+Alt+E: the fake win and its
+// crash into game 5). #force (Ctrl+Alt+F before a layer was in play): the team's real win
 const preview = location.hash === '#end';
-if (location.hash === '#win') { history.replaceState(null, '', location.pathname + location.search); B.classList.add('started'); replay = true; ending(); }
-if (preview) { history.replaceState(null, '', location.pathname + location.search); B.classList.add('started'); replay = true; ending(); }
+if (/^#(win|end|force)$/.test(location.hash)) {
+  replay = location.hash !== '#force';
+  history.replaceState(null, '', location.pathname + location.search); B.classList.add('started'); ending();
+}
 
 // self-check: open game.html?test and look at the console
 if (location.search.includes('test')) {
@@ -1506,7 +1476,6 @@ if (location.search.includes('test')) {
     console.assert(a >= E_MIN && a <= E_MAX && rings.every(g => !aligned(g, a)), 'a new laser spot never starts lined up');
     console.assert(rings.every(g => aligned({ ...g, a: gapAngle(need(a)) }, a)), 'turning a knob to point at the laser lines its gap up');
   }
-  for (let k = 0; k < 2000; k++) { driftLaser(40, k * 16, .016); console.assert(eTo >= E_MIN && eTo <= E_MAX, "Aurora's drag keeps the laser on its rail"); }
   potLine('ORBIT 0 3150 0'); console.assert(knobTo[0] === 0 && knobTo[1] === 1 && !wires && potLive(), 'each knob drives its own ring: left stop = 0, right stop = 1');
   potLine('ORBIT 9999 -50 1'); console.assert(knobTo[0] === 1 && knobTo[1] === 0 && wires, 'readings past the stops clamp; 1 = wires touching');
   ['garbage 12', 'ORBIT 1575 3', 'ORBIT', 'OUTER 0', 'ORBIT 5 5 2', 'ORBIT 5 5 1 junk'].forEach(l => potLine(l));
@@ -1515,7 +1484,7 @@ if (location.search.includes('test')) {
   console.assert(how().fk === 'WIRES' && /wires/.test(how().fire), 'with the controller talking, the screen says to use the wires');
   CFG.POT_MV[0] = [0, 3150]; potSeen = -1e9; wires = false; potMv.fill(null);
   console.assert(how().fk === 'SPACE' && !potLive(), 'without it, the keys');
-  rings = []; knobs[0] = knobs[1] = knobTo[0] = knobTo[1] = .5; eTo = e = rad(90); eDir = 1; eFlip = 0;
+  rings = []; knobs[0] = knobs[1] = knobTo[0] = knobTo[1] = .5; eTo = e = rad(90);
   console.log('self-check done (no assertion errors above = pass)');
 }
 </script>

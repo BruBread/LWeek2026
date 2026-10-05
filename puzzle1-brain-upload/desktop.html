@@ -28,7 +28,7 @@ html, body { height: 100%; overflow: hidden; user-select: none; cursor: default;
 
 /* stuck hint, sent by projector.html CFG.HINT_AFTER s into the run if the mask isn't found: Aurora glitches the wallpaper */
 #motto div { position: relative; }
-#motto.stuck div { font: 700 4.4vw Consolas, "Cascadia Mono", monospace; color: var(--g); border-color: var(--g); background: rgba(0,20,10,.6);
+#motto.stuck div { text-transform: uppercase; font: 700 4.4vw Consolas, "Cascadia Mono", monospace; color: var(--g); border-color: var(--g); background: rgba(0,20,10,.6);
   text-shadow: 0 0 18px rgba(77,255,136,.7); box-shadow: 0 0 30px rgba(77,255,136,.3), inset 0 0 30px rgba(77,255,136,.15); }
 #motto.stuck svg { animation-duration: .7s; }
 #motto.stuck svg path { fill: var(--g); }
@@ -86,23 +86,20 @@ body.glitch::after { content: ""; position: fixed; inset: 0; z-index: 45; pointe
 #app::before { content: ""; position: absolute; inset: 0; pointer-events: none;
   background: repeating-linear-gradient(rgba(0,0,0,.22) 0 1px, transparent 1px 3px); }
 #app h1 { font: 700 2.4vh Consolas, monospace; letter-spacing: .4em; text-shadow: 0 0 10px rgba(77,255,136,.6); }
-#app p { margin: .8vh 0 1.8vh; font-size: 1.8vh; color: #cfe; opacity: .8; }
-.row { display: grid; grid-template-columns: repeat(4, 5.4vh) 9vh; gap: .9vh; align-items: center; height: 5.2vh; }
-.row i { height: 4.4vh; display: grid; place-items: center; font: 700 2.6vh Consolas, monospace; font-style: normal;
-  border: 1px solid rgba(77,255,136,.22); border-radius: 4px; color: rgba(77,255,136,.35); }
-.row b { padding-left: 1.6vh; font: 600 3.4vh "Segoe UI", sans-serif; color: #fff; opacity: 0; }
-.row.top { height: 3.4vh; }
-.row.top i { height: auto; border: 0; color: #fff; font-size: 2vh; opacity: 0; }
-.row.top.in i { opacity: .8; transition: opacity .3s; }
+/* a printed lookup table, "0101 = 5": plain text, no boxes, so nothing looks like a button */
+#rows { margin-top: 1.6vh; }
+.row { display: flex; align-items: center; gap: 2.4vh; height: 5.2vh; font: 700 3.8vh Consolas, monospace; }
+.row span { letter-spacing: .25em; }
+.row i { font-style: normal; color: rgba(77,255,136,.55); }
+.row u { text-decoration: none; font-weight: 400; color: rgba(255,255,255,.4); }
+.row b { min-width: 1ch; color: #fff; opacity: 0; }
 #rows .row { opacity: 0; transform: translateX(-14px); }
 #rows .row.in { opacity: 1; transform: none; transition: opacity .12s, transform .3s cubic-bezier(.2,1.4,.4,1); }
-.row.lock i.on { color: #03140a; background: var(--g); border-color: var(--g); box-shadow: 0 0 12px rgba(77,255,136,.6); animation: lit .45s ease-out; }
+.row.lock i { color: rgba(77,255,136,.28); }
+.row.lock i.on { color: var(--g); text-shadow: 0 0 12px rgba(77,255,136,.7); animation: lit .45s ease-out; }
 .row.lock b { opacity: 1; animation: pop .4s cubic-bezier(.2,1.6,.4,1); }
-.row.hl { animation: hl .5s 3 alternate; }
-@keyframes lit { from { background: #fff; box-shadow: 0 0 30px #fff; } }
+@keyframes lit { from { color: #fff; text-shadow: 0 0 24px #fff; } }
 @keyframes pop { from { transform: scale(2); color: var(--g); text-shadow: 0 0 20px var(--g); } }
-@keyframes hl { to { background: rgba(77,255,136,.18); } }
-#ex { min-height: 1.4em; margin-top: 1.6vh; font: 2.4vh Consolas, monospace; color: #fff; white-space: pre; }
 #beam { position: absolute; left: 0; right: 0; height: 2px; top: 0; opacity: 0; pointer-events: none;
   background: #fff; box-shadow: 0 0 10px 2px var(--g), 0 0 40px 8px rgba(77,255,136,.4); }
 </style>
@@ -117,7 +114,7 @@ body.glitch::after { content: ""; position: fixed; inset: 0; z-index: 45; pointe
 
 <div id="wall"><i></i><i></i><i></i>
   <div id="motto">
-    <div data-text="Think outside the box">Think outside the box</div>
+    <div data-text="Move the mouse down">Move the mouse down</div>
     <!-- a mouse pointer, turned to point straight down -->
     <svg viewBox="0 -1 16 23"><path transform="rotate(202 6 9.5)" d="M0 0V16L4 12.2 6.8 18.6 9.4 17.5 6.6 11.2H11.6Z"
       fill="#fff" stroke="#000" stroke-width="1.1" stroke-linejoin="round"/></svg>
@@ -130,10 +127,7 @@ body.glitch::after { content: ""; position: fixed; inset: 0; z-index: 45; pointe
   <div class="tbar"><svg><use href="#bk"/></svg><span>Binary Key</span><b data-a="min">&#xE921;</b><b data-a="max">&#xE922;</b><b data-a="close" class="x">&#xE8BB;</b></div>
   <div id="app">
     <h1>BINARY KEY</h1>
-    <p>Each 1 is worth the number above it. Add them up.</p>
-    <div class="row top" id="top"><i>8</i><i>4</i><i>2</i><i>1</i><b></b></div>
     <div id="rows"></div>
-    <div id="ex"></div>
     <div id="beam"></div>
   </div>
 </div>
@@ -171,7 +165,6 @@ function tone(type, f0, f1, dur, vol, delay = 0) {
 const sfx = {
   open() { tone('sine', 420, 900, .18, .12); },
   tick() { tone('square', 2200, 1300, .05, .05); },
-  key()  { tone('square', 900, 0, .015, .03); },
   done() { tone('sine', 1320, 0, .25, .1); tone('sine', 1760, 0, .35, .08, .08); },
   glitch() {
     const n = AC.createBufferSource(), b = AC.createBuffer(1, AC.sampleRate * .9, AC.sampleRate), d = b.getChannelData(0), g = AC.createGain();
@@ -184,8 +177,8 @@ const sfx = {
 
 // ===== Binary Key: the rows 0-9, revealed with a scan beam every time the app opens =====
 $('#rows').innerHTML = Array.from({ length: 10 }, (_, d) =>
-  `<div class="row">${[...d.toString(2).padStart(4, '0')].map(b => `<i class="${b === '1' ? 'on' : ''}">0</i>`).join('')}<b>${d}</b></div>`).join('');
-const rows = [...$('#rows').children], EX = '0101  =  4 + 1  =  5';
+  `<div class="row"><span>${[...d.toString(2).padStart(4, '0')].map(b => `<i class="${b === '1' ? 'on' : ''}">0</i>`).join('')}</span><u>=</u><b>${d}</b></div>`).join('');
+const rows = [...$('#rows').children];
 let tok = 0;
 async function lockRow(r, me) {                  // the bits scramble, then lock: lit cells flash and the digit pops
   r.classList.add('in');
@@ -196,11 +189,10 @@ async function lockRow(r, me) {                  // the bits scramble, then lock
   r.classList.add('lock'); sfx.tick();
 }
 async function reveal() {
-  const me = ++tok, ex = $('#ex'), list = $('#rows');
-  rows.forEach(r => r.className = 'row'); $('#top').classList.remove('in'); ex.textContent = '';
+  const me = ++tok, list = $('#rows');
+  rows.forEach(r => r.className = 'row');
   await wait(220);                               // the window finishes opening
   if (me !== tok) return;
-  $('#top').classList.add('in');
   const y0 = list.offsetTop + 'px', y1 = list.offsetTop + list.offsetHeight + 'px';   // the beam reaches each row as it slides in
   $('#beam').animate([{ top: y0, opacity: 1 }, { top: y1, opacity: 1, offset: .92 }, { top: y1, opacity: 0 }], rows.length * CFG.ROW_MS / .92);
   for (const r of rows) {                        // not awaited: the rows overlap in a cascade
@@ -208,8 +200,7 @@ async function reveal() {
     lockRow(r, me); await wait(CFG.ROW_MS);
   }
   await wait(450);
-  for (const ch of EX) { if (me !== tok) return; ex.textContent += ch; if (ch !== ' ') sfx.key(); await wait(45); }
-  rows[5].classList.add('hl'); sfx.done();       // the example's own row lights up
+  if (me === tok) sfx.done();
 }
 
 // ===== Stuck hint: projector.html sends it CFG.HINT_AFTER s into the run while the mask is still unclicked =====
@@ -219,10 +210,9 @@ async function stuckHint() {
   if (stuck) return;
   stuck = true;
   if (!win.hidden && !win.dataset.min) minimize();   // Aurora shoves Binary Key out of the way so the wallpaper shows
-  const t = $('#motto div');
   document.body.classList.add('glitch'); burst(1300); sfx.glitch();
   await wait(550);
-  t.textContent = t.dataset.text = 'DRAG THE MOUSE DOWN'; $('#motto').classList.add('stuck');
+  $('#motto').classList.add('stuck');
   await wait(650);
   document.body.classList.remove('glitch');
   setInterval(() => burst(300), 5000);               // keeps twitching so it gets noticed
@@ -235,7 +225,7 @@ function openWin() {
   win.hidden = false; win.classList.remove('max'); delete win.dataset.min;
   win.style.left = (innerWidth - win.offsetWidth) / 2 + 'px';
   win.style.top = Math.max(0, (innerHeight - 48 - win.offsetHeight) / 2) + 'px';
-  appBtn.classList.add('open'); front(true); sfx.open();
+  appBtn.classList.add('open'); front(true); sfx.open(); glow();
   hubWs?.readyState === 1 && hubWs.send(JSON.stringify({ t: 'evt', e: 'p1start' }));   // the run clock starts at the team's first click (this, or the mask)
   win.animate([{ transform: 'scale(.9)', opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 200, easing: 'cubic-bezier(.1,.9,.2,1)' });
   reveal();
@@ -251,7 +241,7 @@ function restore() {
 }
 function closeWin() {
   ++tok; appBtn.classList.remove('open');
-  win.animate([{}, { transform: 'scale(.95)', opacity: 0 }], 120).finished.then(() => { win.hidden = true; win.style.visibility = ''; delete win.dataset.min; });
+  win.animate([{}, { transform: 'scale(.95)', opacity: 0 }], 120).finished.then(() => { win.hidden = true; win.style.visibility = ''; delete win.dataset.min; glow(); });
 }
 icon.addEventListener('click', openWin);            // one click opens it too: not everyone double-clicks
 appBtn.addEventListener('click', () => win.dataset.min ? restore() : minimize());
@@ -292,13 +282,27 @@ async function findHub() {
   }
 }
 let hubWs;
+// while Binary Key is open (minimized too), the mask on the wall glows as if hovered. Re-sent every 2 s, so a reloaded
+// projector gets it again, and sent on connect, so a reset clears it
+const glow = () => hubWs?.readyState === 1 && hubWs.send(JSON.stringify({ t: 'cmd', to: 'puzzle1', a: 'glow', v: +!win.hidden }));
+setInterval(glow, 2000);
 async function hub() {
   const ws = hubWs = new WebSocket('ws://' + await findHub() + ':3000/ws');
-  ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', id: 'desk1', role: 'page' }));
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ t: 'hello', id: 'desk1', role: 'page' })); glow();
+    if (window.TX) return;                       // from the hub, shared with the projector: the GM panel's INCOMING
+    window.TX = 1;                               // TRANSMISSION, and the team's TIME LEFT
+    for (const f of ['transmission.js', 'runclock.js']) {
+      const s = document.createElement('script'); s.src = ws.url.replace(/^ws(.*)\/ws$/, `http$1/${f}?`) + Date.now(); s.dataset.room = 1;
+      document.head.append(s);
+    }
+  };
   ws.onclose = () => setTimeout(hub, 2000);
   ws.onmessage = e => { const m = JSON.parse(e.data);
     if (m.t === 'cmd' && m.a === 'key' && m.v === 'KeyR') location.reload();
-    if (m.t === 'cmd' && m.a === 'hint') stuckHint(); };
+    if (m.t === 'cmd' && m.a === 'hint') stuckHint();
+    if (m.t === 'cmd' && m.a === 'msg') window.transmit?.(m.v);
+    if (m.t === 'run') window.RUN = m; };         // runclock.js reads it
 }
 hub();
 </script>

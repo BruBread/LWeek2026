@@ -54,6 +54,8 @@ const SAY = {
   rings: [["YOU DON'T NEED THIS ANYMORE.", 'angry']],   // room 4: the first try to fire, before she breaks game 4's rings
   // the team ran out of lives: on every screen, then YOU LOST (all recorded lines from the other games)
   lost: [['...heh.', 'smug'], ["That's the last of it."], ['Every mistake teaches me something.', 'smug'], ['Bring your friends. I have room.']],
+  // the run's clock ran out before game 4's end (the hub's RUN_MIN): the same, she starts with the clock
+  time: [['Tick. Tock.', 'smug'], ['...heh.', 'smug'], ["That's the last of it."], ['Every mistake teaches me something.', 'smug'], ['Bring your friends. I have room.']],
 };
 // her last words, the same on every screen: the worst thing she saw in this run (the dossier's facts), or a clean run
 function lastWords(r) {
@@ -209,6 +211,7 @@ function silencePage() {
   page(() => Object.values(tracks).forEach(a => a.pause()));
   page(() => chargeSound(0));
   document.querySelectorAll('audio, video').forEach(m => m.pause());
+  page(() => clearInterval((0, eval)('loop')));   // games 2 and 3 cut off mid-game by the clock: their own loop can't end the game behind us (global eval: our loop() hides the page's)
 }
 
 // ===== Her portrait (img/aurora.png from the hub; img/aurora-<face>.png per mood). Placeholder until those exist =====
@@ -1207,18 +1210,20 @@ async function theEnd(g, restore) {
   if (!restore) { one('end'); strip('win'); flash(1, 900); await resolveText($('bfin'), 'TERMINATED', 70); stamp($('bfin')); }
   else $('bfin').textContent = 'TERMINATED';
 }
-// ===== Out of lives: she wins. The -1 LIFE banner plays, then every screen goes black together, she gloats, YOU LOST =====
+// ===== Out of lives (or out of time before game 4's end): she wins. The -1 LIFE banner plays, then every screen goes
+// black together, she gloats, YOU LOST =====
 async function theLost(g, restore) {
+  const time = S.ev?.k === 'time';
   task?.stop(); task = cur = null; view = ''; counting = '';
   if (!restore) { await until(S.at); if (g !== gen) return; }
   quiet(); scene = null; clearFx(); main(''); B.classList.add('black'); theme('green');
   if (!restore) {
     one('lost'); strip('miss'); await wait(1400); if (g !== gen) return;
-    await talk(SAY.lost, { auto: true, hold: 1800, rain: .4, cancel: () => g !== gen });
+    await talk(time ? SAY.time : SAY.lost, { auto: true, hold: 1800, rain: .4, cancel: () => g !== gen });
     if (g !== gen) return;
   }
   B.classList.remove('black'); setRain(1);
-  main(`<div class="mid"><div class="note">ALL ${S.maxLives} LIVES GONE</div><div class="big" id="bfin"></div>` +
+  main(`<div class="mid"><div class="note">${time ? "TIME'S UP" : `ALL ${S.maxLives} LIVES GONE`}</div><div class="big" id="bfin"></div>` +
     `<div class="sub">AURORA V ▸ STILL ONLINE</div><div class="note">THANK YOU FOR PLAYING ▸ EXIT THROUGH SECTOR 04</div></div>`);
   if (!restore) { flash(1, 700, '#4dff88'); shake(B, 14, 600); await resolveText($('bfin'), 'YOU LOST', 70); stamp($('bfin')); }
   else $('bfin').textContent = 'YOU LOST';

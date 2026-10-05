@@ -1,8 +1,8 @@
 # Puzzle 4: Orbit Lock (booth setup)
 
-Aurora's heart sits in the middle of the screen behind two shield rings. Each ring has one gap, and **each ring is its knob**: the gap always points where its knob's mark points. The team points both gaps at the laser, then **touches two wires together and holds** to fire. Before layer 1 a short **training** teaches each control by doing it. Four layers: ALIGN, DRIFT, WATCHDOGS, OVERRIDE.
+Aurora's heart sits in the middle of the screen behind two shield rings. Each ring has one gap, and **each ring is its knob**: the gap always points where its knob's mark points. The team points both gaps at the laser, then **touches two wires together and holds** to fire. Before layer 1 a short **training** (2 steps: aim, fire) teaches the controls by doing them. Three layers: ALIGN, WATCHDOGS, OVERRIDE. The laser never drifts: after day 1 (teams struggled most while Aurora dragged it around) it holds still in every layer.
 
-Everything the players touch is on **one controller**: one ESP32 on a breadboard with **two knobs** (one per ring), **two loose fire wires**, and a **small screen** that shows a spinning circle while waiting and **FIRE** when the laser shoots. It's on the booth Wi-Fi, **NexusV**, at **192.168.0.52** (like the mask at .50 and the beacon at .51), and the game reads it over the network. If NexusV isn't there within 4 s it joins the backup network **walawifi** instead, at **192.168.1.52** (then keeps trying both in turn). The laptops must be on the same network as the board. Power it from any USB port or charger. Best: plug it into the **Puzzle 4 laptop**, because then USB is a backup if the Wi-Fi drops.
+Everything the players touch is on **one controller**: one ESP32 on a breadboard with **two knobs** (one per ring), **two loose fire wires**, and a **small screen** that shows a spinning circle while waiting and **FIRE** when the laser shoots. It's on the booth Wi-Fi, **NexusV**, at **192.168.0.52** (like the mask at .50 and the beacon at .51), and the game reads it over the network. If NexusV isn't there within 4 s of switching on, it joins the backup network **walawifi** instead, at **192.168.1.52** (then keeps trying both in turn until one works). Once it has been on a network, a drop only ever re-joins that same network. The laptops must be on the same network as the board. Power it from any USB port or charger. Best: plug it into the **Puzzle 4 laptop**, because then USB is a backup if the Wi-Fi drops.
 
 Without the controller, the keys do the same job: **A / D** turn the outer ring, **◄ / ►** turn the inner ring, **hold Space** to fire. If the controller goes silent mid-game (Wi-Fi and USB both), the keys take over within a second, and the game screen's labels switch to the keys too.
 
@@ -25,7 +25,7 @@ Without the controller, the keys do the same job: **A / D** turn the outer ring,
 2. Install the screen library: **Tools → Manage Libraries**, search **U8g2**, click **Install** (the one by oliver).
    - `U8g2lib.h: No such file or directory` when you upload = it isn't installed. If the Library Manager can't download (the booth network blocks arduino.cc), download `https://github.com/olikraus/U8g2_Arduino/archive/refs/heads/master.zip`, unzip it, rename the folder to `U8g2`, put it in `Documents\Arduino\libraries\`, and restart the Arduino IDE.
 3. Open `controller_esp32/controller_esp32.ino`. `controller_esp32/secrets.h` already has **NexusV** (IP **192.168.0.52**, same password as the mask and the beacon) and the backup **walawifi** (IP **192.168.1.52**). Upload.
-4. Serial Monitor (115200) prints `trying NexusV as 192.168.0.52`, then `controller ready on NexusV at http://192.168.0.52:81/`, and `ORBIT 1650 2210 0` lines very fast: outer knob mV, inner knob mV, and `1` while the fire wires touch. The small screen shows the spinning circle, and the red LED goes off once it's on NexusV.
+4. Serial Monitor (115200) prints `trying NexusV as 192.168.0.52`, then `NOTE controller ready on NexusV at http://192.168.0.52:81/`, and `ORBIT 1650 2210 0` lines very fast: outer knob mV, inner knob mV, and `1` while the fire wires touch. The small screen shows the spinning circle, and the red LED goes off once it's on NexusV.
    - **Red LED stays on:** neither network is there, or a password in `secrets.h` is wrong. The Serial Monitor shows which network it's trying (`trying walawifi as 192.168.1.52`).
    - **The screen stays black:** check the 4 screen wires against the table in Wiring. Most often SDA (D26) and SCK (D27) are swapped, or VCC (D25) and GND are (this screen has **VCC first**, unlike most).
    - **A different screen** (a 0.96" one, chip SSD1306) shows nothing or garbage: in the sketch, put `//` in front of the `U8G2_SH1106…` line, remove the `//` in front of the `U8G2_SSD1306…` line under it, and upload again.
@@ -75,6 +75,16 @@ The pins on that side, counting from the USB end:
 2. Ctrl+Alt+H then shows `USB backup: 1 paired, 1 plugged in`. With Wi-Fi off, it says `OK over USB`.
 
 - **`not seen yet` / `SILENT`:** the board has no power, or its red LED is on (not on Wi-Fi), or the P4 laptop is on a different network than the board. The keys work meanwhile.
+- **It keeps dropping off NexusV** (fixed in the sketch on 2026-10-06; upload it again). Look at the controller's small screen:
+  - **Spinning circle**: the board is on the Wi-Fi. A drop the GM panel saw was the old sketch freezing: one laptop that stopped reading the stream (asleep, or gone without hanging up) froze the whole board for up to 10 s per reading. The new sketch never waits for a page.
+  - **NO WI-FI** with a reason underneath (the board's view of why it dropped):
+    - `SIGNAL LOST (200)`: too far from the router, or too many phones on its channel. Move the board or the router closer, keep the ESP32 out of metal boxes, or change the router's 2.4 GHz channel (1, 6 or 11).
+    - `NOT FOUND (201)`: the router is off or rebooting.
+    - `PASSWORD/WEAK`: wrong password in `secrets.h`, or a very weak signal.
+    - `ROUTER KICKED`: the router dropped it. Restart the router; check it isn't full.
+    - `restarted: POWER DIP` underneath: the board rebooted because its power dipped. Use another USB port, a better cable, or a phone charger.
+  - The board re-joins by itself every 10 s. It no longer hops to walawifi mid-day: that turned a 1 s blip into 14 s or more off NexusV.
+  - The same reasons print over USB as `NOTE wifi lost: …` lines (Serial Monitor, 115200, between the fast `ORBIT` lines).
 - **An IP is taken or changed:** set it in `secrets.h` and in `CFG.CTRL_IPS` (or add `?ctrl=<ip>` to the game's URL).
 - **USB backup: nothing in the list:** check the cable is a data cable, then Device Manager under *Ports (COM & LPT)*. No COM port means the USB driver is missing: install **CH340** or **CP210x**, whichever chip is on the board.
 
@@ -140,17 +150,15 @@ A **Govee H6143** (5 m, 15 segments, 12 V) taped along the wall behind the scree
 
 ## How a round goes
 1. Standby "CORE GATE LOCKED" until puzzle 3 finishes, then PRESS SPACE.
-2. A red terminal sets the scene (3 lines). Then the **training**, one step at a time in a panel on the left, with the practice rings in view:
-   1. **TURN THE OUTER KNOB**: the outer ring lights up with arrows around it, the inner one dims. Done after about a quarter turn.
-   2. **TURN THE INNER KNOB**: the same for the inner ring.
-   3. **POINT BOTH GAPS AT YOUR LASER**: the laser sits at the bottom; done when both rings say `● LOCKED`.
-   4. **TOUCH THE TWO WIRES TOGETHER** (and hold): an animation shows the two wire tips meeting, and it snaps together while the real wires touch. Done when the practice shot hits her heart. Practice shots cost no HUMAN and don't count as shots.
-   - Without the controller, the steps say A / D, ◄ / ►, HOLD SPACE instead. After 20 s on a step an extra help line shows; after 45 s it moves on by itself (`TUT_HELP_S`, `TUT_SKIP_S`). Ctrl+Alt+K skips the intro and the training.
+2. The screen boots straight into the **training** (no intro text since 2026-10-06), 2 steps in a panel on the left, with the practice rings in view:
+   1. **POINT BOTH KNOBS AT YOUR LASER**: the laser slides somewhere the gaps don't point, so both knobs must turn. Arrows rock beside each ring that isn't lined up yet. Done when both rings say `● LOCKED`.
+   2. **TOUCH THE TWO WIRES TOGETHER** (and hold): an animation shows the two wire tips meeting, and it snaps together while the real wires touch. Done when the practice shot hits her heart. Practice shots cost no HUMAN and don't count as shots.
+   - Without the controller, the steps say A / D ◄ / ►, HOLD SPACE instead. After 8 s on a step an extra help line shows; after 20 s it moves on by itself (`TUT_HELP_S`, `TUT_SKIP_S`). A quick team is in layer 1 about 10 s after SPACE. Ctrl+Alt+K skips the training.
 3. Each layer opens with a banner. From layer 2 it says **NEW HANDS ON THE CONTROLS**: let different players take the knobs and the fire wires.
-4. Each layer puts the **laser** somewhere new on its rail (never where the gaps already point), so both knobs have to turn to it. In DRIFT and WATCHDOGS, Aurora slowly drags the laser along its rail: keep following it. In OVERRIDE every miss throws it somewhere else. Every laser spot is between the knobs' end stops.
+4. Each layer puts the **laser** somewhere new on its rail (never where the gaps already point), so both knobs have to turn to it. It holds still there. WATCHDOGS adds two drones that eat the beam. In OVERRIDE every miss also throws the laser somewhere else. Every laser spot is between the knobs' end stops.
 5. A miss sparks off a ring or a watchdog: +10 HUMAN. A slow layer adds a little HUMAN too.
-6. 25 s into a layer its hint glitches onto the screen. At 55 s the gaps widen.
-7. The 4th hit cracks her heart open: **CORE BREACHED**, and the finale unlocks.
+6. 25 s into a layer its hint glitches onto the screen by itself (free). At 55 s the gaps widen. Staff can also send a message from the GM panel's room 4 box: it flashes as INCOMING TRANSMISSION and costs +5 HUMAN.
+7. The 3rd hit cracks her heart open: the fake win (**AURORA TERMINATED**), then game 5 starts.
 
 ## Staff keys (on the game laptop)
 | Key | What it does |
@@ -159,13 +167,13 @@ A **Govee H6143** (5 m, 15 segments, 12 V) taped along the wall behind the scree
 | Ctrl+Alt+P | Pair the controller (needs a real key press on this laptop) |
 | Ctrl+Alt+U | Unlock by hand (puzzle 3's signal never came) |
 | Ctrl+Alt+S | Start now, even if locked |
-| Ctrl+Alt+K | Skip the intro |
+| Ctrl+Alt+K | Skip the training |
 | Ctrl+Alt+I | Show this layer's hint now |
 | Ctrl+Alt+N | Clear this layer (lines up a clean shot and fires) |
-| Ctrl+Alt+F | Force the win (team stuck / running late) |
+| Ctrl+Alt+F | Force the win (team stuck / running late), any time after SPACE: the fake win, then game 5. Does nothing on the locked start screen |
 | Ctrl+Alt+R | Reset for the next team |
 | Ctrl+Alt+W | Replay only the win screen |
 | Ctrl+Alt+M | Mute / unmute |
 | Ctrl+Alt+B | Testing: jump straight to game 5's **MIRRORS** (rings still, then her line and the mirrors). Starts the finale on every laptop; NEW TEAM or FINISH RUN on the GM panel ends it. Needs the hub |
 
-The GM panel can press UNLOCK, FORCE WIN and RESET remotely.
+The GM panel can press UNLOCK, FORCE WIN and RESET remotely (point at a button to see what it does), and its message box replaces the old HINT button.

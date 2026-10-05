@@ -143,9 +143,10 @@ During the fake start's "dread", the game flips the light on and off quickly. Th
 ## Test
 1. Run `hub\start.bat`. A second minimized window, "nexus-bulb", opens. The GM panel shows **● strip** as online. Once the P2 page is open and locked, the bulb is off.
 2. On the GM panel, press **FINALE RED**: the bulb turns red. Press **SAFE**: it turns white.
-3. Run this folder's `start.bat`: the bulb stays off. Press Ctrl+Alt+U: flickering cyan. Press Space. Hold the plush key during the tutorial: the bulb goes green. Let go: it goes dim red. The laptop's own Enter does nothing.
+3. Run this folder's `start.bat`: the bulb stays off. Press Ctrl+Alt+U: flickering cyan. Press Space. Hold the plush key during the tutorial: the bulb goes green. Let go: it goes dim red. The laptop's own Enter does nothing. The game 2 laptop has a number pad, and its Numpad Enter sends the same code as the plush key, so a browser can't tell them apart: tape over that key (or pop its keycap off) before players arrive.
 4. Close the hub's window. Within 3 s, the bulb goes white.
 5. Switch the lamp off and on: the bulb comes back white (the power-on behaviour from step 5).
+6. Reminder phrases: press Ctrl+Alt+K and type 2 words without holding the plush key. There's a buzz, and the next words spell a phrase one at a time ("keep", "the", "lights", "on"). After it, normal words come back.
 
 ## Hallway camera (the kiosk pop-up)
 The Tapo C200 ("NexusCam") sits **behind** the players. When the fake start begins, the game sends `p2cam`, and the signup kiosk outside shows a forced pop-up: INCOMING TRANSMISSION over static. At LOOK BEHIND YOU, the game sends `p2scare` and the live feed cuts in.
@@ -173,7 +174,7 @@ One-time setup (done 2026-10-02 on the dev laptop):
 
 Sound is off (`#media=video` in `camera.js`). Delete `#media=video` to hear the hallway on the kiosk.
 
-Test: run `signup/start.bat` (a minimized "nexus-camera" window starts next to the server). On the kiosk, hold **Ctrl+Alt** and type **CAMERA**: the pop-up opens with static, the live feed cuts in 4 s later, and it closes after 20 s. For the real thing, play game 2 until LOOK BEHIND YOU and watch the kiosk. Without `go2rtc.exe`, the pop-up still opens, with static and SIGNAL LOST.
+Test: run `signup/start.bat` (a minimized "nexus-camera" window starts next to the server). On the kiosk, hold **Ctrl+Alt** and type **CCTV**: the pop-up opens with static, the live feed cuts in 4 s later, and it closes after 20 s. For the real thing, play game 2 until LOOK BEHIND YOU and watch the kiosk. Without `go2rtc.exe`, the pop-up still opens, with static and SIGNAL LOST.
 
 ## Troubleshooting
 | Problem | Fix |

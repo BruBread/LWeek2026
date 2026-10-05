@@ -7,6 +7,7 @@ signup/pin.txt
 # Event data: sales, player photos, run history
 signup/sales.jsonl
 signup/photos/
+signup/restarts/
 hub/runs.jsonl
 hub/run.json
 

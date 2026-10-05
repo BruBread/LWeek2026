@@ -82,6 +82,7 @@ input { font: inherit; color: #fff; background: #000; border: 1px solid rgba(255
 .res { display: flex; justify-content: space-between; align-items: center; gap: 8px; border-top: 1px solid rgba(255,51,68,.2); padding-top: 8px; margin-top: 4px; }
 .res b { color: #fff; }
 .keys { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.say { display: flex; gap: 6px; margin-top: 8px; } .say input { flex: 1; width: auto; min-width: 0; }
 .room.alarm { animation: alarm 1s steps(1) infinite; }
 @keyframes alarm { 50% { background: #4a0008; } }
 
@@ -130,7 +131,7 @@ th { color: var(--dim); font-size: 11px; } td.win { color: var(--g); }
 <div id="top">
   <div id="brand"><b>AURORA//GM</b><div class="devs" id="sys"></div><span class="lbl">SOUND <span id="snd">CLICK THE PAGE ONCE TO TURN ON</span></span></div>
   <div><div class="lbl">TEAM</div><div id="who" class="none">NO TEAM</div><div id="pics"></div></div>
-  <div><div class="lbl" id="limit"></div><div id="clock">--:--</div><button id="go" class="white" hidden onclick="startClock()">START CLOCK NOW</button></div>
+  <div><div class="lbl" id="limit"></div><div id="clock">--:--</div><button id="go" class="white" hidden onclick="startClock()">START CLOCK NOW</button><button id="more" class="white" hidden onclick="moreTime()" title="Gives the team 2 more minutes before TIME'S UP (their TIME LEFT box too)">+2 MIN</button></div>
   <div id="acts">
     <div class="row"><input id="tname" placeholder="TEAM NAME" maxlength="40"><button class="pri" onclick="newTeam()">NEW TEAM</button></div>
     <div class="row"><button onclick="finish()">FINISH RUN</button><button onclick="resetAll()" title="Save this run, mark the group done, every room back to its start, hallway light off, call the next group">RESET ALL ROOMS</button><button class="white" onclick="scene('safe')" title="Every light on, now (the hallway bulb goes white)">LIGHTS ON</button><button class="white" onclick="camShow(!camOn)" title="Game 2's hallway camera">CAMERA</button><button class="white" onclick="updateAll(this)" title="Every laptop with a game page open gets this laptop's version of the game">UPDATE ALL SYSTEMS</button></div>
@@ -163,22 +164,56 @@ th { color: var(--dim); font-size: 11px; } td.win { color: var(--g); }
   <div class="box"><span class="lbl">RUN HISTORY (POINT AT A ROW FOR ROOM TIMES + HINTS)</span><div id="hist"></div><span class="lbl" id="phones"></span></div>
   </div>
   <div class="box" id="line"></div>
+  <datalist id="says-puzzle3">
+    <option value="THE LIGHTS ARE IN THIS ROOM">
+    <option value="DON'T WATCH THE SCREEN. LOOK AROUND">
+    <option value="EACH LIGHT BLINKS ITS NUMBER">
+    <option value="WAIT FOR THE DARK PAUSE, THEN COUNT">
+    <option value="COUNT LIGHT 1, THEN 2, THEN 3">
+    <option value="COUNT OUT LOUD TOGETHER">
+  </datalist>
+  <datalist id="says-puzzle4">
+    <option value="POINT BOTH KNOB MARKS AT THE LASER">
+    <option value="BOTH RINGS MUST SAY LOCKED, THEN FIRE">
+    <option value="TOUCH THE WIRES AND KEEP HOLDING">
+    <option value="WAIT FOR THE WATCHDOG TO PASS">
+    <option value="SWAP WHO IS ON THE KNOBS">
+    <option value="AIM FIRST: EVERY MISS MOVES YOUR LASER">
+  </datalist>
+  <datalist id="says-puzzle1">
+    <option value="MOVE THE MOUSE DOWN">
+    <option value="CLICK THE GLOWING MASK">
+    <option value="OPEN BINARY KEY">
+    <option value="LOOK UP THE WALL'S CODE IN BINARY KEY">
+    <option value="CLICK THE WALL, TYPE THE CODE">
+    <option value="MASH ANY KEY!">
+  </datalist>
   <div class="box" id="cam" hidden><div class="hd"><span class="lbl">HALLWAY CAMERA ▸ ROOM 02</span><button class="quiet" onclick="camShow(false)">HIDE</button></div><iframe title="hallway camera"></iframe><div class="msg"></div></div>
 </div>
 
 <script>
-const LIMIT_MIN = 20;        // booth time limit: the clock turns amber at 75%, red past it; ✓ in history = under it
+const LIMIT_MIN = 23;        // booth time limit (= RUN_MIN in runclock.js, the players' TIME LEFT, and in server.js, which ends a run still short of game 4's end): the clock turns amber at 75%, red past it; ✓ in history = under it
 // the signup kiosk (signup/server.js): the hub tells us its IP once the kiosk page connects ('addr'); until then, or
 // when it runs on the hub laptop, this laptop
 let SIGNUP = 'http://' + location.hostname + ':4000';
 // One card per room. keys = that room's Ctrl+Alt staff keys, pressed remotely; a 3rd item asks to confirm first.
-// During game 5 every room's F key skips that room's finale step (the game 5 card has its own SKIP too)
+// During game 5 a room's F key skips that room's finale step (the game 5 card has its own SKIP and DONE buttons too).
+// say = a message box instead of the HINT button, and the pages that flash its messages; each message costs a hint
 const ROOMS = [
-  { id: 'puzzle1', name: 'BRAIN UPLOAD',  k: 'sync',  stat: 'SYNC',   hint: -5, devs: ['mask'], keys: [['KeyF', 'FORCE CAPTURE', 'Force the mask capture?'], ['KeyB', 'BLINK MASK'], ['KeyR', 'RESET', 'Reset room 1?']] },
+  { id: 'puzzle1', name: 'BRAIN UPLOAD',  k: 'sync',  stat: 'SYNC',   hint: -5, devs: ['mask'], say: ['desk1', 'puzzle1'], keys: [['KeyB', 'BLINK MASK'], ['KeyR', 'RESET', 'Reset room 1?']] },
   { id: 'puzzle2', name: 'SYSTEM POWER',  k: 'power', stat: 'ENERGY', hint: -5, devs: ['bulb', 'camera'], keys: [['KeyU', 'UNLOCK'], ['KeyX', 'CAUGHT', 'Team caught? (-15 POWER, they advance)'], ['KeyR', 'RESET', 'Reset room 2?']] },
-  { id: 'puzzle3', name: 'HIDDEN SIGNAL', k: 'trace', stat: 'TRACE',  aur: 1, hint: 5,  devs: ['beacon'], keys: [['KeyU', 'UNLOCK'], ['KeyL', 'SLOWER'], ['KeyF', 'FORCE WIN', 'Force the win?'], ['KeyR', 'RESET', 'Reset room 3?']] },
-  { id: 'puzzle4', name: 'CORE GATE',     k: 'human', stat: 'HUMAN',  aur: 1, hint: 5,  devs: ['ctrl'], keys: [['KeyU', 'UNLOCK'], ['KeyF', 'FORCE WIN', 'Force the win?'], ['KeyR', 'RESET', 'Reset room 4?']] },
+  { id: 'puzzle3', name: 'HIDDEN SIGNAL', k: 'trace', stat: 'TRACE',  aur: 1, hint: 5,  devs: ['beacon'], say: ['puzzle3'], keys: [['KeyU', 'UNLOCK'], ['KeyL', 'SLOWER'], ['KeyF', 'FORCE WIN', 'Force the win?'], ['KeyR', 'RESET', 'Reset room 3?']] },
+  { id: 'puzzle4', name: 'CORE GATE',     k: 'human', stat: 'HUMAN',  aur: 1, hint: 5,  devs: ['ctrl'], say: ['puzzle4'], keys: [['KeyU', 'UNLOCK'], ['KeyF', 'FORCE WIN', 'Force the win? (the fake win, then game 5)'], ['KeyR', 'RESET', 'Reset room 4?']] },
 ];
+// what each key does, shown when pointing at it
+const TIPS = {
+  UNLOCK: "Opens this room by hand. It opens by itself when the room before is won: use this only if it's still locked after that (that laptop crashed, or a staff test). The team still presses SPACE to start.",
+  'FORCE WIN': "Ends this game as won right now, and the team moves on (room 3: once the hunt has started; room 4: any time after SPACE, then the fake win and game 5). During game 5 it skips this room's finale step instead.",
+  SLOWER: 'The lights blink 1.5x slower for the rest of this run. Press again for slower still.',
+  CAUGHT: 'Ends game 2 as caught: -15 POWER, and the team still moves on.',
+  'BLINK MASK': "The mask's eyes blink 3 times, to point the team at the mask.",
+  RESET: "Reloads this room's laptop back to its start screen. Mid-run it reopens by itself if the room before is done.",
+};
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`);
@@ -215,11 +250,11 @@ function tone(f, dur, delay = 0) {
 // the bulb, the signup PC looks for the camera; the rest is the hub's roster. The P4 controller is pinged from this page
 // too, so its light works even while the P4 game is closed.
 const hubUp = () => ws?.readyState === 1, linked = id => rost.pages.includes(id) || rost.devices.includes(id);
-const via = (room, f) => !hubUp() ? [null, 'the hub is down'] : !online(room) ? [null, `can't tell: the ${room} laptop is offline`] : f(status[room]);
+const via = (room, f) => !hubUp() ? [null, 'the hub is down'] : !online(room) ? [null, `can't tell: the ${room} laptop is offline`] : f(status[room] || {});   // {} = linked, no status report yet
 const beacon = () => hubUp() && linked('beacon-sim') ? [true, 'a phone stands in (/beacon)'] :
   via('puzzle3', s => s.boards?.beacon === undefined ? [null, 'checking…'] : s.boards.beacon === true ? [true, 'ESP32 board answering (.51)'] :
-    s.boards.beacon === 'old' ? [false, "beacon ESP32 runs an OLD sketch: it blinks its own code, not the game's. Upload beacon_esp32.ino again"] :
-    [false, 'beacon ESP32 not answering (.0.51 / .1.51), and no phone on /beacon. Switched on? On NexusV or walawifi?']);
+    s.boards.beacon === 'old' ? [false, "LEDs ESP32 runs an OLD sketch: it blinks its own code, not the game's. Upload beacon_esp32.ino again"] :
+    [false, 'LEDs ESP32 not answering (.0.51 / .1.51), and no phone on /beacon. Switched on? On NexusV or walawifi?']);
 // the P4 controller ESP32 (knobs + fire wires + screen): on NexusV, or walawifi as a backup (same list as game.html's
 // CFG.CTRL_IPS). ?ctrl=<ip> replaces the list
 const CTRL_IPS = (q => q ? [q] : ['192.168.0.52', '192.168.1.52'])(new URLSearchParams(location.search).get('ctrl'));
@@ -247,7 +282,7 @@ const DEVS = {
     [false, 'bridge running, but the bulb is not answering. Lamp switched on at the wall? On NexusV?']],
   camera: ['CAMERA', () => !S ? [null, "can't tell: the signup server is down"] : !S.camera ? [null, 'checking…'] : S.camera.error ? [false, S.camera.error] :
     S.camera.ip ? [true, 'camera at ' + S.camera.ip] : [false, 'camera not found on the network. Plugged in? On NexusV?']],
-  beacon: ['BEACON', beacon],
+  beacon: ['LEDS', beacon],
   ctrl:   ['CONTROLLER', ctrl],
 };
 $('#sys').innerHTML = ['hub', 'signup', 'kiosk', 'board'].map(d => `<span class="dev unk" data-dev="${d}">${DEVS[d][0]}</span>`).join('');
@@ -277,18 +312,45 @@ $('#rooms').innerHTML = ROOMS.map((r, i) => `
     <div class="live ${r.aur ? 'aur' : ''}"><span class="lbl">${r.stat} NOW</span><b>--</b></div>
     <div class="segs ${r.aur ? 'aur' : ''}">${'<i></i>'.repeat(25)}</div>
     <div class="code"></div>
-    <div class="res"><span><span class="lbl">TO THE FINALE</span><br><b class="rv"></b></span><button class="quiet" data-hint title="A hint costs the team this much">HINT ${r.hint > 0 ? '+' : ''}${r.hint} ${r.k.toUpperCase()}</button></div>
-    <div class="keys">${r.keys.map(([c, l]) => `<button data-key="${c}" class="${c === 'KeyR' ? 'quiet' : ''}">${l}</button>`).join('')}</div>
+    <div class="res"><span><span class="lbl">TO THE FINALE</span><br><b class="rv"></b></span>${r.say ? '' : `<button class="quiet" data-hint title="A hint costs the team this much">HINT ${r.hint > 0 ? '+' : ''}${r.hint} ${r.k.toUpperCase()}</button>`}</div>
+    ${r.say ? `<div class="say"><input list="says-${r.id}" maxlength="60" placeholder="MESSAGE: FLASHES 2 s ON ${r.say.length > 1 ? 'LAPTOP + WALL' : 'THEIR SCREEN'}"><button data-say title="Every message is a hint">SEND ${r.hint > 0 ? '+' : ''}${r.hint} ${r.k.toUpperCase()}</button></div>` : ''}
+    <div class="keys">${r.keys.map(([c, l]) => `<button data-key="${c}" class="${c === 'KeyR' ? 'quiet' : ''}" title="${esc(TIPS[l] || '')}">${l}</button>`).join('')}</div>
   </div>`).join('');
 ROOMS.forEach(r => $('#' + r.id).onclick = e => {
   e.currentTarget.classList.remove('alarm');
   const d = e.target.closest('.dev'); if (d) return alert(d.textContent + ': ' + d.title);
   const b = e.target.closest('button'); if (!b) return;
   if ('hint' in b.dataset) return send({ t: 'adj', k: r.k, d: r.hint, why: 'hint' });
+  if ('say' in b.dataset) return say(r);
   const [c, , ask] = r.keys.find(([c]) => c === b.dataset.key);
   if (!online(r.id)) return alert(r.name + ' is offline. Check its laptop.');
   if (!ask || confirm(ask)) key(r.id, c);
 });
+// rooms 1, 3 and 4: the message flashes on the room's say pages (room 1: the laptop screen desk1 + the wall) as INCOMING
+// TRANSMISSION (hub/public/transmission.js) for 2 s, while this laptop plays it on the booth speaker: sounds/transmission.mp3 if it's there, else synthesized static
+function txSound() {
+  const a = new Audio('sounds/transmission.mp3'); a.volume = MUSIC_VOL;
+  a.play().catch(() => {
+    const t = AC.currentTime, n = AC.createBufferSource(), b = AC.createBuffer(1, AC.sampleRate * 2, AC.sampleRate), d = b.getChannelData(0), g = AC.createGain();
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (i % 4800 < 2400 ? 1 : .35);   // static that stutters 10x a second
+    n.buffer = b; g.gain.setValueAtTime(.3, t); g.gain.setValueAtTime(.3, t + 1.7); g.gain.exponentialRampToValueAtTime(.001, t + 2);
+    n.connect(g).connect(AC.destination); n.start(t);
+    const o = AC.createOscillator(), og = AC.createGain();
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(35, t + 2);
+    og.gain.setValueAtTime(.2, t); og.gain.exponentialRampToValueAtTime(.001, t + 2);
+    o.connect(og).connect(AC.destination); o.start(t); o.stop(t + 2);
+  });
+}
+function say(r) {
+  const inp = $(`#${r.id} .say input`), v = inp.value.trim();
+  if (!v) return inp.focus();
+  if (!r.say.some(online)) return alert(r.name + ' is offline. Check its laptop.');
+  r.say.forEach(to => send({ t: 'cmd', to, a: 'msg', v }));
+  send({ t: 'adj', k: r.k, d: r.hint, why: 'hint' });
+  txSound();
+  inp.value = ''; inp.placeholder = 'SENT: ' + v;
+}
+ROOMS.filter(r => r.say).forEach(r => $(`#${r.id} .say input`).onkeydown = e => e.key === 'Enter' && say(r));
 const WORD = { clear: 'CLEARED', off: 'OFFLINE', ready: 'READY', locked: 'LOCKED', playing: 'PLAYING' };
 function drawRooms() {
   ROOMS.forEach((r, i) => {
@@ -322,7 +384,7 @@ function drawRooms() {
 // ===== Game 5: what's happening, what staff do, and a SKIP that works even if a room's laptop died =====
 const TASKS = [['binary', 'BINARY'], ['words', 'WORDS'], ['cross', 'MIRRORS']];
 const PHASES = {
-  null:     ['WAITING FOR GAME 4', 'Starts by itself when game 4\'s fake win stalls at 97%.', ''],
+  null:     ['WAITING FOR GAME 4', 'Starts by itself when game 4\'s fake win stalls at 97%. If the time limit runs out first, the team loses (TIME\'S UP on every screen).', ''],
   crash:    ['SHE\'S TALKING', 'Her dialogue plays on the room 4 screen. Then the team walks back to room 3.', 'SKIP HER DIALOGUE'],
   takeover: ['GO TO THE MAP', 'Every screen is green. The team presses SPACE at the map in room 3.', 'SKIP: START HER TASKS'],
   fight:    ['HER TASKS', 'Split up: rooms 1, 2 and 4, SPACE when there. The first task done makes rooms 1 and 2 swap. A wrong BINARY digit or a missed MIRRORS shot costs a life.', ''],
@@ -331,6 +393,7 @@ const PHASES = {
   kill:     ['KILL SWITCH', 'One player each in rooms 1, 2 and 4 presses once to be ready. The rest press SPACE at the map and read its 3-2-1 out loud; all press on NOW. Out of sync costs a life.', 'FORCE THE KILL'],
   end:      ['SHE\'S DEAD ✓', 'Her last words play on every screen. Then FINISH RUN.', ''],
   lost:     ['SHE WON ✗', 'The team ran out of lives. She gloats on every screen, then YOU LOST. Then FINISH RUN.', ''],
+  time:     ['TIME\'S UP ✗', 'The time limit ran out before game 4\'s end. She gloats on every screen, then YOU LOST. Then FINISH RUN.', ''],
 };
 $('#ftasks').innerHTML = TASKS.map(([k, n]) => `<b>${n}</b><span class="lbl" id="tr-${k}"></span><span class="tbar"><i id="tb-${k}"></i></span>` +
   `<span id="tn-${k}"></span><button class="quiet" data-skip="${k}">DONE</button>`).join('');
@@ -341,7 +404,7 @@ $('#ftasks').onclick = e => {
 };
 $('#fskip').onclick = () => { const p = PHASES[F?.phase]; if (p?.[2] && confirm(p[2] + '?')) send({ t: 'finskip' }); };
 function drawFinale() {
-  const ph = F?.phase ?? null, [title, todo, skip] = PHASES[ph] || PHASES.null;
+  const ph = F?.phase ?? null, [title, todo, skip] = PHASES[ph === 'lost' && F.ev?.k === 'time' ? 'time' : ph] || PHASES.null;
   cls($('#fin'), `box ${ph === 'end' ? 'done' : ph ? 'on' : ''} ${ph || ''}`);
   put($('#fph'), title); put($('#fdo'), todo);
   put($('#fwin'), F && ph ? `LIVES ${F.lives}/${F.maxLives} ▸ KILL WINDOW ${F.win} s ▸ TRACE ${F.run?.trace ?? 50}%` : '');
@@ -362,9 +425,10 @@ function drawFinale() {
 }
 
 function render() { drawFlow(); drawRooms(); drawFinale(); drawAI(); drawPics(); musicCheck();
-  const ms = clock(), lim = LIMIT_MIN * 60000, w = waiting();
-  put($('#limit'), w ? "RUN CLOCK ▸ STARTS AT ROOM 1'S FIRST CLICK" : `RUN CLOCK ▸ LIMIT ${LIMIT_MIN}:00`);
+  const min = LIMIT_MIN + (run.extra || 0), ms = clock(), lim = min * 60000, w = waiting();
+  put($('#limit'), w ? "RUN CLOCK ▸ STARTS AT ROOM 1'S FIRST CLICK" : `RUN CLOCK ▸ LIMIT ${min}:00${run.extra ? ` (+${run.extra})` : ''}`);
   put($('#clock'), w ? 'READY' : mmss(ms)); $('#go').hidden = !w;
+  $('#more').hidden = !run.t0 || run.end != null || !!F?.phase;   // only while TIME'S UP can still happen
   cls($('#clock'), w ? 'wait' : ms == null ? '' : run.end != null || run.splits.p5done != null || run.splits.p5lost != null ? 'fin' : ms > lim ? 'over' : ms > lim * .75 ? 'warn' : 'ok');
   put($('#who'), run.team || 'NO TEAM'); cls($('#who'), run.team ? '' : 'none');
 }
@@ -375,6 +439,7 @@ function newTeam() {
   if (run.team && run.end == null && !confirm(`${run.team} hasn't finished. Start ${team} anyway? (their run is not saved)`)) return;
   send({ t: 'newteam', team }); $('#tname').value = '';
 }
+const moreTime = () => confirm(`Give ${run.team} 2 more minutes?`) && send({ t: 'extra' });
 const startClock = () => confirm(`Start ${run.team}'s clock now? (It starts by itself at their first click in room 1.)`) && send({ t: 'start' });
 function finish() {
   if (!run.t0 || run.end != null) return alert('No run going. NEW TEAM (or SEND IN from the line) starts one.');
@@ -465,7 +530,7 @@ function soundtrack() {
   const on = !loud && Date.now() - quietAt > HUM_WAIT, h = tracks[HUM];   // on but paused: the browser blocked it, or a reset faded it
   if (on !== humOn || (on && h?.paused)) { humOn = on; music(null, { f: HUM, start: on && !h, to: on ? lvl(HUM) : 0, ms: on ? 4000 : 1500 }); }
 }
-// game 2's LOOK BEHIND YOU ('p2scare'): game 2 already faded its track during the dread. The music stops, the scream
+// game 2's LOOK BEHIND YOU ('p2scare') and game 3's I CAUGHT YOU ('p3caught'). The music stops, the scream
 // plays, then the music fades back in where it stopped
 function scream() {
   if (bgNow) music(null, { f: bgNow, to: 0, ms: 50 });
@@ -646,11 +711,11 @@ function conn() {
     if (m.t === 'run') { if (m.team !== run.team || m.t0 !== run.t0 || m.end !== run.end) live = null; run = m; skew = m.now - Date.now(); }   // live: a new team, start, finish or reset
     if (m.t === 'fin') F = m;
     if (m.t === 'addr') SIGNUP = 'http://' + (m.signup || location.hostname) + ':4000';   // signup null = the kiosk runs on the hub laptop
-    if (m.t === 'addr') put($('#phones'), m.hub.length ? `PHONES OPEN ▸ BEACON ${m.hub[0]}:3000/beacon` +
+    if (m.t === 'addr') put($('#phones'), m.hub.length ? `PHONES OPEN ▸ LEDS STAND-IN ${m.hub[0]}:3000/beacon` +
       (m.hub.length > 1 ? ` ▸ OTHER NETWORKS ON THIS LAPTOP: ${m.hub.slice(1).join(', ')}` : '') : 'THIS LAPTOP IS NOT ON A NETWORK');
     if (m.t === 'evt' && /^p\ddone$/.test(m.e)) { tone(880, .15); tone(1320, .3, .15); }
     if (m.t === 'evt' && m.e === 'music') return music(m.id, m.v || {});
-    if (m.t === 'evt' && m.e === 'p2scare') scream();
+    if (m.t === 'evt' && (m.e === 'p2scare' || m.e === 'p3caught')) scream();
     if (m.t === 'evt' && SOUNDTRACK.some(([at]) => at.includes(m.e))) live = { e: m.e, room: m.id, at: Date.now() };
     if (m.t === 'roster') rost = m;
     if (m.t === 'history') $('#hist').innerHTML = `<table><tr><th>TEAM</th><th>TIME</th><th>FINALE</th><th>SYNC</th><th>POWER</th><th>TRACE</th><th>HUMAN</th></tr>` +

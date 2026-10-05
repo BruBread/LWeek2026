@@ -1,7 +1,7 @@
 # Puzzle 1: Brain Upload (booth setup)
 
 ## Laptop (once)
-Players never see the real Windows desktop. `start.bat` covers the laptop screen with `desktop.html`, a fake Windows desktop: the "Think outside the box" wallpaper with a mouse pointer pointing down, and one app, **Binary Key** (the 0-9 binary table, revealed with a short animation each time it opens). The projector shows `projector.html`.
+Players never see the real Windows desktop. `start.bat` covers the laptop screen with `desktop.html`, a fake Windows desktop: the "Move the mouse down" wallpaper with a mouse pointer pointing down, and one app, **Binary Key** (a plain lookup table, `0000 = 0` to `1001 = 9`, revealed with a short animation each time it opens). While Binary Key is open, the mask on the wall glows, lights its eyes and hums as if hovered. The projector shows `projector.html`.
 1. Create a local Windows account named **AURORA**, so no personal pop-ups appear.
 2. Display settings: **Extend** these displays, and drag the projector **below** the laptop, left edges lined up. Players reach the wall by moving the mouse off the **bottom** of the laptop screen. Taskbar settings → turn off "Show my taskbar on all displays".
 3. Power settings: sleep = Never, screen off = Never. Turn off notifications (Do not disturb), and disable the lock screen timeout.
@@ -32,8 +32,8 @@ All pins used (GND, D25, D27) are on the same side of the ESP32 DevKit. Only the
 |---|---|
 | Red on | Not on Wi-Fi yet (router off, or wrong name/password in `NETS`) |
 | Red off | On Wi-Fi and ready |
-| Red blinking | Stuck hint: a minute into the run and the team still hasn't clicked the mask (the laptop wallpaper glitches to DRAG THE MOUSE DOWN at the same time). Stops when they click it. Needs the sketch with `/red` (reflash once) |
-| Blue eyes | On while the cursor hovers the mask area and through the click sequence (they glitch at 97%); off from the binary screen until the right code; on again after the win. They flicker while Aurora talks (not during code entry). In the finale's attacks they drop to dim, and mashing brightens them back up |
+| Red blinking | Stuck hint: a minute into the run and the team still hasn't clicked the mask (the laptop wallpaper glitches and turns into a green MOVE THE MOUSE DOWN at the same time). Stops when they click it. Needs the sketch with `/red` (reflash once) |
+| Blue eyes | On while the cursor hovers the mask area or Binary Key is open on the laptop, and through the click sequence (they glitch at 97%); off from the binary screen until the right code; on again after the win. They flicker while Aurora talks (not during code entry). In the finale's attacks they drop to dim, and mashing brightens them back up |
 
 The DevKit's own small blue LED (GPIO 2) is switched off by the sketch. Its red power LED is wired straight to power and can't be turned off in code: cover it with black tape.
 
@@ -53,9 +53,9 @@ The keyboard types into whichever screen was clicked last. When the projector ne
 | Key | What it does |
 |---|---|
 | Ctrl+Alt+H | Control panel: mask box, corner brackets, current code and this list (drag the panel to move it) |
-| Ctrl+Alt+F | Force capture (use if the click or mask fails) |
+| Ctrl+Alt+F | Force capture (use if the click or mask fails). Only here: the GM panel no longer has it |
 | Ctrl+Alt+B | Blink the mask eyes 3 times (hint for a team that hasn't found the mask). Also **BLINK MASK** on the GM panel |
-| Ctrl+Alt+D | Stuck hint now, without waiting the minute: the laptop wallpaper glitches to DRAG THE MOUSE DOWN (Binary Key gets minimized) and the mask's red LED blinks until the mask is clicked. It also fires by itself `CFG.HINT_AFTER` (60) s after the run clock starts |
+| Ctrl+Alt+D | Stuck hint now, without waiting the minute: the laptop wallpaper glitches and turns into a green MOVE THE MOUSE DOWN (Binary Key gets minimized) and the mask's red LED blinks until the mask is clicked. It also fires by itself `CFG.HINT_AFTER` (60) s after the run clock starts |
 | Ctrl+Alt+R | Reset for the next team (new code, eyes off). The laptop's fake desktop resets too, through the hub (Ctrl+Alt+R on the laptop screen resets only the desktop) |
 | Ctrl+Alt+P | Replay the sequence (for tuning timings) |
 | Ctrl+Alt+W | Replay only the win / mind-upload finale |
@@ -65,12 +65,10 @@ During the finale Aurora attacks four times. Tell players to **mash any key** on
 
 Timings, particle count and volume are in `CFG` / `T` at the top of `projector.html`.
 
-## Hint ladder
-1. "Aurora's reach goes beyond the screen."
-2. "Try moving the mouse off the bottom of the screen."
-3. "Look at the wall: the mouse is on it now."
-4. "Click the mask."
-5. "Open Binary Key on the laptop and match each group of 4 bits."
+## Hints: GM messages
+The GM panel's room 1 card has a message box instead of a HINT button. Pick a ready-made message or type one, then SEND (or Enter). It flashes as **INCOMING TRANSMISSION** on top of everything for **2 seconds**, on the laptop screen and on the wall at the same time (`hub/public/transmission.js`, `SHOW_MS`; the hub must be up). Clicks pass through it. The GM laptop plays a sound on the booth speaker at the same moment: `hub/public/sounds/transmission.mp3` if you add one, else synthesized static. A new message replaces the one on screen. Keep messages short (the box takes 60 characters). **Every message counts as a hint: -5 SYNC.**
+
+Ready-made messages, roughly in order: MOVE THE MOUSE DOWN · CLICK THE GLOWING MASK · OPEN BINARY KEY · LOOK UP THE WALL'S CODE IN BINARY KEY · CLICK THE WALL, TYPE THE CODE · MASH ANY KEY!
 
 ## Sound files
 Drop these into `sounds/` (mp3). Any file that's missing is skipped, so the page still runs without them. Overall level: `CFG.MUSIC_VOLUME`.

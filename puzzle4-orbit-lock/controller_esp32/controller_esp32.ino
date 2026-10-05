@@ -12,6 +12,8 @@
 //   - over USB too, so a board plugged into the Puzzle 4 laptop still works if the Wi-Fi drops (Web Serial, Ctrl+Alt+P)
 // The game says FIRE on every shot it really fires (http://<ip>/fire, or the line FIRE over USB): the screen
 // flashes FIRE. Power: any USB port or charger.
+// While it's off the Wi-Fi the screen says NO WI-FI and why (SIGNAL LOST, NOT FOUND...), so staff can tell a Wi-Fi drop
+// from a laptop problem. The same goes out over USB as "NOTE ..." lines.
 // Needs the U8g2 library (Arduino IDE: Tools > Manage Libraries > search "U8g2" > Install). Wi-Fi: secrets.h.
 // Wiring and setup: ../SETUP.md. The mV at each knob's end stops goes into CFG.POT_MV in game.html.
 
@@ -19,6 +21,7 @@
 #include <WebServer.h>
 #include <U8g2lib.h>
 #include <driver/gpio.h>
+#include <lwip/sockets.h>
 
 // Networks in order of preference. The first (NexusV) gets FIRST_TRY_MS to connect, the others TRY_MS, then the next.
 // Each ip must be free on that network, sit in its router's subnet, and be listed in CFG.CTRL_IPS in game.html.
@@ -27,7 +30,8 @@ struct Net { const char* ssid; const char* pass; IPAddress ip, gateway; };
 const int NET_COUNT = sizeof(NETS) / sizeof(NETS[0]);
 IPAddress SUBNET(255, 255, 255, 0);
 const unsigned long FIRST_TRY_MS = 4000;   // no NexusV after 4 s: try walawifi
-const unsigned long TRY_MS = 10000;        // a backup network gets longer: joining can take a few seconds
+const unsigned long TRY_MS = 10000;        // a backup network gets longer: joining can take a few seconds. Also how often
+                                           // it re-joins after a drop (it gets that long to come back by itself first)
 
 const int OUTER_PIN = 34, INNER_PIN = 35;  // the knobs' middle pins. Input-only ADC1 pins (they work with Wi-Fi on)
 const int KNOB_POWER = 32;      // both knobs' + pins
@@ -50,7 +54,10 @@ WebServer server(80);           // /fire from the game
 WiFiServer stream(81);          // the readings stream the game listens to
 WiFiClient viewers[3];          // up to 3 pages listening at once (the game, plus a staff laptop checking)
 unsigned long tryStart = 0;
-bool wasOnline = false;
+bool wasOnline = false, stay = false;      // stay: it has been online on NETS[net], so a drop only ever re-joins that one
+volatile bool online = false;              // shared with the screen (other core)
+volatile int lostWhy = 0;                  // why the Wi-Fi last dropped (Espressif's reason code), shown on the screen
+volatile bool brownout = false;            // this start was a power dip: shown on the screen until it's online
 int net = 0;
 
 struct Knob { int pin; float level; int sent; };
@@ -90,12 +97,30 @@ void acceptViewer() {
   viewers[0].stop(); viewers[0] = c;           // all full: the oldest goes
 }
 
+const char* why() {               // the last drop's reason, in words
+  switch (lostWhy) {
+    case 0: return "connecting...";
+    case WIFI_REASON_BEACON_TIMEOUT: return "SIGNAL LOST";               // too far, or a crowded channel
+    case WIFI_REASON_NO_AP_FOUND: return "NOT FOUND";
+    case WIFI_REASON_AUTH_FAIL: case WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT: case WIFI_REASON_HANDSHAKE_TIMEOUT: return "PASSWORD/WEAK";
+    case WIFI_REASON_AUTH_EXPIRE: case WIFI_REASON_ASSOC_EXPIRE: case WIFI_REASON_ASSOC_TOOMANY: return "ROUTER KICKED";
+    default: return "OTHER";
+  }
+}
+
 // the screen runs on the ESP32's other core, so drawing it never slows down the knob readings
 void screen(void *) {
   oled.begin();
+  char buf[32];
   for (float a = 0;;) {
     oled.clearBuffer();
-    if (firing()) {                                 // FIRE, in a blinking double frame. No all-white flash: the screen
+    if (!online && !firing()) {                     // for staff: off the Wi-Fi, and why
+      oled.setFont(u8g2_font_logisoso16_tr); oled.drawStr(0, 18, "NO WI-FI");
+      oled.setFont(u8g2_font_6x10_tr);
+      snprintf(buf, sizeof buf, "trying %s", NETS[net].ssid); oled.drawStr(0, 34, buf);
+      snprintf(buf, sizeof buf, "%s (%d)", why(), lostWhy); oled.drawStr(0, 48, buf);
+      if (brownout) oled.drawStr(0, 62, "restarted: POWER DIP");
+    } else if (firing()) {                                 // FIRE, in a blinking double frame. No all-white flash: the screen
       oled.setFont(u8g2_font_logisoso32_tr);        // runs off a pin, so it keeps the lit pixels few
       oled.drawStr((128 - oled.getStrWidth("FIRE")) / 2, 48, "FIRE");
       if (fireBlink()) { oled.drawFrame(0, 0, 128, 64); oled.drawFrame(3, 3, 122, 58); }
@@ -114,6 +139,8 @@ void screen(void *) {
 void setup() {
   Serial.begin(115200);
   pinMode(RED_PIN, OUTPUT); digitalWrite(RED_PIN, HIGH);
+  brownout = esp_reset_reason() == ESP_RST_BROWNOUT;   // it restarted because its power dipped
+  if (brownout) Serial.println("NOTE restarted: the power dipped (brownout). Try another USB port or charger");
   pinMode(KNOB_POWER, OUTPUT); digitalWrite(KNOB_POWER, HIGH);
   pinMode(SCREEN_POWER, OUTPUT); gpio_set_drive_capability((gpio_num_t)SCREEN_POWER, GPIO_DRIVE_CAP_3);   // full strength
   digitalWrite(SCREEN_POWER, HIGH);
@@ -124,6 +151,12 @@ void setup() {
 
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);         // Wi-Fi power saving bunches the readings up (the rings stutter): off, the board is on USB power
+  WiFi.onEvent([](WiFiEvent_t, WiFiEventInfo_t info) {
+    int r = info.wifi_sta_disconnected.reason;
+    if (r == WIFI_REASON_ASSOC_LEAVE) return;       // that's join() leaving on purpose
+    lostWhy = r;
+    Serial.printf("NOTE wifi lost: %s (%d)\n", why(), r);
+  }, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
   join(0);
   server.on("/fire", [] {
     fireUntil = millis() + FIRE_SHOW_MS;
@@ -142,10 +175,12 @@ void loop() {
   server.handleClient();
   acceptViewer();
 
-  bool online = WiFi.status() == WL_CONNECTED;
-  if (online) tryStart = millis();                                  // stay on this network while it works
-  else if (millis() - tryStart > (net ? TRY_MS : FIRST_TRY_MS)) join((net + 1) % NET_COUNT);   // offline too long: try the next one
-  if (online && !wasOnline) Serial.printf("controller ready on %s at http://%s:81/\n", NETS[net].ssid, WiFi.localIP().toString().c_str());
+  online = WiFi.status() == WL_CONNECTED;
+  if (online) { tryStart = millis(); stay = true; brownout = false; }   // stay on this network while it works
+  // offline too long: before it's ever been online, try the next network (NexusV 4 s, walawifi 10 s, ...). After that a drop
+  // only re-joins the same one: hopping to walawifi mid-day turned a 1 s Wi-Fi blip into 14 s+ off NexusV
+  else if (millis() - tryStart > (stay || net ? TRY_MS : FIRST_TRY_MS)) join(stay ? net : (net + 1) % NET_COUNT);
+  if (online && !wasOnline) Serial.printf("NOTE controller ready on %s at http://%s:81/\n", NETS[net].ssid, WiFi.localIP().toString().c_str());
   wasOnline = online;
   // red = not connected (same as the mask and the beacon); during a shot it blinks with the screen's FIRE instead
   digitalWrite(RED_PIN, firing() ? fireBlink() : !online);
@@ -162,9 +197,13 @@ void loop() {
     else if (c != '\r' && inbox.length() < 32) inbox += c;
   }
 
-  char line[40];
+  char line[40], msg[48];
   snprintf(line, sizeof line, "ORBIT %d %d %d", knobs[0].sent, knobs[1].sent, touching ? 1 : 0);
   Serial.printf("%s\n", line);
-  for (WiFiClient &v : viewers) if (v.connected()) v.printf("data: %s\n\n", line);
+  // never wait on a page. One that stopped reading (its laptop asleep, or gone without hanging up) used to freeze the whole
+  // board for up to 10 s per line: no readings for anyone and no answer to the GM panel, so it looked off the Wi-Fi. Now a
+  // line that doesn't fit right away drops that page; a page that's still there reconnects within 1 s
+  int n = snprintf(msg, sizeof msg, "data: %s\n\n", line);
+  for (WiFiClient &v : viewers) if (v.connected() && send(v.fd(), msg, n, MSG_DONTWAIT) != n) v.stop();
   delay(20);
 }

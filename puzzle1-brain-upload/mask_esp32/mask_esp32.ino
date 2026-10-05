@@ -20,7 +20,7 @@ const unsigned long BLINK_MS = 250;  // red LED on/off time while the stuck hint
 
 WebServer server(80);
 unsigned long tryStart = 0;
-bool wasOnline = false;
+bool wasOnline = false, stay = false;   // stay: it has been online on NETS[net], so a drop only re-joins that one
 bool redBlink = false;
 int net = 0;
 
@@ -63,8 +63,10 @@ void loop() {
   server.handleClient();
 
   bool online = WiFi.status() == WL_CONNECTED;
-  if (online) tryStart = millis();                                  // stay on this network while it works
-  else if (millis() - tryStart > TRY_MS) join((net + 1) % NET_COUNT);   // offline too long: try the next one
+  if (online) { tryStart = millis(); stay = true; }                 // stay on this network while it works
+  // offline too long: before it's ever been online, try the next network. After that a drop only re-joins the same one:
+  // hopping to the backup mid-day turned a 1 s Wi-Fi blip into 14 s+ off NexusV
+  else if (millis() - tryStart > TRY_MS) join(stay ? net : (net + 1) % NET_COUNT);
   if (online && !wasOnline) Serial.printf("mask ready on %s at http://%s/level?v=255\n", NETS[net].ssid, WiFi.localIP().toString().c_str());
   wasOnline = online;
 

@@ -133,7 +133,7 @@ function cmd(to, a, v) {
 // start) and pNdone; end = ms from t0 when the run closes (FINISH RUN or RESET ALL ROOMS; the kill switch's time if they got there).
 const KEYS = ['sync', 'power', 'trace', 'human'];
 const fresh = (team = '', code = '') => ({ sync: null, power: null, trace: null, human: null, facts: {}, adj: {}, hints: {},
-  team, code, t0: null, splits: {}, end: null, fin: finFresh() });
+  team, code, t0: null, splits: {}, end: null, extra: 0, fin: finFresh() });   // extra = minutes the GM's +2 MIN added to the limit
 
 // ===== Game 5, the finale: hub/public/boss.js on every room laptop. The hub owns its state, so the 4 screens agree,
 // a reloaded laptop rejoins, and the synced moments (takeover, blackout) land at one hub time on every screen.
@@ -150,8 +150,9 @@ const FIN = {
   LIVES: 5,              // shared by the whole team for the whole finale
   GRACE: +process.env.FIN_GRACE || 2500,   // ms after a lost life: mistakes are free and kill presses don't count (only the tests change it)
   LOST: 2600,            // ms from the last life to her win on every screen (the -1 LIFE banner plays first)
-  BULB: { takeover: '#4dff88', end: '#ffffff' },   // the hallway bulb: her green while she's loose, white when she dies
+  BULB: { takeover: '#4dff88', end: '#ffffff', lost: '#4dff88' },   // the hallway bulb: her green while she's loose, white when she dies
 };
+const RUN_MIN = +process.env.RUN_MIN || 23;   // the run's time limit (= LIMIT_MIN in gm.html and RUN_MIN in runclock.js; only the tests change it here)
 const TASK_ROOMS = { binary: 1, words: 2, cross: 4 }, KILL_ROOMS = [1, 2, 4];
 function finFresh() {
   return { phase: null, at: 0, seq: 0, swapped: false, ready: {}, fails: 0, ev: null, lives: FIN.LIVES, safe: 0,
@@ -217,9 +218,19 @@ function loseLife(ev) {        // one of the team's lives gone; the last one and
   f.lives--; f.safe = now + FIN.GRACE; f.ev = { ...ev, lives: f.lives, at: now };
   log(`finale life lost (${ev.task || 'kill switch'}) ▸ ${f.lives} left`);
   if (f.lives > 0) return;
-  f.phase = 'lost'; f.at = now + FIN.LOST; log('finale lost');
+  sheWins(FIN.LOST);
+}
+function sheWins(lead) {     // her lost ending on every screen, lead ms from now
+  const now = Date.now();
+  run.fin.phase = 'lost'; run.fin.at = now + lead; log('finale lost'); cmd('strip', 'solid', FIN.BULB.lost);
   if (run.t0 && run.end == null && run.splits.p5lost == null) { run.splits.p5lost = now - run.t0; toPages(runMsg()); }   // the GM's clock stops
 }
+// out of time: a team still short of game 4's end when the limit runs out loses there and then (the same ending, TIME'S UP).
+// From game 4's fake win on they play on into OVERTIME
+setInterval(() => {
+  if (!run.t0 || run.end != null || run.fin.phase || run.splits.p4done != null || Date.now() - run.t0 < (RUN_MIN + (run.extra || 0)) * 60000) return;
+  log('time up'); run.fin.ev = { k: 'time', at: Date.now() }; sheWins(FIN.LEAD); finChanged();
+}, 1000);
 function finChanged() { run.fin.seq++; save(); finOut(); }
 const finOut = () => { const m = finMsg(); toFin(m); toPages(m); };   // boss.js on the room laptops, and the GM panel's game 5 card
 // the GM panel's SKIP: the finale's next step, from whichever room it belongs to, even if that room's laptop is down
@@ -303,6 +314,7 @@ wss.on('connection', (ws, req) => {
     }
     else if (m.t === 'newteam') { clearTimeout(judgeT); presses = {}; run = fresh(String(m.team || '').slice(0, 40), String(m.code || '').slice(0, 8)); changed(`new team ${run.team}`); }
     else if (m.t === 'start') startClock('GM');
+    else if (m.t === 'extra' && run.t0 && run.end == null && !run.fin.phase) { run.extra = (run.extra || 0) + 2; changed(`+2 min for ${run.team} (${run.extra} extra)`); }   // GM's +2 MIN: only before her ending
     else if (m.t === 'finish' && run.t0 && run.end == null) { closeRun(); run.fin = finFresh(); changed(`finish ${run.team}`); }   // the finale screens go back to their own games
     else if (m.t === 'evt') {
       if (m.e === 'p1start') startClock(ws.id);

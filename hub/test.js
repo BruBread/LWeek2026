@@ -6,8 +6,8 @@
 const WebSocket = require('ws'), assert = require('assert'), { spawn } = require('child_process'), fs = require('fs'), os = require('os'), path = require('path');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-hub-'));
 let hub;
-const startHub = () => new Promise((ok, bad) => {
-  hub = spawn(process.execPath, [path.join(__dirname, 'server.js')], { env: { ...process.env, PORT: '3999', RUNS: path.join(tmp, 'runs.jsonl'), RUN: path.join(tmp, 'run.json'), SFX: path.join(tmp, 'sfx'), UPDATER_PORT: '3998', FIN_GRACE: '300' } });
+const startHub = (env = {}) => new Promise((ok, bad) => {
+  hub = spawn(process.execPath, [path.join(__dirname, 'server.js')], { env: { ...process.env, PORT: '3999', RUNS: path.join(tmp, 'runs.jsonl'), RUN: path.join(tmp, 'run.json'), SFX: path.join(tmp, 'sfx'), UPDATER_PORT: '3998', FIN_GRACE: '300', ...env } });
   hub.stdout.once('data', () => ok());
   hub.once('exit', c => bad(new Error(`hub exited (${c}). Is something already on :3999?`)));
 });
@@ -51,7 +51,7 @@ const unlocked = (w, e) => w.msgs.some(m => m.t === 'evt' && m.e === e);
   assert.strictEqual(last(late).trace, 25, 'run sent on hello');
   g({ t: 'newteam' }); await wait(100);
   assert.deepStrictEqual(last(gm), { t: 'run', sync: null, power: null, trace: null, human: null, facts: {}, adj: {}, hints: {},
-    team: '', code: '', t0: null, splits: {}, end: null }, 'new team resets');
+    team: '', code: '', t0: null, splits: {}, end: null, extra: 0 }, 'new team resets');
 
   // GM panel: room status, remote staff keys, run clock, splits, finish + history
   const p3 = await open('puzzle3', 'page');
@@ -208,6 +208,19 @@ const unlocked = (w, e) => w.msgs.some(m => m.t === 'evt' && m.e === e);
   g({ t: 'finish' }); await wait(200);
   const lost = runs()[runs().length - 1];
   assert(lost.team === 'Team Three' && lost.end === lost.splits.p5lost, 'a lost run is saved, timed at the loss');
+  g({ t: 'newteam' }); await wait(100);
+
+  // out of time: the limit (0.02 min here) runs out before game 4's end = she wins with TIME'S UP; past game 4's end it doesn't
+  hub.kill(); await wait(300); await startHub({ RUN_MIN: '0.02' }); gm = await open('gm1', 'page');
+  g({ t: 'newteam', team: 'Slow Team' }); g({ t: 'start' }); await wait(2500);
+  s = gf();
+  assert(s.phase === 'lost' && s.ev.k === 'time' && s.lives === 5, "time's up before game 4's end: she wins, lives untouched");
+  assert(last(gm).splits.p5lost >= 1200, 'the time-out sets the p5lost split');
+  g({ t: 'newteam', team: 'Extra Team' }); g({ t: 'start' }); g({ t: 'extra' }); await wait(2500);
+  assert(last(gm).extra === 2 && gf().phase !== 'lost', '+2 MIN pushes the time-out back');
+  g({ t: 'newteam', team: 'Late Team' }); g({ t: 'start' }); await wait(100);
+  (await open('puzzle4', 'page')).send(JSON.stringify({ t: 'evt', e: 'p4done' })); await wait(2500);
+  assert.strictEqual(fin(await open('fin3', 'fin')).phase, null, "past game 4's end: overtime, no time-out");
   g({ t: 'newteam' }); await wait(100);
 
   // the GM's sound effect pads: upload, list, rename to a safe name, refuse other files, delete

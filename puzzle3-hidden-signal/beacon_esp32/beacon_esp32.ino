@@ -33,7 +33,7 @@ const char* BOOT = "900:150,090:150,009:150,900:150,090:150,009:150";
 
 WebServer server(80);
 unsigned long tryStart = 0;
-bool wasOnline = false;
+bool wasOnline = false, stay = false;   // stay: it has been online on NETS[net], so a drop only re-joins that one
 int net = 0;
 
 const int MAX_STEPS = 160;           // the longest list game.html sends is about 70 steps
@@ -134,8 +134,10 @@ void loop() {
   server.handleClient();
 
   bool online = WiFi.status() == WL_CONNECTED;
-  if (online) tryStart = millis();                                  // stay on this network while it works
-  else if (millis() - tryStart > (net ? TRY_MS : FIRST_TRY_MS)) join((net + 1) % NET_COUNT);   // offline too long: try the next one
+  if (online) { tryStart = millis(); stay = true; }                 // stay on this network while it works
+  // offline too long: before it's ever been online, try the next network. After that a drop only re-joins the same one:
+  // hopping to the backup mid-day turned a 1 s Wi-Fi blip into 14 s+ off NexusV
+  else if (millis() - tryStart > (stay || net ? TRY_MS : FIRST_TRY_MS)) join(stay ? net : (net + 1) % NET_COUNT);
   if (online && !wasOnline) Serial.printf("beacon ready on %s at http://%s/play\n", NETS[net].ssid, WiFi.localIP().toString().c_str());
   wasOnline = online;
 

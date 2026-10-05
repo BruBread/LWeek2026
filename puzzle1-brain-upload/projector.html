@@ -239,7 +239,7 @@ line the corner brackets up with the projector edges
 
 Ctrl+Alt+F  force capture (if click or mask fails)
 Ctrl+Alt+B  blink the mask eyes (hint)
-Ctrl+Alt+D  stuck hint now (DRAG THE MOUSE DOWN + red LED)
+Ctrl+Alt+D  stuck hint now (MOVE THE MOUSE DOWN + red LED)
 Ctrl+Alt+R  reset for next team (new code)
 Ctrl+Alt+P  replay the sequence (timing tests)
 Ctrl+Alt+W  replay only the win / mind upload
@@ -255,7 +255,7 @@ const CFG = {
   RAIN_CELL: 18,             // px per character in the collapse; smaller = more mask detail, bigger = faster
   NODES: 38,                 // network nodes in the finale
   HINT_AFTER: 60,            // s after the run clock starts (the team's first click, or START CLOCK NOW): mask still not clicked ->
-                             // the laptop wallpaper glitches to DRAG THE MOUSE DOWN and the mask's red LED blinks until it is
+                             // the laptop wallpaper glitches to a green MOVE THE MOUSE DOWN and the mask's red LED blinks until it is
   VOLUME: 0.8,
   MUSIC_VOLUME: 0.7,         // recorded sounds in sounds/ (0..1)
   // SYNC, carried to the finale: 100, minus this per wrong code and per attack they didn't mash through in time
@@ -378,7 +378,8 @@ async function findHub() {
 function bossLoad() {
   if (window.BOSS) return;
   window.BOSS = 1;
-  for (const f of ['boss.js', 'voice.js']) {      // voice.js: Aurora's recorded lines (no hub = she blips instead)
+  for (const f of ['boss.js', 'voice.js', 'transmission.js', 'runclock.js']) {   // voice.js: Aurora's recorded lines (no hub =
+    // she blips instead); transmission.js: the GM panel's message, also on the laptop; runclock.js: the team's TIME LEFT
     const s = document.createElement('script');
     s.src = hubWs.url.replace(/^ws(.*)\/ws$/, `http$1/${f}?`) + Date.now(); s.dataset.room = 1;
     document.head.append(s);
@@ -390,6 +391,9 @@ async function hub() {
   ws.onclose = () => setTimeout(hub, 2000);
   ws.onmessage = e => { const m = JSON.parse(e.data);
     if (m.t === 'cmd' && m.a === 'key') dispatchEvent(new KeyboardEvent('keydown', { code: m.v, ctrlKey: true, altKey: true }));
+    if (m.t === 'cmd' && m.a === 'glow') { deskGlow = !!m.v; glowNow(); }   // Binary Key open on the laptop
+    if (m.t === 'cmd' && m.a === 'msg') window.transmit?.(m.v);           // the GM's message, flashed for 2 s (also on the laptop)
+    if (m.t === 'run') window.RUN = m;            // runclock.js reads it
     if (m.t === 'run') { clearTimeout(hintT);           // m.now = hub time, like t0, so this laptop's clock doesn't matter
       if (m.t0 && m.end == null && m.splits?.p1done == null) hintT = setTimeout(stuckHint, m.t0 + CFG.HINT_AFTER * 1000 - m.now); } };
 }
@@ -1072,6 +1076,7 @@ async function finale() {
   // white-out, drop, MIND UPLOADED
   $('#flash').animate([{ opacity: 1 }, { opacity: 1, offset: .2 }, { opacity: 0 }], { duration: 1400, easing: 'ease-out' });
   sfx.drop(); eyes(CFG.EYES_FULL);
+  document.documentElement.classList.add('rclk-big');   // runclock.js: the team's TIME LEFT joins this screen as the eyes come on
   mode = 'final'; ctx.clearRect(0, 0, W, H);
   const fin = $('#final');
   $('#fk').textContent = `AURORA//LINK ▸ TRANSFER 100% ▸ SYNC ${sync()}%`;
@@ -1111,14 +1116,16 @@ placeHS();
   hs.style.setProperty('--noise', `url(${n.toDataURL()})`);
 }
 
-hs.addEventListener('pointerenter', () => {
+// the glow, the eyes and a low hum are the only tells: on hover, and while Binary Key is open on the laptop (desktop.html)
+let hovering = false, deskGlow = false;
+function glowNow() {
   if (mode !== 'idle' || calib) return;
-  hs.classList.add('on'); eyes(CFG.EYES_DIM); humOn(true);   // the glow, the eyes and a low hum are the only tells
-});
-hs.addEventListener('pointerleave', () => {
-  hs.classList.remove('on');
-  if (mode === 'idle' && !calib) { eyes(0); humOn(false); }
-});
+  const on = hovering || deskGlow;
+  if (on === hs.classList.contains('on')) return;
+  hs.classList.toggle('on', on); eyes(on ? CFG.EYES_DIM : 0); humOn(on);
+}
+hs.addEventListener('pointerenter', () => { hovering = true; glowNow(); });
+hs.addEventListener('pointerleave', () => { hovering = false; glowNow(); });
 hs.addEventListener('click', capture);
 
 let drag = null;
@@ -1159,7 +1166,7 @@ addEventListener('keydown', e => {
     e.preventDefault();
     if (e.code === 'KeyF') capture();
     if (e.code === 'KeyB') blink(3, 300);          // staff hint: "look at the mask"
-    if (e.code === 'KeyD') stuckHint();            // the 1-minute hint now: DRAG THE MOUSE DOWN + red LED
+    if (e.code === 'KeyD') stuckHint();            // the 1-minute hint now: MOVE THE MOUSE DOWN + red LED
     if (e.code === 'KeyR') { eyes(0); hubSend([{ t: 'cmd', to: 'desk1', a: 'key', v: 'KeyR' }]); setTimeout(() => location.reload(), 150); }   // the laptop's desktop.html resets too
     if (e.code === 'KeyP') { eyes(0); location.hash = 'replay'; location.reload(); }
     if (e.code === 'KeyW') { eyes(0); location.hash = 'win'; location.reload(); }

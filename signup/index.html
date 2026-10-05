@@ -534,9 +534,10 @@ addEventListener('keydown', e => {
     // TEST: runs the whole flow for one signup, but the sale is never saved
     // BYPASS: lifts the MIN_PARTY minimum for one signup (works mid-signup too); paid, counted and saved like any sale
     // ICPEP: the staff line screen (from the main screen)
-    // CAMERA: game 2's camera pop-up on its own, to check the camera: static, the live feed 4 s later, closes after 20 s
+    // CCTV: game 2's camera pop-up on its own, to check the camera: static, the live feed 4 s later, closes after 20 s
+    // (not CAMERA: start.bat's restart-key.ps1 owns Ctrl+Alt+R on the signup PC)
     if (cheat.endsWith('ICPEP')) { cheat = ''; if (!flow) deliver({ staff: true, key: '' }); return; }
-    if (cheat.endsWith('CAMERA')) { cheat = ''; feedOpen(); setTimeout(feedLive, 4000); clearTimeout(feedT); feedT = setTimeout(feedClose, 24000); return; }
+    if (cheat.endsWith('CCTV')) { cheat = ''; feedOpen(); setTimeout(feedLive, 4000); clearTimeout(feedT); feedT = setTimeout(feedClose, 24000); return; }
     const code = cheat.endsWith('NEXUS') ? 'assist' : cheat.endsWith('TEST') ? 'testing' : cheat.endsWith('BYPASS') ? 'bypass' : null;
     if (code) {
       cheat = '';
@@ -545,9 +546,8 @@ addEventListener('keydown', e => {
       if (mode === 'idle') renderIdle(true);
       return;
     }
-    const spelling = /CAM$|CAMER$/.test(cheat);   // the M and R in CAMERA aren't mute and reload
-    if (e.code === 'KeyM' && !spelling) { muted = !muted; master.gain.value = muted ? 0 : CFG.VOLUME; }
-    if (e.code === 'KeyR' && !flow && !spelling) location.reload();
+    if (e.code === 'KeyM') { muted = !muted; master.gain.value = muted ? 0 : CFG.VOLUME; }
+    if (e.code === 'KeyR' && !flow) location.reload();   // only reached without restart-key.ps1 (e.g. /queue on a TV)
     if (e.key === 'Enter') deliver(e);       // still holding Ctrl+Alt after typing NEXUS / TEST: Enter still works
     return;
   }
