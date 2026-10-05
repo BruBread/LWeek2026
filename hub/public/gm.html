@@ -284,8 +284,10 @@ const DEVS = {
     S.camera.ip ? [true, 'camera at ' + S.camera.ip] : [false, 'camera not found on the network. Plugged in? On NexusV?']],
   beacon: ['LEDS', beacon],
   ctrl:   ['CONTROLLER', ctrl],
+  bearbox: ['BEARBOX', () => !hubUp() ? [null, 'the hub is down'] : linked('bearbox') ? [true, 'the Bearbox ticket display is connected'] :
+    [null, "the Bearbox ticket display isn't connected (optional). Switched on? On NexusV or walawifi?"]],
 };
-$('#sys').innerHTML = ['hub', 'signup', 'kiosk', 'board'].map(d => `<span class="dev unk" data-dev="${d}">${DEVS[d][0]}</span>`).join('');
+$('#sys').innerHTML = ['hub', 'signup', 'kiosk', 'board', 'bearbox'].map(d => `<span class="dev unk" data-dev="${d}">${DEVS[d][0]}</span>`).join('');
 $('#sys').onclick = e => { const d = e.target.closest('.dev'); if (d) alert(d.textContent + ': ' + d.title); };
 
 // ===== Where the team is: games 1-4 and the finale =====
