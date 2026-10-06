@@ -82,7 +82,7 @@ input { font: inherit; color: #fff; background: #000; border: 1px solid rgba(255
 .res { display: flex; justify-content: space-between; align-items: center; gap: 8px; border-top: 1px solid rgba(255,51,68,.2); padding-top: 8px; margin-top: 4px; }
 .res b { color: #fff; }
 .keys { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.say { display: flex; gap: 6px; margin-top: 8px; } .say input { flex: 1; width: auto; min-width: 0; } .say select { font: inherit; color: #fff; background: #000; border: 1px solid rgba(255,51,68,.6); width: 90px; }
+.say { display: flex; gap: 6px; margin-top: 8px; } .say input { flex: 1; width: auto; min-width: 0; }
 .room.alarm { animation: alarm 1s steps(1) infinite; }
 @keyframes alarm { 50% { background: #4a0008; } }
 
@@ -281,12 +281,6 @@ function drawFlow() {
 }
 
 // ===== One card per room. Built once and only their text changes, so a click never lands on a rebuilt button =====
-// preset messages: picking one fills the message box, where the GM can still edit it or type their own
-const SAYS = {
-  puzzle3: ["THE LIGHTS ARE IN THIS ROOM", "DON'T WATCH THE SCREEN. LOOK AROUND", "EACH LIGHT BLINKS ITS NUMBER", "WAIT FOR THE DARK PAUSE, THEN COUNT", "COUNT LIGHT 1, THEN 2, THEN 3", "COUNT OUT LOUD TOGETHER"],
-  puzzle4: ["POINT BOTH KNOB MARKS AT THE LASER", "BOTH RINGS MUST SAY LOCKED, THEN FIRE", "TOUCH THE WIRES AND KEEP HOLDING", "WAIT FOR THE WATCHDOG TO PASS", "SWAP WHO IS ON THE KNOBS", "AIM FIRST: EVERY MISS MOVES YOUR LASER"],
-  puzzle1: ["MOVE THE MOUSE DOWN", "CLICK THE GLOWING MASK", "OPEN BINARY KEY", "LOOK UP THE WALL'S CODE IN BINARY KEY", "CLICK THE WALL, TYPE THE CODE", "MASH ANY KEY!"],
-};
 $('#rooms').innerHTML = ROOMS.map((r, i) => `
   <div class="box room" id="${r.id}">
     <h3><span>SECTOR 0${i + 1} ▸ <b>${r.name}</b></span></h3>
@@ -297,7 +291,7 @@ $('#rooms').innerHTML = ROOMS.map((r, i) => `
     <div class="segs ${r.aur ? 'aur' : ''}">${'<i></i>'.repeat(25)}</div>
     <div class="code"></div>
     <div class="res"><span><span class="lbl">TO THE FINALE</span><br><b class="rv"></b></span>${r.say ? '' : `<button class="quiet" data-hint title="A hint costs the team this much">HINT ${r.hint > 0 ? '+' : ''}${r.hint} ${r.k.toUpperCase()}</button>`}</div>
-    ${r.say ? `<div class="say"><select title="Fills the message box"><option value="">PRESET…</option>${SAYS[r.id].map(v => `<option>${esc(v)}</option>`).join('')}</select><input maxlength="60" placeholder="MESSAGE: FLASHES 2 s ON ${r.say.length > 1 ? 'LAPTOP + WALL' : 'THEIR SCREEN'}"><button data-say title="Every message is a hint">SEND ${r.hint > 0 ? '+' : ''}${r.hint} ${r.k.toUpperCase()}</button></div>` : ''}
+    ${r.say ? `<div class="say"><input maxlength="60" placeholder="MESSAGE: FLASHES 2 s ON ${r.say.length > 1 ? 'LAPTOP + WALL' : 'THEIR SCREEN'}"><button data-say title="Every message is a hint">SEND ${r.hint > 0 ? '+' : ''}${r.hint} ${r.k.toUpperCase()}</button></div>` : ''}
     <div class="keys">${r.keys.map(([c, l]) => `<button data-key="${c}" class="${c === 'KeyR' ? 'quiet' : ''}" title="${esc(TIPS[l] || '')}">${l}</button>`).join('')}</div>
   </div>`).join('');
 ROOMS.forEach(r => $('#' + r.id).onclick = e => {
@@ -334,8 +328,7 @@ function say(r) {
   txSound();
   inp.value = ''; inp.placeholder = 'SENT: ' + v;
 }
-ROOMS.filter(r => r.say).forEach(r => $(`#${r.id} .say input`).onkeydown = e => e.key === 'Enter' && say(r));
-ROOMS.filter(r => r.say).forEach(r => $(`#${r.id} .say select`).onchange = e => { const inp = $(`#${r.id} .say input`); inp.value = e.target.value; e.target.value = ''; inp.focus(); });
+ROOMS.filter(r => r.say).forEach(r => $(`#${r.id} .say input`).onkeydown = e => { if (e.key === 'Enter') say(r); });   // braces: returning false would cancel every other key
 const WORD = { clear: 'CLEARED', off: 'OFFLINE', ready: 'READY', locked: 'LOCKED', playing: 'PLAYING' };
 function drawRooms() {
   ROOMS.forEach((r, i) => {
