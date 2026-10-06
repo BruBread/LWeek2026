@@ -279,7 +279,7 @@ const addrMsg = () => ({ t: 'addr', hub: myIPs(), signup: signupIP });
 
 const wss = new WebSocketServer({ server, path: '/ws' });
 wss.on('connection', (ws, req) => {
-  ws.alive = true; ws.on('pong', () => ws.alive = true);
+  ws.miss = 0; ws.on('pong', () => ws.miss = 0);
   ws.ip = req.socket.remoteAddress.replace(/^::ffff:/, '');
   if (/^(127\.|::1$)/.test(ws.ip) || myIPs().includes(ws.ip)) ws.ip = '127.0.0.1';   // this laptop, however it connected
   ws.on('message', raw => {
@@ -331,11 +331,13 @@ wss.on('connection', (ws, req) => {
   });
 });
 
-// heartbeat: app-level ping to devices (their watchdog), TCP-level ping to drop dead sockets
-const PING = JSON.stringify({ t: 'ping' });
+// heartbeat: app-level ping to devices (their watchdog), TCP-level ping to drop dead sockets.
+// A socket goes only after DEAD_S s without a pong: day 2, a crowd of 30 phones slowed the Wi-Fi past 1-2 s and the old
+// 2 s cut dropped every laptop at once while their Wi-Fi stayed connected
+const PING = JSON.stringify({ t: 'ping' }), DEAD_S = 7;
 setInterval(() => wss.clients.forEach(c => {
-  if (!c.alive) return c.terminate();
-  c.alive = false; c.ping(); if (c.readyState === 1) c.send(PING);
+  if (++c.miss > DEAD_S) return c.terminate();
+  c.ping(); if (c.readyState === 1) c.send(PING);
 }), 1000);
 
 server.listen(PORT, '0.0.0.0', () => console.log(`NEXUS hub on :${PORT}  (gm: /gm)`));

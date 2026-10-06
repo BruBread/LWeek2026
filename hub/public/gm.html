@@ -202,7 +202,7 @@ const status = {}, seen = {}, wasOn = {}, wasOk = {};
 const send = o => ws?.readyState === 1 && ws.send(JSON.stringify(o));
 const scene = v => send({ t: 'cmd', a: 'scene', v });
 const key = (id, v) => send({ t: 'cmd', to: id, a: 'key', v });
-// a room is online while its connection is up (the hub drops a dead one within 2 s), or it reported in the last 3 s (a
+// a room is online while its connection is up (the hub drops a dead one after 7 s), or it reported in the last 3 s (a
 // reset's reload). Not from the 1 s reports alone: a hidden, silent tab (a finished room) slows its timers to once a minute
 const online = id => hubUp() && (linked(id) || Date.now() - (seen[id] || 0) < 3000);
 // the run clock: from room 1's first click to the kill switch (or FINISH / RESET). waiting = a team is in, no click yet
