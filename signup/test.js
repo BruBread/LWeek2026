@@ -23,7 +23,7 @@ const start = async () => { srv = spawn(process.execPath, [path.join(__dirname, 
   assert.strictEqual((await post('/api/sale', sale({ slot: { date: '2026-10-05', time: '09:10' } })))[0], 400, 'not a slot start');
   assert.strictEqual((await post('/api/sale', sale({ slot: { date: '2026-10-10', time: '09:00' } })))[0], 400, 'not a booth day');
   const eight = Array(8).fill(img), s2 = { date: '2026-10-05', time: '09:25' };
-  assert.strictEqual((await post('/api/sale', sale({ size: 8, photos: eight, slot: s2 })))[0], 400, 'party of 8 refused');
+  assert.strictEqual((await post('/api/sale', sale({ size: 100, photos: [img], slot: s2 })))[0], 400, 'party over MAX_PARTY refused');
   assert.strictEqual((await post('/api/sale', sale({ size: 3, photos: [img], slot: s2 })))[0], 400, 'one photo per player');
   assert.strictEqual((await post('/api/sale', sale({ size: 1, photos: [img], slot: s2 })))[0], 400, 'below the minimum group size refused');
   assert.strictEqual((await post('/api/sale', sale({ size: 1, photos: [img], slot: s2, test: true })))[0], 200, '...but test mode allows any size');

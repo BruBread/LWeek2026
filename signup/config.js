@@ -2,9 +2,9 @@
 const BOOTH = {
   TICKETS: 400,              // people, not groups. Selling stops at this many (or when the slots run out)
   PRICE: 50,                 // ₱ per player, paid at the desk before the signup. SET THIS: placeholder
-  MIN_PARTY: 4,              // smallest group (test mode and ASSIST mode allow any size, even 1)
-  MAX_PARTY: 7,             // ASSIST mode (hold Ctrl+Alt, type NEXUS) lifts this to ASSIST_MAX.
-  ASSIST_MAX: 20,            // Assist groups are free and don't count toward TICKETS or the sales totals
+  MIN_PARTY: 1,              // smallest group: any size can play (was 4; BYPASS only matters if this goes back up)
+  MAX_PARTY: 99,             // no real cap (was 7): 99 = the most the 2-digit size box takes; tickets left still caps a sale
+  ASSIST_MAX: 99,           // Assist groups are free and don't count toward TICKETS or the sales totals
   SLOT_MIN: 25,              // one game + the 2 min cleanup. Tune after the dry run (the GM panel shows real run times)
   GRACE_MIN: 2,              // a called group has this long to show up, then the next group goes
   // booth hours per day (local time). The last slot starts SLOT_MIN before close. SET THESE: placeholders
