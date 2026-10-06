@@ -18,15 +18,15 @@ OFF = {'20': False}
 GREEN = colour(120, 1000, 1000)
 CYAN = colour(180, 1000, 750)      # puzzle 2 unlocked, waiting for the team: 75% cyan...
 CYAN_DIM = colour(180, 1000, 10)   # ...that keeps dipping to the dimmest cyan, so the team sees where to go
-# one flicker (~5 s, ~1 command per second): steady, a stutter, steady, a dip
-FLICKER = [(CYAN, 2), (CYAN_DIM, .4), (CYAN, .4), (CYAN_DIM, .4), (CYAN, 1.2), (CYAN_DIM, .4)]
+# one slow pulse (~7 s): steady 5 s, a quick fade to dark (one step per MIN_GAP), 1 s dark
+FLICKER = [(CYAN, 5)] + [(colour(180, 1000, v), MIN_GAP) for v in (450, 200)] + [(CYAN_DIM, 1)]
 FLASH = colour(0, 1000, 600)
 
 # game state -> steps of (bulb command, seconds to hold it). The last step stays.
 LOOKS = {
     'idle':  [(OFF, 0)],           # locked: puzzle 1 still playing, page load, Ctrl+Alt+R
     # unlocked: Ctrl+Alt+U or puzzle 1's p1done. Flickers until the game sends the next state.
-    # ponytail: 240 flickers = ~20 min, then steady cyan; loop it in bulb_loop if a team ever waits longer
+    # ponytail: 240 pulses = ~28 min, then steady cyan; loop it in bulb_loop if a team ever waits longer
     'ready': FLICKER * 240 + [(CYAN, 0)],
     'on':   [(GREEN, 0)],
     'off':  [(OFF, 0)],            # every moment the light key isn't held
@@ -53,7 +53,9 @@ def handle(a, v):
     if a == 'solid':               # GM scenes: SAFE = #ffffff, FINALE RED = #ff0000
         r, g, b = (int(v[i:i + 2], 16) / 255 for i in (1, 3, 5))
         h, s, val = colorsys.rgb_to_hsv(r, g, b)
-        return show([(WHITE if s == 0 else colour(round(h * 360), round(s * 1000), max(10, round(val * 1000))), 0)])
+        # GM LIGHTS pop-up sends the color already scaled by brightness; #000000 = off
+        bright = max(10, round(val * 1000))
+        return show([(OFF if val == 0 else {**WHITE, '22': bright} if s == 0 else colour(round(h * 360), round(s * 1000), bright), 0)])
     if a != 'p2' or v not in LOOKS: return print('ignored', a, v)
     if v in FX: return show(LOOKS[v] + LOOKS[base])
     base = 'off' if v == 'down' else v

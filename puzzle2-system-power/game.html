@@ -193,6 +193,15 @@ body.low #segs i.on { animation: blink .4s steps(1) infinite; }
 body.scare #scareBg { display: block; }
 @keyframes scareFlick { 50% { opacity: .1; background: #300; } }
 
+/* end of the training: a whisper in the dark, dim and unsteady, like a dying bulb */
+#whisper { position: fixed; inset: 0; z-index: 45; display: none; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4vh; background: #000; color: var(--g); font-size: 2vw; letter-spacing: .4em; text-transform: lowercase;
+  text-shadow: 0 0 14px var(--g); }
+body.whisper #whisper { display: flex; }
+#whisper p { margin: 0; min-height: 1.3em; animation: wFlick 2.7s steps(1) infinite; }
+#whisper p + p { font-size: 1.3vw; color: #fff; text-shadow: 0 0 10px var(--g); animation-delay: -1.1s; }
+@keyframes wFlick { 0%, 100% { opacity: .8 } 41% { opacity: .15 } 43% { opacity: .8 } 77% { opacity: .35 } 78% { opacity: .8 } }
+
 /* end screens (win / grid lost / captured), same as puzzle 1's MIND UPLOADED */
 #final { position: fixed; inset: 0; z-index: 50; display: none; flex-direction: column; align-items: center; justify-content: center;
   gap: 2.5vh; overflow: hidden; color: var(--hud); animation: flick .11s steps(2) infinite;
@@ -255,6 +264,7 @@ body.help #help { display: block; }
   <div id="beam"></div>
   <div id="scareBg"></div>
   <div id="big" class="glitch" hidden></div>
+  <div id="whisper"><p></p><p></p></div>
   <div id="final">
     <i class="ring"></i><i class="ring r2"></i><i class="ring r3"></i>
     <div id="fk"></div>
@@ -311,6 +321,7 @@ const T = {                  // ms
   dread: 1100,               // the fake game rots before the cut: word scrambles, lights stutter, whine rises
   scareGap: 600,             // dead black and silence between the cut and LOOK BEHIND YOU
   look: 2800,                // how long LOOK BEHIND YOU stays up
+  scareLight: 1000,          // the hallway bulb stays white this long after LOOK BEHIND YOU vanishes (keep < afterScare + crtOn's 500)
   rescue: 3000,              // how long they get to type the emergency word (time is frozen meanwhile)
   boostGrace: 1000,          // no drain for this long after a boost lands
   afterScare: 700,           // black after it vanishes, before the real game boots
@@ -395,8 +406,8 @@ async function findHub() {
 function bossLoad() {
   if (window.BOSS) return;
   window.BOSS = 1;
-  for (const f of ['boss.js', 'voice.js', 'runclock.js']) {   // voice.js: Aurora's recorded lines (no hub = she blips
-                                                  // instead); runclock.js: the team's TIME LEFT
+  for (const f of ['boss.js', 'voice.js', 'transmission.js', 'runclock.js']) {   // voice.js: Aurora's recorded lines (no hub =
+    // she blips instead); transmission.js: the GM panel's messages, as INCOMING TRANSMISSION; runclock.js: the team's TIME LEFT
     const s = document.createElement('script');
     s.src = hubWs.url.replace(/^ws(.*)\/ws$/, `http$1/${f}?`) + Date.now(); s.dataset.room = 2;
     document.head.append(s);
@@ -407,6 +418,7 @@ async function hub() {
   ws.onopen = () => { ws.send(JSON.stringify({ t: 'hello', id: 'puzzle2', role: 'page' })); hubSend(); bossLoad(); lights(light); $('#hubst').textContent = 'connected'; };
   ws.onclose = () => { $('#hubst').textContent = 'DOWN (Ctrl+Alt+U to unlock by hand)'; setTimeout(hub, 2000); };
   ws.onmessage = e => { const m = JSON.parse(e.data); if (m.t === 'evt' && m.e === CFG.UNLOCK_EVT) unlock(); if (m.t === 'cmd' && m.a === 'key') staffKey(m.v);
+    if (m.t === 'cmd' && m.a === 'msg') window.transmit?.(m.v);   // the GM's message, flashed for 2 s
     if (m.t === 'run') window.RUN = m; };         // runclock.js reads it
 }
 // the GM panel presses this page's Ctrl+Alt staff keys remotely, and sees its state once a second
@@ -759,6 +771,18 @@ async function training() {
   lightOK = false; setLit(false);
   await wait(T.after);
   panel.classList.remove('on'); hall.classList.remove('on'); document.body.classList.remove('tutBar');
+
+  // the whisper: black screen, a low drone, the line creeps out letter by letter (silent, no key clicks), then fades
+  const wsp = $('#whisper'), [w1, w2] = wsp.children;
+  const creep = async (el, text, ms) => { for (const ch of text) { el.textContent += ch; await wait(ms * rand(.6, 1.6)); } };
+  document.body.classList.add('whisper'); tone('sine', 55, 41, 7, .25); tone('sine', 82, 79, 7, .06);
+  await wait(900);
+  await creep(w1, "don't forget to keep the lights on", 75);
+  await wait(900);
+  await creep(w2, 'it keeps them away', 120);
+  await wait(2200);
+  await wsp.animate([{ opacity: 1 }, { opacity: 0 }], 900).finished;
+  document.body.classList.remove('whisper');
 }
 
 async function start() {
@@ -808,7 +832,7 @@ async function jumpscare() {
   sfx.scream(); sfx.boom(); say('Look behind you.'); shake(app, 26, 1400); lights('scare'); kiosk('p2scare');
   await wait(T.look);
   // 4. gone as suddenly as it came, then the real game boots
-  big.hidden = true; big.classList.remove('jit'); document.body.classList.remove('scare'); lights('off');
+  big.hidden = true; big.classList.remove('jit'); document.body.classList.remove('scare'); setTimeout(() => lights('off'), T.scareLight);
   await wait(T.afterScare);
   await crtOn(.5);
   game(false);

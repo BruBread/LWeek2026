@@ -769,7 +769,7 @@ async function start() {
 
 // ===== Training: the lenses on screen show how to read the lights before the real hunt. Few words, all shown:
 // 1 watch a demo code blink while its blinks are counted, 2 the goal, with the blink-rate gauge sweeping to
-// "beyond human sight". Then the hunt starts and they type the real code. The real board stays dark until then.
+// "beyond human sight". Then the hunt starts and they type the real code. The real board stays steady on until then.
 // Ctrl+Alt+K skips it all
 const TUT = [
   { title: 'COUNT THE BLINKS', sub: 'each light blinks its number.',
@@ -797,6 +797,7 @@ const TUT = [
 ];
 async function training() {
   mode = 'tut'; B.classList.add('tut'); $('#term').textContent = '';
+  setLoop([[all(9), 1000]]);   // the real board stays steady on through the training (lights the room); hunt() swaps in the code
   renderHud(); renderLayers();
   const panel = $('#tut'), dots = [...$('#tutDots').children], bar = $('#tutBar i');
   const prog = p => bar.style.transform = `scaleX(${Math.min(1, Math.max(0, p)).toFixed(3)})`;
