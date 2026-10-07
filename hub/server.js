@@ -7,6 +7,7 @@ const scenes = require('./scenes');
 const PORT = +process.env.PORT || 3000, PUB = path.join(__dirname, 'public');   // PORT: only the tests change it
 const RUNS = process.env.RUNS || path.join(__dirname, 'runs.jsonl');   // finished teams, one JSON line each
 const RUN = process.env.RUN || path.join(__dirname, 'run.json');        // the team in the booth now, so a hub restart mid-run loses nothing
+const LOG = process.env.LOG || path.join(__dirname, 'hub.log');         // every log line with its time, so a bad day can be read back
 const state = {};            // deviceId -> last cmd {a,v}; replayed on reconnect
 const status = {};           // game page id -> its last status (mode, live stat, ...), for the GM room cards
 const conns = new Map();     // id -> ws (devices and pages)
@@ -110,7 +111,10 @@ const toFin = o => broadcast(o, c => c.role === 'fin');   // boss.js on the room
 const toGM = o => broadcast(o, c => c.role === 'page' && /^gm/.test(c.id));   // only the GM panel reads room statuses
 const ids = role => [...conns].filter(([, w]) => w.role === role).map(([id]) => id);
 const roster = () => ({ t: 'roster', devices: ids('device'), pages: ids('page') });
-const log = m => console.log(m);   // the hub window only (no page shows a log)
+const log = m => { console.log(m); try { fs.appendFileSync(LOG, `${new Date().toLocaleString()}  ${m}\n`); } catch {} };
+// One bad WebSocket frame or any bug used to crash the hub, and its restart dropped every room at once. Now the error
+// goes in hub.log and the hub keeps running, so the rooms stay connected.
+process.on('uncaughtException', e => log('ERROR ' + (e.stack || e)));
 
 function cmd(to, a, v) {
   if (a === 'scene') {
@@ -284,7 +288,8 @@ const addrMsg = () => ({ t: 'addr', hub: myIPs(), signup: signupIP });
 const wss = new WebSocketServer({ server, path: '/ws' });
 wss.on('connection', (ws, req) => {
   ws.miss = 0; ws.on('pong', () => ws.miss = 0);
-  ws.ip = req.socket.remoteAddress.replace(/^::ffff:/, '');
+  ws.on('error', e => log(`socket error ${ws.id || ws.ip}: ${e.code || e.message}`));   // the socket closes after this; no crash
+  ws.ip = String(req.socket.remoteAddress).replace(/^::ffff:/, '');
   if (/^(127\.|::1$)/.test(ws.ip) || myIPs().includes(ws.ip)) ws.ip = '127.0.0.1';   // this laptop, however it connected
   ws.on('message', raw => {
     let m; try { m = JSON.parse(raw); } catch { return; }
@@ -330,7 +335,7 @@ wss.on('connection', (ws, req) => {
   });
   ws.on('close', () => {
     if (ws.id && conns.get(ws.id) === ws) {
-      conns.delete(ws.id); log(`- ${ws.id}`); toPages(roster());
+      conns.delete(ws.id); log(`- ${ws.id}${ws.miss > DEAD_S ? ` (silent ${DEAD_S} s)` : ''}`); toPages(roster());
       delete status[ws.id];   // no broadcast: the GM marks a room offline after 3 s of silence, so a reset's reload doesn't alarm
     }
   });
@@ -338,8 +343,9 @@ wss.on('connection', (ws, req) => {
 
 // heartbeat: app-level ping to devices (their watchdog), TCP-level ping to drop dead sockets.
 // A socket goes only after DEAD_S s without a pong: day 2, a crowd of 30 phones slowed the Wi-Fi past 1-2 s and the old
-// 2 s cut dropped every laptop at once while their Wi-Fi stayed connected
-const PING = JSON.stringify({ t: 'ping' }), DEAD_S = 7;
+// 2 s cut dropped every laptop at once while their Wi-Fi stayed connected. Cutting a slow laptop never helps (its
+// reconnect costs more air than waiting), so this only clears laptops that are really gone
+const PING = JSON.stringify({ t: 'ping' }), DEAD_S = 15;
 setInterval(() => wss.clients.forEach(c => {
   if (++c.miss > DEAD_S) return c.terminate();
   c.ping(); if (c.readyState === 1) c.send(PING);

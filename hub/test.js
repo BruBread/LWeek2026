@@ -11,7 +11,7 @@ const camLog = path.join(tmp, 'camera.log'), camJs = path.join(tmp, 'camera.js')
 fs.writeFileSync(camJs, `require('fs').appendFileSync(${JSON.stringify(camLog)}, process.argv[3] + '\\n')`);
 const aims = () => { try { return fs.readFileSync(camLog, 'utf8').trim().split('\n'); } catch { return []; } };
 const startHub = (env = {}) => new Promise((ok, bad) => {
-  hub = spawn(process.execPath, [path.join(__dirname, 'server.js')], { env: { ...process.env, PORT: '3999', RUNS: path.join(tmp, 'runs.jsonl'), RUN: path.join(tmp, 'run.json'), SFX: path.join(tmp, 'sfx'), UPDATER_PORT: '3998', FIN_GRACE: '300', CAMERA: camJs, ...env } });
+  hub = spawn(process.execPath, [path.join(__dirname, 'server.js')], { env: { ...process.env, PORT: '3999', RUNS: path.join(tmp, 'runs.jsonl'), RUN: path.join(tmp, 'run.json'), LOG: path.join(tmp, 'hub.log'), SFX: path.join(tmp, 'sfx'), UPDATER_PORT: '3998', FIN_GRACE: '300', CAMERA: camJs, ...env } });
   hub.stdout.once('data', () => ok());
   hub.once('exit', c => bad(new Error(`hub exited (${c}). Is something already on :3999?`)));
 });
@@ -32,6 +32,11 @@ const unlocked = (w, e) => w.msgs.some(m => m.t === 'evt' && m.e === e);
   strip.close(); await wait(200);
   const again = await open('strip', 'device');
   assert(again.msgs.some(m => m.t === 'cmd' && m.v === '#ff0000'), 'state replayed');
+  // a broken frame (unmasked) used to crash the hub and drop every room at once
+  const bad = require('net').connect(3999, 'localhost', () => bad.write('GET /ws HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n'));
+  bad.on('error', () => {}).once('data', () => bad.write(Buffer.from([0x81, 1, 0x41])));
+  await wait(300);
+  assert(hub.exitCode === null && gm.readyState === 1, 'a broken frame closes only its own socket');
 
   const g = o => gm.send(JSON.stringify(o));
   g({ t: 'newteam' }); await wait(100);

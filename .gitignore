@@ -10,6 +10,7 @@ signup/photos/
 signup/restarts/
 hub/runs.jsonl
 hub/run.json
+hub/hub.log
 
 # Separate teammate repo with its own remote
 LWeek-Queuing-System/

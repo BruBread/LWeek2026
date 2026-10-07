@@ -373,7 +373,7 @@ async function findHub() {
     .then(r => r.text()).then(t => t === 'nexus-hub' ? ip : Promise.reject());
   for (;;) {
     let saved; try { saved = localStorage.getItem('nexus-hub'); } catch {}
-    const ip = await Promise.any(['localhost', saved].filter(Boolean).map(ip => ping(ip, 1000)))
+    const ip = await Promise.any(['localhost', saved].filter(Boolean).map(ip => ping(ip, 4000)))   // 4 s: on slow Wi-Fi a 1 s miss set off a 254-address scan that slowed every laptop
       .catch(() => Promise.any(Array.from({ length: 254 }, (_, i) => ping(`${net}.${i + 1}`, 4000))))
       .catch(() => null);
     if (ip) { try { localStorage.setItem('nexus-hub', ip); } catch {} return ip; }

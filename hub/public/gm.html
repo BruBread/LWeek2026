@@ -208,7 +208,7 @@ let lightOn = false;
 const light = () => { const c = $('#lightCol').value, k = lightOn ? $('#lightBri').value / 100 : 0;
   send({ t: 'cmd', to: 'strip', a: 'solid', v: '#' + [1, 3, 5].map(i => Math.round(parseInt(c.slice(i, i + 2), 16) * k).toString(16).padStart(2, '0')).join('') }); };
 const key = (id, v) => send({ t: 'cmd', to: id, a: 'key', v });
-// a room is online while its connection is up (the hub drops a dead one after 7 s), or it reported in the last 3 s (a
+// a room is online while its connection is up (the hub drops a dead one after 15 s), or it reported in the last 3 s (a
 // reset's reload). Not from the 1 s reports alone: a hidden, silent tab (a finished room) slows its timers to once a minute
 const online = id => hubUp() && (linked(id) || Date.now() - (seen[id] || 0) < 3000);
 // the run clock: from room 1's first click to the kill switch (or FINISH / RESET). waiting = a team is in, no click yet
