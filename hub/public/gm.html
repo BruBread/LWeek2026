@@ -177,7 +177,7 @@ let SIGNUP = 'http://' + location.hostname + ':4000';
 // During game 5 a room's F key skips that room's finale step (the game 5 card has its own SKIP and DONE buttons too).
 // say = the pages that flash the room's message box (a free chat with the team, it costs nothing)
 const ROOMS = [
-  { id: 'puzzle1', name: 'BRAIN UPLOAD',  k: 'sync',  stat: 'SYNC',   devs: ['mask'], say: ['desk1', 'puzzle1'], keys: [['KeyB', 'BLINK MASK'], ['KeyR', 'RESET', 'Reset room 1?']] },
+  { id: 'puzzle1', name: 'BRAIN UPLOAD',  k: 'sync',  stat: 'SYNC',   devs: ['mask'], say: ['desk1', 'puzzle1'], keys: [['KeyF', 'FORCE START', 'Start the upload for them (as if they opened Mind Upload)?'], ['KeyB', 'BLINK MASK'], ['KeyR', 'RESET', 'Reset room 1?']] },
   { id: 'puzzle2', name: 'SYSTEM POWER',  k: 'power', stat: 'ENERGY', devs: ['bulb', 'camera'], say: ['puzzle2'], keys: [['KeyU', 'UNLOCK'], ['KeyX', 'CAUGHT', 'Team caught? (-15 POWER, they advance)'], ['KeyR', 'RESET', 'Reset room 2?']] },
   { id: 'puzzle3', name: 'HIDDEN SIGNAL', k: 'trace', stat: 'TRACE',  aur: 1, devs: ['beacon'], say: ['puzzle3'], keys: [['KeyU', 'UNLOCK'], ['KeyL', 'SLOWER'], ['KeyF', 'FORCE WIN', 'Force the win?'], ['KeyR', 'RESET', 'Reset room 3?']] },
   { id: 'puzzle4', name: 'CORE GATE',     k: 'human', stat: 'HUMAN',  aur: 1, devs: ['ctrl'], say: ['puzzle4'], keys: [['KeyU', 'UNLOCK'], ['KeyF', 'FORCE WIN', 'Force the win? (the fake win, then game 5)'], ['KeyR', 'RESET', 'Reset room 4?']] },
@@ -188,6 +188,7 @@ const TIPS = {
   'FORCE WIN': "Ends this game as won right now, and the team moves on (room 3: once the hunt has started; room 4: any time after SPACE, then the fake win and game 5). During game 5 it skips this room's finale step instead.",
   SLOWER: 'The lights blink 1.5x slower for the rest of this run. Press again for slower still.',
   CAUGHT: 'Ends game 2 as caught: -15 POWER, and the team still moves on.',
+  'FORCE START': "Room 1 only: starts the upload on the wall and opens Mind Upload on the laptop, for a team that doesn't click it.",
   'BLINK MASK': "The mask's eyes blink 3 times, to point the team at the mask.",
   RESET: "Reloads this room's laptop back to its start screen. Mid-run it reopens by itself if the room before is done.",
 };
@@ -332,6 +333,10 @@ function say(r) {
 }
 ROOMS.forEach(r => $(`#${r.id} .say input`).onkeydown = e => { if (e.key === 'Enter') say(r); });   // braces: returning false would cancel every other key
 const WORD = { clear: 'CLEARED', off: 'OFFLINE', ready: 'READY', locked: 'LOCKED', playing: 'PLAYING' };
+// room 1, in words, from the wall's status (projector.html's mode, the digits typed, the finale's quick-time event)
+const room1 = s => /^(capture|upload|fight|rain|dark)$/.test(s.mode) ? 'MIND UPLOAD OPENED ▸ INTRO PLAYING' : s.mode === 'crt' ? 'BINARY COMING UP'
+  : /^(input|check)$/.test(s.mode) ? `DECODING ▸ TYPED ${(s.entry || '').padEnd(4, '_')}` : s.mode === 'done' ? 'CODE CRACKED'
+  : /^(net|atk|surge)$/.test(s.mode) ? 'FINAL PUSH' + (s.qte ? ' ▸ ' + s.qte : '') : 'TIME IN THIS ROOM';
 function drawRooms() {
   ROOMS.forEach((r, i) => {
     const card = $('#' + r.id), s = status[r.id] || {}, on = online(r.id);
@@ -342,7 +347,7 @@ function drawRooms() {
     put(card.querySelector('.state'), WORD[st]);
     put(card.querySelector('.tin'), !run.t0 ? '' : t1 != null ? 'DONE IN ' + mmss(t1 - t0) : st === 'playing' && t0 != null ? mmss(clock() - t0) : '');
     put(card.querySelector('.sub'), st === 'off' ? 'NO SIGNAL FROM ITS LAPTOP FOR 3 s' : st === 'locked' ? `WAITS FOR ROOM 0${i}` :
-      st === 'ready' ? (i ? 'UNLOCKED ▸ WAITING FOR THE TEAM' : 'WAITING FOR THE TEAM') : st === 'playing' ? 'TIME IN THIS ROOM' : '');
+      st === 'ready' ? (i ? 'UNLOCKED ▸ WAITING FOR THE TEAM' : 'WAITING FOR THE TEAM') : st === 'playing' ? (i ? 'TIME IN THIS ROOM' : room1(s)) : '');
     const v = on ? s.stat : null;
     put(card.querySelector('.live b'), v != null ? v + '%' : '--');
     card.querySelectorAll('.segs i').forEach((el, j) => el.classList.toggle('on', v != null && j < v / 4));
@@ -538,6 +543,15 @@ function drawPads(list) {
 }
 async function sfxApi(q = '', o) { const r = await fetch('sfx' + q, o), b = await r.json(); if (!r.ok) throw b.msg; return b; }
 const loadPads = () => sfxApi().then(drawPads, () => {});
+// game 5's ending, on this laptop's speaker so the whole booth hears it (TERMINATED = win; YOU LOST and TIME'S UP = lose).
+// Drop win.mp3 / lose.mp3 into hub/public/sfx/ to replace the synth fanfare / downer
+let endAt = 0;   // every finale screen reports the ending: play it once
+function ending(win) {
+  if (Date.now() - endAt < 10000) return;
+  endAt = Date.now();
+  const a = new Audio('sfx/' + (win ? 'win' : 'lose') + '.mp3'); a.volume = sfxVol;
+  a.play().catch(() => (win ? [523, 659, 784, 1047] : [392, 330, 262, 196]).forEach((f, i) => tone(f, i < 3 ? .3 : 1.4, i * (win ? .16 : .32))));
+}
 function pad(f) {
   const a = new Audio('sfx/' + f); a.volume = sfxVol;
   (playing[f] ||= new Set()).add(a);
@@ -692,6 +706,7 @@ function conn() {
     if (m.t === 'status') { status[m.id] = m.v; seen[m.id] = Date.now(); return; }   // 5 a second: the 500 ms redraw picks them up
     if (m.t === 'run') { if (m.team !== run.team || m.t0 !== run.t0 || m.end !== run.end) live = null; run = m; skew = m.now - Date.now(); }   // live: a new team, start, finish or reset
     if (m.t === 'fin') F = m;
+    if (m.t === 'evt' && m.e === 'ending') ending(m.v === 'win');   // TERMINATED / YOU LOST just landed on the finale screens
     if (m.t === 'addr') SIGNUP = 'http://' + (m.signup || location.hostname) + ':4000';   // signup null = the kiosk runs on the hub laptop
     if (m.t === 'addr') put($('#phones'), m.hub.length ? `PHONES OPEN ▸ LEDS STAND-IN ${m.hub[0]}:3000/beacon` +
       (m.hub.length > 1 ? ` ▸ OTHER NETWORKS ON THIS LAPTOP: ${m.hub.slice(1).join(', ')}` : '') : 'THIS LAPTOP IS NOT ON A NETWORK');

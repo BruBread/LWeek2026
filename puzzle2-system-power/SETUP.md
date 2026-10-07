@@ -168,8 +168,10 @@ One-time setup (done 2026-10-02 on the dev laptop):
 **Aiming: `hub\camerasetup.bat`** (any laptop on NexusV). It opens the live view in the browser and finds the camera. Keys:
 - **Arrows** move it.
 - **+ / -** change the step (1°, 5°, 15° or 45°).
-- **S** saves the aim to `camera.json`.
-- **H** goes back to the saved aim, for example after a power cut.
+- **1 / 2** save the aim for **game 1 / game 2** to `camera.json`.
+- **A / B** go back to game 1's / game 2's aim, for example after a power cut.
+
+The hub turns the camera by itself: to **game 1's aim at RESET ALL ROOMS**, and to **game 2's aim when room 1 is cleared**. The hub window logs `camera game1: ok` (or why not). It reads the aims from `signup\camera.json` on the **hub laptop**, so run camerasetup.bat there, or commit camera.json so Update.bat brings the aims to every laptop.
 - **Q** quits.
 
 Sound is off (`#media=video` in `camera.js`). Delete `#media=video` to hear the hallway on the kiosk.

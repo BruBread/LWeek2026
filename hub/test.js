@@ -6,8 +6,12 @@
 const WebSocket = require('ws'), assert = require('assert'), { spawn } = require('child_process'), fs = require('fs'), os = require('os'), path = require('path');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-hub-'));
 let hub;
+// a stand-in for signup/camera.js: never moves the real camera, just notes which aim the hub asked for
+const camLog = path.join(tmp, 'camera.log'), camJs = path.join(tmp, 'camera.js');
+fs.writeFileSync(camJs, `require('fs').appendFileSync(${JSON.stringify(camLog)}, process.argv[3] + '\\n')`);
+const aims = () => { try { return fs.readFileSync(camLog, 'utf8').trim().split('\n'); } catch { return []; } };
 const startHub = (env = {}) => new Promise((ok, bad) => {
-  hub = spawn(process.execPath, [path.join(__dirname, 'server.js')], { env: { ...process.env, PORT: '3999', RUNS: path.join(tmp, 'runs.jsonl'), RUN: path.join(tmp, 'run.json'), SFX: path.join(tmp, 'sfx'), UPDATER_PORT: '3998', FIN_GRACE: '300', ...env } });
+  hub = spawn(process.execPath, [path.join(__dirname, 'server.js')], { env: { ...process.env, PORT: '3999', RUNS: path.join(tmp, 'runs.jsonl'), RUN: path.join(tmp, 'run.json'), SFX: path.join(tmp, 'sfx'), UPDATER_PORT: '3998', FIN_GRACE: '300', CAMERA: camJs, ...env } });
   hub.stdout.once('data', () => ok());
   hub.once('exit', c => bad(new Error(`hub exited (${c}). Is something already on :3999?`)));
 });
@@ -79,6 +83,7 @@ const unlocked = (w, e) => w.msgs.some(m => m.t === 'evt' && m.e === e);
   assert(last(gm).t0 > 0, "room 1's first click starts the clock");
   p3b.send(JSON.stringify({ t: 'evt', e: 'p1done' })); await wait(100);
   assert(last(gm).splits.p1done >= 0, 'p1done sets a split');
+  await wait(300); assert.strictEqual(aims().at(-1), 'game2', "room 1 cleared: the camera turns to game 2's aim");
   const p2 = await open('puzzle2', 'page'), gm4 = await open('gm4', 'page');
   assert(unlocked(p2, 'p1done'), 'mid-run: a game page that (re)connects gets the unlocks again');
   assert(!gm4.msgs.some(m => m.t === 'evt'), 'unlocks are resent to game pages only');
@@ -150,6 +155,7 @@ const unlocked = (w, e) => w.msgs.some(m => m.t === 'evt' && m.e === e);
   g({ t: 'reset' }); await wait(200);
   r = last(gm);
   assert(r.team === '' && r.t0 === null && r.sync === null && !Object.keys(r.splits).length, 'reset clears the team, scores and splits');
+  await wait(300); assert.strictEqual(aims().at(-1), 'game1', "reset turns the camera back to game 1's aim");
   const runs = () => gm.msgs.filter(m => m.t === 'history').pop().runs, saved = runs()[runs().length - 1];
   assert(saved.team === 'Team Test' && saved.end === saved.splits.p5done, 'reset saves the run, timed at the kill switch');
   assert(bulb.msgs.some(m => m.t === 'cmd' && m.a === 'p2' && m.v === 'idle'), 'reset turns the hallway bulb off');

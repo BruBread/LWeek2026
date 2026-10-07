@@ -2,9 +2,11 @@
 //   node camera.js url   go2rtc runs this every time the kiosk pop-up opens the stream (see go2rtc.yaml). It finds the
 //                        camera on the booth network and prints its stream address, or nothing if the camera is off.
 //   node camera.js       aims the camera (hub\camerasetup.bat): arrows move it, + / - change the step,
-//                        S saves the aim, H goes back to the saved aim, Q quits.
-// camera.json next to this file holds the Camera Account from the Tapo app, and the saved aim:
-//   {"user": "...", "pass": "..."}
+//                        1 / 2 save the aim for game 1 / game 2, A / B go back to them, Q quits.
+//   node camera.js go game1   turns the camera to a saved aim, then exits. The hub runs it: game1 when room 1 starts
+//                        and at RESET ALL ROOMS, game2 when room 1 is cleared.
+// camera.json next to this file holds the Camera Account from the Tapo app, and the saved aims:
+//   {"user": "...", "pass": "...", "aims": {"game1": {"x": 0, "y": 0}, "game2": {"x": -50, "y": -32}}}
 const crypto = require('crypto'), fs = require('fs'), net = require('net'), path = require('path'), readline = require('readline');
 
 const FILE = path.join(__dirname, 'camera.json'), NET = process.env.NET || '192.168.0';
@@ -46,7 +48,7 @@ async function aim() {
   const st = await onvif(ip, `<GetStatus ${PTZ}</GetStatus>`);
   let x = +st.match(/PanTilt[^>]*\sx="([-\d.]+)"/)[1], y = +st.match(/PanTilt[^>]*\sy="([-\d.]+)"/)[1], step = 5;
   console.log(`Camera at ${ip}. The live view is in the browser.\n` +
-    'ARROWS move   + / - step size   S save this aim   H back to the saved aim   Q quit\n');
+    'ARROWS move   + / - step size   1 / 2 save as game 1 / game 2   A / B go to game 1 / game 2   Q quit\n');
   const draw = note => process.stdout.write(`\rPAN ${x}   TILT ${y}   STEP ${step}   ${note || ''}`.padEnd(70));
   let busy = false, again = false;
   async function send() {                    // the newest aim wins: holding an arrow never floods the camera
@@ -61,8 +63,9 @@ async function aim() {
     if (n === 'q' || n === 'escape' || (k.ctrl && n === 'c')) { console.log(); process.exit(0); }
     if (s === '+' || s === '=') step = Math.min(45, step === 1 ? 5 : step * 3);
     if (s === '-') step = Math.max(1, step === 5 ? 1 : Math.round(step / 3));
-    if (n === 's') { C.aim = { x, y }; fs.writeFileSync(FILE, JSON.stringify(C, null, 2)); return draw('SAVED'); }
-    if (n === 'h') { if (!C.aim) return draw('NOTHING SAVED YET'); ({ x, y } = C.aim); send(); return draw('BACK TO SAVED'); }
+    const game = { 1: 'game1', 2: 'game2' }[s], back = { a: 'game1', b: 'game2' }[n];
+    if (game) { (C.aims ||= {})[game] = { x, y }; fs.writeFileSync(FILE, JSON.stringify(C, null, 2)); return draw(`SAVED AS ${game.toUpperCase()}`); }
+    if (back) { if (!C.aims?.[back]) return draw(`NO ${back.toUpperCase()} AIM YET`); ({ x, y } = C.aims[back]); send(); return draw(back.toUpperCase()); }
     if (/^(left|right|up|down)$/.test(n)) {
       x = clamp(x + ({ left: -step, right: step }[n] || 0), PAN);
       y = clamp(y + ({ up: step, down: -step }[n] || 0), TILT);
@@ -75,4 +78,10 @@ async function aim() {
 
 if (process.argv[2] === 'url') find().then(ip => process.stdout.write(ip ?   // exit now: go2rtc waits, and so would the unanswered knocks
   `rtsp://${encodeURIComponent(C.user)}:${encodeURIComponent(C.pass)}@${ip}:554/stream1#media=video` : '', () => process.exit()));
+else if (process.argv[2] === 'go') {          // node camera.js go game1: turn to that saved aim, then exit
+  const a = C.aims?.[process.argv[3]];
+  if (!a) { console.log(`no ${process.argv[3]} aim in camera.json: save one with hub\\camerasetup.bat`); process.exit(1); }
+  find().then(ip => ip ? moveTo(ip, a.x, a.y) : Promise.reject(new Error('camera not found')))
+    .then(() => process.exit(0), e => { console.log(e.message); process.exit(1); });
+}
 else aim().catch(e => { console.log('\n' + e.message); process.exit(1); });

@@ -1,6 +1,8 @@
 @echo off
-rem Aim game 2's hallway camera (Tapo C200). The live view opens in the browser; this window moves the camera.
-rem ARROWS move it, + / - change the step, S saves the aim, H goes back to the saved aim, Q quits.
+rem Aim the hallway camera (Tapo C200) for game 1 and game 2. The live view opens in the browser; this window moves it.
+rem ARROWS move it, + / - change the step, 1 / 2 save the aim for game 1 / game 2, A / B go back to them, Q quits.
+rem The hub turns the camera to game 1's aim when room 1 starts and at RESET ALL ROOMS, and to game 2's when room 1 is
+rem cleared. It reads the aims from signup\camera.json ON THE HUB LAPTOP: run this there, or commit camera.json.
 rem Needs signup\go2rtc.exe and signup\camera.json on this laptop (see puzzle2-system-power\SETUP.md, "Hallway camera").
 call "%~dp0..\booth.bat"
 cd /d "%~dp0..\signup"

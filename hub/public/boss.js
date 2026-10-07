@@ -29,7 +29,7 @@ const C = {
   WORDS: 5, WORDS_HARD_BELOW: 50,           // WORDS: 5 rounds. POWER (game 2) below 50 = the hardest list
   // MIRRORS (room 4): hits to win; her core's radius and each mirror's half-length in arena heights, [at HUMAN 0, at HUMAN
   // 100]; the keyboard stand-in's turning speed (knob travel per s); ms to charge a shot (as in game 4) and to vent after
-  MIRROR: { hits: 5, core: [.09, .055], mirror: [.12, .085], keySpeed: .35, chargeMs: 900, coolMs: 1300 },
+  MIRROR: { hits: 3, core: [.09, .055], mirror: [.12, .085], keySpeed: .35, chargeMs: 900, coolMs: 1300 },
   ARROW: '',                 // room 4's lockout: e.g. '◄' if that points at room 3 from where the players stand
   KILL_KEYS: ['Space', 'Enter', 'NumpadEnter'],   // any of these counts in every kill room (the screens name one)
   COUNT_MS: 1000,            // the map's 3 · 2 · 1 · NOW! (SPACE in room 3 during the kill switch): ms per number
@@ -245,7 +245,6 @@ html.boss-on { background: #000; }
 #boss.see { background: transparent; }
 #boss.red { --c: #ff3344; --cg: rgba(255,51,68,.06); }
 #boss.black #bgrid, #boss.black #bmain { display: none; }
-#boss.pointer { cursor: default; }
 #boss * { box-sizing: border-box; margin: 0; }
 #bgrid { position: absolute; inset: 0; background: linear-gradient(var(--cg) 1px, transparent 1px) 0 0 / 4vw 4vw,
   linear-gradient(90deg, var(--cg) 1px, transparent 1px) 0 0 / 4vw 4vw; }
@@ -416,9 +415,6 @@ html.boss-on { background: #000; }
 #bminus { position: absolute; inset: 0; z-index: 44; display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 2.6vh; background: rgba(24,0,4,.95); color: #fff; text-align: center; pointer-events: none; opacity: 0; --c: #ff3344; }
 #bminus .big { font-size: 9vw; }
-#bfocus { position: absolute; z-index: 45; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
-  gap: 2vh; background: rgba(0,0,0,.85); color: #fff; text-align: center; }
-#boss.unfocused #bfocus { display: flex; }
 #bhelp { position: absolute; z-index: 70; top: 12px; right: 12px; display: none; padding: 10px 14px; background: rgba(0,0,0,.9);
   border: 1px solid #4dff88; color: #4dff88; font: 14px/1.6 Consolas, monospace; letter-spacing: 0; white-space: pre; }
 #boss.help #bhelp { display: block; }
@@ -434,7 +430,6 @@ function wake() {
   B.innerHTML = '<canvas id="bx"></canvas><div id="bgrid"></div><div id="bmain"></div>' +
     '<div id="bstage"><i class="glow"></i><img class="f0" alt="" crossorigin="anonymous"><img class="f1" alt=""><img class="f2" alt=""></div>' +
     '<div id="bdlg"><div class="pf"><img alt=""></div><div class="tx"></div></div>' +
-    '<div id="bfocus"><div class="big">CLICK HERE</div><div class="sub">MOVE THE MOUSE OFF THE BOTTOM EDGE OF THE LAPTOP, ONTO THIS WALL, AND CLICK</div></div>' +
     '<div id="blives"></div><div id="bminus"></div>' +
     '<div id="bflash"></div><div id="bscan"></div><div id="bvig"></div><div id="bflick"></div><div id="bhelp"></div>';
   document.documentElement.append(B);   // outside <body>, so hiding the page doesn't hide us
@@ -1207,7 +1202,7 @@ async function theEnd(g, restore) {
   ringsFrom = performance.now(); scene = rings;
   main(`<div class="mid"><div class="note">${ROOM === 3 ? 'EVERY SECTOR' : SEC(ROOM)} ▸ CLEAN</div><div class="big" id="bfin"></div>` +
     `<div class="sub">AURORA V ▸ OFFLINE</div><div class="note">THANK YOU FOR PLAYING ▸ EXIT THROUGH SECTOR 04</div></div>`);
-  if (!restore) { one('end'); strip('win'); flash(1, 900); await resolveText($('bfin'), 'TERMINATED', 70); stamp($('bfin')); }
+  if (!restore) { one('end'); send({ t: 'evt', e: 'ending', v: 'win' }); strip('win'); flash(1, 900); await resolveText($('bfin'), 'TERMINATED', 70); stamp($('bfin')); }
   else $('bfin').textContent = 'TERMINATED';
 }
 // ===== Out of lives (or out of time before game 4's end): she wins. The -1 LIFE banner plays, then every screen goes
@@ -1225,7 +1220,7 @@ async function theLost(g, restore) {
   B.classList.remove('black'); setRain(1);
   main(`<div class="mid"><div class="note">${time ? "TIME'S UP" : `ALL ${S.maxLives} LIVES GONE`}</div><div class="big" id="bfin"></div>` +
     `<div class="sub">AURORA V ▸ STILL ONLINE</div><div class="note">THANK YOU FOR PLAYING ▸ EXIT THROUGH SECTOR 04</div></div>`);
-  if (!restore) { flash(1, 700, '#4dff88'); shake(B, 14, 600); await resolveText($('bfin'), 'YOU LOST', 70); stamp($('bfin')); }
+  if (!restore) { send({ t: 'evt', e: 'ending', v: 'lose' }); flash(1, 700, '#4dff88'); shake(B, 14, 600); await resolveText($('bfin'), 'YOU LOST', 70); stamp($('bfin')); }
   else $('bfin').textContent = 'YOU LOST';
 }
 
@@ -1262,11 +1257,6 @@ function onKey(e) {
 ['keydown', 'keyup', 'keypress'].forEach(t => addEventListener(t, onKey, true));
 ['pointerdown', 'mousedown', 'mouseup', 'click', 'dblclick', 'contextmenu', 'wheel'].forEach(t => addEventListener(t, e => live && e.stopImmediatePropagation(), true));
 addEventListener('blur', () => task?.blur?.());   // no key stuck down if the window loses focus
-setInterval(() => {                            // room 1's game runs on the projector: its keys only arrive if that window is focused
-  if (!live || ROOM !== 1) return;
-  const lost = (phase === 'fight' || phase === 'kill') && !document.hasFocus();
-  B.classList.toggle('unfocused', lost); B.classList.toggle('pointer', lost);
-}, 500);
 function helpPanel() {
   B.classList.toggle('help');
   $('bhelp').textContent = `GAME 5 · THE FINALE\nroom ${ROOM}   phase ${phase}   lives ${S?.lives}   hub ${ws?.readyState === 1 ? 'connected' : 'DOWN'}   clock ±${Math.round(best / 2)} ms\n\n` +

@@ -18,6 +18,8 @@ html, body { height: 100%; background: #000; overflow: hidden; cursor: default; 
 
 /* hotspot over the physical mask: invisible, and the cursor stays an arrow so it gives nothing away */
 #hotspot { position: fixed; z-index: 40; }
+/* nothing on the wall reacts to the mouse: the laptop window keeps the keyboard and sends the keys here */
+body:not(.calib) { pointer-events: none; }
 /* hover glow over the mask: a noisy CRT circle, not a flat one. --noise is generated in JS */
 #glow { position: absolute; left: 50%; top: 50%; width: var(--d); height: var(--d); translate: -50% -50%; border-radius: 50%;
   pointer-events: none; opacity: 0; transition: opacity .6s;
@@ -143,7 +145,10 @@ body.atk #atk { display: flex; }
 #mash { padding: .7vw 2.2vw; font-size: 2.6vw; font-weight: 700; letter-spacing: .25em; color: #fff; background: var(--hud);
   text-shadow: 0 0 6px rgba(0,0,0,.7); box-shadow: 0 0 30px var(--hud);
   will-change: transform; animation: mashPulse .45s ease-in-out infinite alternate; }
-@keyframes mashPulse { to { scale: 1.06; } }                         /* scale only: stays on the GPU, no repaint */
+@keyframes mashPulse { to { scale: 1.06; } }
+#mash.hold { animation: none; }                                      /* HOLD: a steady banner, SPAM: it pulses */
+#mash kbd, .shard kbd { display: inline-block; margin-left: .35em; padding: 0 .55em; border: .2vw solid #fff; border-radius: .3em;
+  font: inherit; letter-spacing: .1em; background: rgba(0,0,0,.25); }                         /* scale only: stays on the GPU, no repaint */
 .shard { position: absolute; margin: 0; pointer-events: none; will-change: transform, opacity;
   padding: .7vw 2.2vw; font-size: 2.6vw; font-weight: 700; letter-spacing: .25em; color: #fff; background: var(--hud);
   text-shadow: 0 0 6px rgba(0,0,0,.7); box-shadow: 0 0 30px var(--hud); white-space: nowrap; text-align: center; }
@@ -218,7 +223,7 @@ body.final #final { display: flex; }
       <p>NOTE <span id="pnote"></span></p>
     </div>
     <div id="nBar"><div class="row"><span>TRANSFERRING CONSCIOUSNESS</span><span id="bp">0.0%</span></div><div id="segs"></div></div>
-    <div id="atk"><div id="atkT"></div><div id="mash">MASH ANY KEY TO PUSH THROUGH</div><div id="mashM"><i></i></div><div id="mashT">5.0</div></div>
+    <div id="atk"><div id="atkT"></div><div id="mash"></div><div id="mashM"><i></i></div><div id="mashT">5.0</div></div>
     <div id="term" hidden></div>
   </div>
   <div id="final">
@@ -237,9 +242,8 @@ drag the green box over the mask, drag its corner to resize
 line the corner brackets up with the projector edges
 <span id="calibInfo"></span>
 
-Ctrl+Alt+F  force capture (if click or mask fails)
+Ctrl+Alt+F  force the upload (if the laptop's Mind Upload fails)
 Ctrl+Alt+B  blink the mask eyes (hint)
-Ctrl+Alt+D  stuck hint now (MOVE THE MOUSE DOWN + red LED)
 Ctrl+Alt+R  reset for next team (new code)
 Ctrl+Alt+P  replay the sequence (timing tests)
 Ctrl+Alt+W  replay only the win / mind upload
@@ -254,11 +258,9 @@ const CFG = {
   DUST: 140,                 // particles sucked into the mask after the click; lower if the booth laptop stutters
   RAIN_CELL: 18,             // px per character in the collapse; smaller = more mask detail, bigger = faster
   NODES: 38,                 // network nodes in the finale
-  HINT_AFTER: 60,            // s after the run clock starts (the team's first click, or START CLOCK NOW): mask still not clicked ->
-                             // the laptop wallpaper glitches to a green MOVE THE MOUSE DOWN and the mask's red LED blinks until it is
   VOLUME: 0.8,
   MUSIC_VOLUME: 0.7,         // recorded sounds in sounds/ (0..1)
-  // SYNC, carried to the finale: 100, minus this per wrong code and per attack they didn't mash through in time
+  // SYNC, carried to the finale: 100, minus this per wrong code and per attack they didn't push through in time
   SYNC_WRONG: 8, SYNC_MISS: 12, SYNC_MIN: 20,
 };
 const T = {                  // ms
@@ -276,18 +278,20 @@ const T = {                  // ms
   typeChar: 45,
   netBuild: 1100,            // finale: network draws itself in
   uploadRate: 1.6,           // finale bar speed (bigger = faster)
-  mashTime: 5000,            // players get this long to mash; the attack clears when the timer runs out...
-  mashNeed: 15,              // ...or as soon as they hit this many keys
+  qteTime: 5000,             // each attack's quick-time event: players get this long; it clears when the timer runs out...
+  spamNeed: 15,              // ...or at this many presses (SPAM)...
+  holdNeed: 2000,            // ...or after holding the key this many ms without letting go (HOLD)
   termChar: 22,              // terminal typing speed after each attack
   termHold: 500,             // how long the result line stays up
   riser: 1700,               // everything collapses into the mask before the drop
 };
-// Aurora's attacks during the second (winning) upload; `lose` = % she knocks the bar back
+// Aurora's attacks during the second (winning) upload; `lose` = % she knocks the bar back. qte = [spam | hold, key code]:
+// only SPACE and plain letters, never anything near Ctrl/Alt/Esc/F-keys that could pull the browser away
 const ATTACKS = [
-  { at: 30, text: 'STOP',                  cmd: 'breach --firewall',   win: 'FIREWALL BYPASSED',       lose: 5,  rgb: 8 },
-  { at: 46, text: "YOU DON'T BELONG HERE", cmd: 'run counter_hack',    win: 'COUNTER-HACK SUCCESSFUL', lose: 8,  rgb: 13 },
-  { at: 72, text: 'I WILL ERASE YOU',      cmd: 'override aurora.core', win: 'AURORA OVERRIDDEN',      lose: 11, rgb: 18 },
-  { at: 94, text: 'ACCESS DENIED',         cmd: 'force --access --all', win: 'ACCESS FORCED',          lose: 6,  rgb: 22, blue: true },
+  { at: 30, text: 'STOP',                  cmd: 'breach --firewall',   win: 'FIREWALL BYPASSED',       lose: 5,  rgb: 8,  qte: ['spam', 'Space'] },
+  { at: 46, text: "YOU DON'T BELONG HERE", cmd: 'run counter_hack',    win: 'COUNTER-HACK SUCCESSFUL', lose: 8,  rgb: 13, qte: ['hold', 'KeyQ'] },
+  { at: 72, text: 'I WILL ERASE YOU',      cmd: 'override aurora.core', win: 'AURORA OVERRIDDEN',      lose: 11, rgb: 18, qte: ['spam', 'KeyE'] },
+  { at: 94, text: 'ACCESS DENIED',         cmd: 'force --access --all', win: 'ACCESS FORCED',          lose: 6,  rgb: 22, blue: true, qte: ['hold', 'Space'] },
 ];
 const NOTES = ['Has not slept properly since midterms', 'Owes a friend 50 pesos', 'Laughs at own jokes',
   'Waved back at someone who was not waving', 'Knows every word to exactly one song', 'Still has 3,000 unread emails'];
@@ -338,11 +342,7 @@ async function eyes(v) {
   while (eyeSent !== eyeWant) { eyeSent = eyeWant; await mask('level?v=' + eyeSent); }
   eyeBusy = false;
 }
-setInterval(() => { eyeSent = null; eyes(eyeWant); mask('red?v=' + red);
-  if (red && hubWs?.readyState === 1) hubWs.send(JSON.stringify({ t: 'cmd', to: 'desk1', a: 'hint' })); }, 2000);   // a reloaded desktop gets it again
-// stuck hint: blink the mask's red LED (needs the /red sketch) and glitch the laptop's wallpaper, until the mask is clicked
-let red = 0, hintT;
-function stuckHint() { if (mode === 'idle' && !red) { red = 1; mask('red?v=1'); } }
+setInterval(() => { eyeSent = null; eyes(eyeWant); }, 2000);
 async function blink(n = 3, ms = 180) {          // flash the eyes against whatever they're showing, then put them back
   const b = eyeWant;
   for (let i = 0; i < n; i++) { eyes(b ? 0 : CFG.EYES_FULL); await wait(ms); eyes(b); await wait(ms); }
@@ -391,14 +391,24 @@ async function hub() {
   ws.onclose = () => setTimeout(hub, 2000);
   ws.onmessage = e => { const m = JSON.parse(e.data);
     if (m.t === 'cmd' && m.a === 'key') dispatchEvent(new KeyboardEvent('keydown', { code: m.v, ctrlKey: true, altKey: true }));
-    if (m.t === 'cmd' && m.a === 'glow') { deskGlow = !!m.v; glowNow(); }   // Binary Key open on the laptop
     if (m.t === 'cmd' && m.a === 'msg') window.transmit?.(m.v);           // the GM's message, flashed for 2 s (also on the laptop)
     if (m.t === 'run') window.RUN = m;            // runclock.js reads it
-    if (m.t === 'run') { clearTimeout(hintT);           // m.now = hub time, like t0, so this laptop's clock doesn't matter
-      if (m.t0 && m.end == null && m.splits?.p1done == null) hintT = setTimeout(stuckHint, m.t0 + CFG.HINT_AFTER * 1000 - m.now); } };
+  };
 }
 hub();
-setInterval(() => hubWs?.readyState === 1 && hubWs.send(JSON.stringify({ t: 'status', v: { mode, code: CODE.join(''), stat: sync(), mask: Date.now() - maskAt < 5000 } })), 1000);
+// the laptop (desktop.html) follows the wall: its loading screen, its key, and the 4 password boxes
+let upPct = 0;
+// through server.js on this laptop (no hub needed), one message at a time so they stay in order
+let linkQ = Promise.resolve();
+const toLaptop = m => linkQ = linkQ.then(() => fetch('/link?to=desk', { method: 'POST', body: JSON.stringify(m) })).catch(() => {});
+const toDesk = () => toLaptop({ a: 'wall', v: { mode, entry, p: upPct } });
+new EventSource('/link?id=wall').onmessage = e => { const m = JSON.parse(e.data);
+  if (m.a === 'start') capture();                // Mind Upload opened on the laptop
+  // a key typed on the laptop, replayed here as a real key event so game 5 (boss.js) gets it too
+  if (m.a === 'kd' || m.a === 'ku') dispatchEvent(new KeyboardEvent(m.a === 'kd' ? 'keydown' : 'keyup', { key: m.v.key, code: m.v.code, repeat: m.v.rep }));
+};
+setInterval(() => { toDesk();
+  hubWs?.readyState === 1 && hubWs.send(JSON.stringify({ t: 'status', v: { mode, entry, qte, code: CODE.join(''), stat: sync(), mask: Date.now() - maskAt < 5000 } })); }, 1000);
 
 // ===== Sound (all synthesized) =====
 const AC = new AudioContext();
@@ -460,7 +470,7 @@ const sfx = {
 const SOUNDS = {
   upload1:     'sounds/upload1.mp3',        // first brain upload: from the click until the screen collapses
   detected:    'sounds/detected.mp3',       // one-shot as "UNAUTHORIZED CONSCIOUSNESS DETECTED" slams in
-  mashIn:      'sounds/mash-in.mp3',        // one-shot when the MASH ANY KEY banner appears
+  mashIn:      'sounds/mash-in.mp3',        // one-shot when the SPAM / HOLD banner appears
   mashOut:     'sounds/mash-out.mp3',       // one-shot when it goes away (shattered or timed out)
   crtMusic:    'sounds/crt-music.mp3',      // loop (hub): from the green CRT boot until the code is cracked
   finaleMusic: 'sounds/finale-music.mp3',   // loop (hub): from the red CRT boot to MIND UPLOADED
@@ -791,8 +801,8 @@ function log(line) {
 // ===== The sequence =====
 async function capture() {
   if (mode !== 'idle' || calib) return;
-  mode = 'capture'; humOn(false); hs.classList.remove('on'); eyes(CFG.EYES_FULL); red = 0; mask('red?v=0');
-  hubSend([{ t: 'evt', e: 'p1start' }]);           // the run clock starts at the team's first click (this, or opening Binary Key)
+  mode = 'capture'; humOn(false); eyes(CFG.EYES_FULL);
+  hubSend([{ t: 'evt', e: 'p1start' }]);           // the laptop already started the clock; this covers Ctrl+Alt+F
 
   // beat 2: capture
   $('#flash').animate([{ opacity: 1 }, { opacity: 1, offset: .35 }, { opacity: 0 }], 200);
@@ -804,6 +814,7 @@ async function capture() {
   let p = 0;
   while (p < 97) {
     p = Math.min(97, p + Math.random() * Math.random() * T.uploadBurst);
+    if ((upPct | 0) !== (p | 0)) { upPct = p; toDesk(); }   // the laptop's loading bar follows this one
     $('#pn').textContent = Math.floor(p);
     spawnFrag(); if (Math.random() < .35) spawnFrag();
     if (Math.random() < .25) log(LOG[Math.random() * LOG.length | 0]);
@@ -825,7 +836,7 @@ async function capture() {
 
   // ...and the screen collapses into falling characters
   frags.length = 0; startRain(); mode = 'rain'; sfx.collapse();
-  while (!rain.done) await wait(50);
+  for (const t = performance.now(); !rain.done && performance.now() - t < T.rainFall + 4000; ) await wait(50);   // drawn per frame: never hang if frames stop
 
   // dead black
   mode = 'dark'; ctx.clearRect(0, 0, W, H); fade('upload1', 0, 800);
@@ -885,6 +896,7 @@ async function crtOn(els, cls, color, speed = 1) {
 // ===== Beat 6: input, micro-glitches (never touch the digits) =====
 let entry = '', taunt = 0;
 function renderCells() {
+  toDesk();
   $('#cells').innerHTML = [0, 1, 2, 3].map(i =>
     `<div class="cell${i === entry.length ? ' cur' : ''}">${entry[i] ?? '_'}</div>`).join('');
 }
@@ -932,7 +944,9 @@ async function win() {
 }
 
 // ===== Finale: the second upload attempt, which the players win =====
-let mash = 0;
+let mash = 0, qte = '', qteKey = '';   // qte: what the GM panel shows, e.g. 'HOLD Q'
+const held = {};                     // keys down right now (codes), for HOLD
+const KEYNAME = { Space: 'SPACE', KeyQ: 'Q', KeyE: 'E' };
 const segEls = [];
 function renderBar(p) {
   $('#bp').textContent = Math.max(0, p).toFixed(1) + '%';
@@ -1010,19 +1024,26 @@ async function attack(A, bar) {
     shake(app, 16, 500);
     for (let i = 0; i < 10; i++) { bar.p -= A.lose / 10; renderBar(bar.p); await wait(35); }   // she pushes the upload back
   }
-  // players push through: mashing fills the meter before the timer runs out; it clears on its own at 0 either way
+  // players push through with a quick-time event: SPAM the key, or HOLD it, before the timer runs out
+  const [kind, k] = A.qte, spam = kind === 'spam', need = spam ? T.spamNeed : T.holdNeed;
+  qte = `${spam ? 'SPAM' : 'HOLD'} ${KEYNAME[k]}`; qteKey = k;
+  $('#mash').innerHTML = `${spam ? 'SPAM' : 'HOLD'}<kbd>${KEYNAME[k]}</kbd>`; $('#mash').classList.toggle('hold', !spam);
   $('#atk').classList.add('prompt'); play('mashIn'); mash = 0;
   const t0 = performance.now(), mt = $('#mashT');
-  let left;
-  while (mash < T.mashNeed && (left = T.mashTime - (performance.now() - t0)) > 0) {
-    $('#mashM i').style.width = mash / T.mashNeed * 100 + '%';
-    eyes(CFG.EYES_LOW + (CFG.EYES_FULL - CFG.EYES_LOW) * mash / T.mashNeed | 0);
+  let left, got = 0, last = t0;
+  while (got < need && (left = T.qteTime - (performance.now() - t0)) > 0) {
+    const now = performance.now();
+    got = spam ? mash : held[k] ? got + now - last : 0;   // HOLD: letting go starts it over
+    last = now;
+    $('#mashM i').style.width = Math.min(1, got / need) * 100 + '%';
+    eyes(CFG.EYES_LOW + (CFG.EYES_FULL - CFG.EYES_LOW) * Math.min(1, got / need) | 0);
     mt.textContent = (left / 1000).toFixed(1) + 's'; mt.classList.toggle('low', left < 1500);
     await wait(30);
   }
+  qte = qteKey = '';
   $('#mashM i').style.width = '100%';
   play('mashOut');
-  if (mash >= T.mashNeed) { eyes(CFG.EYES_FULL); await shatter($('#mash')); }   // they broke through: full eyes, the banner shatters
+  if (got >= need) { eyes(CFG.EYES_FULL); await shatter($('#mash')); }   // they broke through: full eyes, the banner shatters
   else { missed++; hud(); $('#nStat').animate([{ color: '#fff', textShadow: '0 0 20px #fff' }, {}], 600); }   // too slow: SYNC drops, visibly
 
   B.classList.remove('atk'); rgbAmt = 0; app.classList.remove('rgb');
@@ -1116,18 +1137,6 @@ placeHS();
   hs.style.setProperty('--noise', `url(${n.toDataURL()})`);
 }
 
-// the glow, the eyes and a low hum are the only tells: on hover, and while Binary Key is open on the laptop (desktop.html)
-let hovering = false, deskGlow = false;
-function glowNow() {
-  if (mode !== 'idle' || calib) return;
-  const on = hovering || deskGlow;
-  if (on === hs.classList.contains('on')) return;
-  hs.classList.toggle('on', on); eyes(on ? CFG.EYES_DIM : 0); humOn(on);
-}
-hs.addEventListener('pointerenter', () => { hovering = true; glowNow(); });
-hs.addEventListener('pointerleave', () => { hovering = false; glowNow(); });
-hs.addEventListener('click', capture);
-
 let drag = null;
 hs.addEventListener('pointerdown', e => {
   if (!calib) return;
@@ -1157,8 +1166,29 @@ panel.addEventListener('pointermove', e => {
 });
 panel.addEventListener('pointerup', () => { if (pdrag) { pdrag = null; store.set('panel', { x: panel.offsetLeft / W, y: panel.offsetTop / H }); } });
 
-// ===== Keys: players type digits; staff use Ctrl+Alt+<key> (H = control panel) (Ctrl+Shift combos are taken by the browser) =====
+// ===== Keys: players type on the laptop; desktop.html sends every plain key here through the hub (kd / ku). Keys typed
+// on this window work too, in case someone clicks the wall anyway. Staff use Ctrl+Alt+<key> (H = control panel)
+// (Ctrl+Shift combos are taken by the browser) =====
+function gameKey({ key, code, rep }, down) {
+  if (!down) { delete held[code]; return; }
+  held[code] = true;
+  if (rep) return;                               // a held key's auto-repeat never counts as a press
+  if (mode === 'atk') {                          // the quick-time event: only its key counts
+    if (code !== qteKey) return;
+    sfx.hit();
+    if ($('#mash').classList.contains('hold')) return;
+    mash++;
+    $('#atkT').animate([{ translate: `${rand(-12, 12)}px ${rand(-6, 6)}px` }, { translate: '0 0' }], 90);
+    return;
+  }
+  if (mode !== 'input') return;
+  if (/^\d$/.test(key) && entry.length < 4) {
+    entry += key; sfx.tick(); renderCells();
+    if (entry.length === 4) check();
+  } else if (key === 'Backspace') { entry = entry.slice(0, -1); renderCells(); }
+}
 addEventListener('keydown', e => {
+  e.preventDefault();                            // no browser shortcut (Ctrl+H history, F5, F7...) can pull the wall away
   if (e.ctrlKey && e.altKey && e.code === 'KeyH') {   // control panel = hotspot box + corner brackets + shortcuts, all in one
     e.preventDefault(); calib = !calib; document.body.classList.toggle('calib', calib); placeHS(); return;
   }
@@ -1166,33 +1196,17 @@ addEventListener('keydown', e => {
     e.preventDefault();
     if (e.code === 'KeyF') capture();
     if (e.code === 'KeyB') blink(3, 300);          // staff hint: "look at the mask"
-    if (e.code === 'KeyD') stuckHint();            // the 1-minute hint now: MOVE THE MOUSE DOWN + red LED
-    if (e.code === 'KeyR') { eyes(0); hubSend([{ t: 'cmd', to: 'desk1', a: 'key', v: 'KeyR' }]); setTimeout(() => location.reload(), 150); }   // the laptop's desktop.html resets too
+    if (e.code === 'KeyR') { eyes(0); toLaptop({ a: 'reset' }); setTimeout(() => location.reload(), 150); }   // the laptop's desktop.html resets too
     if (e.code === 'KeyP') { eyes(0); location.hash = 'replay'; location.reload(); }
     if (e.code === 'KeyW') { eyes(0); location.hash = 'win'; location.reload(); }
     if (e.code === 'KeyM') { muted = !muted; store.set('muted', muted); master.gain.value = muted ? 0 : CFG.VOLUME;
       Object.values(tracks).forEach(a => a.muted = muted); placeHS(); }
     return;
   }
-  if (mode === 'atk') {      // players mash to push back Aurora
-    if (e.repeat) return;
-    mash++; sfx.hit();
-    $('#atkT').animate([{ translate: `${rand(-12, 12)}px ${rand(-6, 6)}px` }, { translate: '0 0' }], 90);
-    return;
-  }
-  if (mode !== 'input') return;
-  if (/^\d$/.test(e.key) && entry.length < 4) {
-    entry += e.key; sfx.tick(); renderCells();
-    if (entry.length === 4) check();
-  } else if (e.key === 'Backspace') { entry = entry.slice(0, -1); renderCells(); }
+  if (e.ctrlKey || e.altKey || e.metaKey) return;
+  gameKey({ key: e.key, code: e.code, rep: e.repeat }, true);
 });
-
-// the laptop screen (desktop.html) is a separate window: keys only reach this one after a click on the wall
-setInterval(() => {
-  const f = document.hasFocus(), set = (el, t) => el.textContent !== t && (el.textContent = t);
-  set($('#entry .lbl'), f ? 'ENTER DECRYPTION KEY' : 'CLICK HERE, THEN TYPE THE KEY');
-  set($('#mash'), f ? 'MASH ANY KEY TO PUSH THROUGH' : 'CLICK HERE, THEN MASH ANY KEY');
-}, 300);
+addEventListener('keyup', e => { e.preventDefault(); gameKey({ code: e.code }, false); });
 
 eyes(0);
 if (location.hash === '#replay') { history.replaceState(null, '', location.pathname + location.search); setTimeout(capture, 400); }

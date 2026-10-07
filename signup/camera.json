@@ -1,8 +1,10 @@
 {
   "user": "IcyCam",
   "pass": "aurorawashere",
-  "aim": {
-    "x": -50,
-    "y": -32
+  "aims": {
+    "game2": {
+      "x": -50,
+      "y": -32
+    }
   }
 }

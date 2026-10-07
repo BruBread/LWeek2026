@@ -122,6 +122,10 @@ function cmd(to, a, v) {
   else state[to] = { a, v };                  // remember even if offline -> replayed on connect
   const w = conns.get(to); if (w) send(w, { t: 'cmd', a, v });
 }
+// the camera turns between its two saved aims (hub\camerasetup.bat): game 1's at RESET ALL ROOMS, game 2's once room 1
+// is cleared. signup/camera.js finds the camera and moves it; the aims are in signup/camera.json on THIS laptop
+const CAM = process.env.CAMERA ?? path.join(__dirname, '..', 'signup', 'camera.js');   // CAMERA: only the tests change it
+const camera = aim => execFile(process.execPath, [CAM, 'go', aim], { timeout: 15000 }, (err, out) => log(`camera ${aim}: ${err ? String(out || err.message).trim() : 'ok'}`));
 
 // What the team carries into the finale, one team in the room at a time. Each game leaves one resource (0-100):
 // sync = P1 upload depth, power = P2 reserve, trace = how far P3's trace got, human = P4's human error (missed shots, slow layers)
@@ -309,7 +313,7 @@ wss.on('connection', (ws, req) => {
     // the hallway light off. (The GM panel also marks the group done on the kiosk and calls the next one.)
     else if (m.t === 'reset') {
       closeRun(); const was = run.team; run = fresh();
-      cmd(null, 'scene', 'dark'); ROOM_PAGES.forEach(id => cmd(id, 'key', 'KeyR'));
+      cmd(null, 'scene', 'dark'); ROOM_PAGES.forEach(id => cmd(id, 'key', 'KeyR')); camera('game1');
       changed(`reset all rooms${was ? ' after ' + was : ''}`);
     }
     else if (m.t === 'newteam') { clearTimeout(judgeT); presses = {}; run = fresh(String(m.team || '').slice(0, 40), String(m.code || '').slice(0, 8)); changed(`new team ${run.team}`); }
@@ -318,6 +322,7 @@ wss.on('connection', (ws, req) => {
     else if (m.t === 'finish' && run.t0 && run.end == null) { closeRun(); run.fin = finFresh(); changed(`finish ${run.team}`); }   // the finale screens go back to their own games
     else if (m.t === 'evt') {
       if (m.e === 'p1start') startClock(ws.id);
+      if (m.e === 'p1done') camera('game2');   // not back to game 1 on p1start: a reloaded room 1 page sends it again mid-run
       if (/^p\d(start|done)$/.test(m.e) && run.t0 && run.end == null && run.splits[m.e] == null) { run.splits[m.e] = Date.now() - run.t0; save(); toPages(runMsg()); }
       if (m.e !== 'music') log(`evt ${ws.id}: ${m.e}`);   // music: room pages asking the GM laptop to play their background loops
       toPages({ t: 'evt', id: ws.id, e: m.e, v: m.v });
