@@ -1,19 +1,54 @@
 # NEXUS: The Core Protocol
 
-A multi-room escape room built for the ICpEP.se booth at LWeek 2026 (October 5–9). Teams "upload their heads" into Aurora, a rogue AI, and work through four linked rooms to shut her down. Each room runs on its own laptop. The laptops, the ESP32-driven props and a game-master panel all talk through one local WebSocket hub.
+A five-stage, multi-room escape room built for the ICpEP.SE – USLS booth at LWeek 2026 (University of St. La Salle, Bacolod). Teams "upload their minds" into Aurora, a rogue AI, and fight their way through four linked rooms and a finale to shut her down.
 
-The booth is open to the whole university, so the puzzles test observation and teamwork rather than engineering knowledge. The engineering is in the system that runs them.
+Each room runs on its own laptop. The laptops, four ESP32 props, a smart bulb, a laser strip and a game-master panel all talk through one Node.js WebSocket hub on an offline local network.
 
-<!-- TODO: add a 60–90 s video or GIF of a run, plus photos of the mask and the beacon -->
+**All 400 tickets sold out, for ₱20,400 in sales.**
 
-## Highlights
+![Players in masks walking through the danger-tape corridor](docs/images/players.jpg)
 
-- **Networked rooms.** Five game pages, a GM panel and ESP32 props stay in sync over a Node.js WebSocket hub on a local router with no internet.
-- **Hardware props.** An ESP32 drives the wall mask's LED eyes when the projected cursor hovers over it. A second ESP32 blinks a hidden code on 3 blue LEDs, faster every round, until only a phone's slow-motion video can count it. Two more are Room 4's ring controllers: one potentiometer each, streamed to the browser over USB with Web Serial.
-- **Fail-safe by design.** The laptop page is the single source of truth. ESP32s only execute commands, keep a safe default when Wi-Fi drops, and cycle through backup networks. Every room has staff override keys, and the GM can press them remotely.
-- **State that carries over.** Each room hands one resource (SYNC, POWER, TRACE, HUMAN) to the finale, and an "intruder dossier" replays the team's run.
-- **Front of house.** A keyboard-only ticket kiosk handles sales, time slots, party limits, staff-PIN payments and voids. It keeps an append-only sales log that rebuilds its state after a crash.
-- **No build step.** Plain HTML, CSS and JavaScript on canvas, with a CRT/glitch look tuned to run smoothly on a projector laptop.
+<table>
+  <tr>
+    <td><img src="docs/images/mask-wall.jpg" alt="The Room 1 wall mask, bleeding red, on a newspaper collage"></td>
+    <td><img src="docs/images/hallway.jpg" alt="The red-lit hallway, with tarp walls and danger tape"></td>
+  </tr>
+</table>
+
+## At a glance
+
+| | |
+|---|---|
+| Event | LWeek 2026, five days |
+| Tickets | 400 sold (sold out), ₱20,400 |
+| Format | 4 rooms + a finale that takes over all 4 rooms at once, 23-minute limit per team |
+| Booth | 7 computers, 4 ESP32 props, a Tuya smart bulb, a Govee laser strip, a PTZ camera |
+| Software | About 11,000 lines of plain JavaScript, HTML, Python and Arduino C++. No frameworks and no build step. |
+
+Ticket sales per day:
+
+| Day | Tickets | Sales (₱) |
+|-----|--------:|----------:|
+| 1 | 34 | 1,700 |
+| 2 | 70 | 3,450 |
+| 3 | 108 | 5,650 |
+| 4 | 105 | 5,450 |
+| 5 | 83 | 4,150 |
+| **Total** | **400** | **20,400** |
+
+The booth was open to the whole university, so the puzzles test observation and teamwork, not engineering knowledge. The engineering is in the system that runs them.
+
+## The rooms
+
+| # | Room | What players do | Tech |
+|---|------|-----------------|------|
+| 1 | Brain Upload | Start the "Mind Upload" app on the laptop. The upload fails at 97% and Aurora takes over the projected wall. Players decode binary to type her password, then survive her attacks as on-screen quick-time events. | Laptop and wall pages linked by a local Node server (SSE + POST), ESP32 mask with PWM LED eyes |
+| 2 | System Power | Type words to charge a draining power meter while one player holds a giant plush Enter key to keep the hallway light on. Staff playing "AIs" advance whenever it goes dark. | Adaptive word difficulty, key-hold detection, Tuya bulb driven locally through a Python bridge |
+| 3 | Hidden Signal | Find a hidden beacon and count its blue blinks. Three layers, each faster, against a 5-minute trace. | ESP32 beacon, blink timing sent from the page with each code, random codes per reset |
+| 4 | Orbit Lock | Turn two shield rings around Aurora's core until both gaps line up with the laser, then fire. Three layers: align, watchdog drones that eat the beam, and an override. | 2 ESP32 knob controllers over USB (Web Serial), Govee strip over Bluetooth, canvas renderer with pre-blurred glow sprites |
+| 5 | Everywhere at Once | Room 4's win is fake. Aurora crashes back in, takes over every laptop and talks in an Undertale-style text box. Room 3 becomes the map, rooms 1, 2 and 4 get her tasks, and the kill switch needs three rooms to press at the same moment. | `boss.js` loaded into every room from the hub, hub-owned state, clock sync for the simultaneous press |
+
+Each room hands one resource (SYNC, POWER, TRACE, HUMAN) to the finale, and an "intruder dossier" page replays the team's run at the end.
 
 ## Architecture
 
@@ -21,84 +56,85 @@ The booth is open to the whole university, so the puzzles test observation and t
 flowchart LR
   subgraph Router["Local 2.4 GHz router (no internet)"]
     HUB["hub/server.js<br/>Node + ws · :3000"]
-    P1["Room 1 · Brain Upload<br/>projector.html · :8000"]
+    P1["Room 1 · Brain Upload<br/>desktop.html + projector.html · :8000"]
     P2["Room 2 · System Power<br/>game.html · :8001"]
     P3["Room 3 · Hidden Signal<br/>game.html · :8002"]
     P4["Room 4 · Orbit Lock<br/>game.html · :8003"]
-    GM["GM panel<br/>/ (gm.html)"]
-    DOS["Intruder dossier<br/>/dossier"]
+    GM["GM panel<br/>gm.html"]
+    DOS["Intruder dossier<br/>dossier.html"]
     MASK["ESP32 mask<br/>PWM LED eyes"]
-    BEACON["ESP32 beacon<br/>3 blue LEDs"]
-    BRIDGE["bulb_bridge.py<br/>Python + TinyTuya<br/>(on the hub laptop)"]
+    BEACON["ESP32 beacon<br/>blue LEDs"]
+    BRIDGE["bulb_bridge.py<br/>Python + TinyTuya"]
     BULB["Tuya RGB bulb<br/>hallway light"]
   end
   P1 & P2 & P3 & P4 <-->|WebSocket| HUB
   GM & DOS <-->|WebSocket| HUB
-  P1 -->|"HTTP GET /level"| MASK
-  P3 -->|"HTTP GET /play"| BEACON
+  P1 -->|HTTP| MASK
+  P3 -->|HTTP| BEACON
   KNOBS -->|"Web Serial (USB)"| P4
-  P4 -->|"localhost, then Bluetooth"| STRIP
-  HUB <-->|"WebSocket, device strip"| BRIDGE
+  P4 -->|"Bluetooth via laser_bridge.py"| STRIP
+  HUB <-->|WebSocket| BRIDGE
   BRIDGE -->|"Tuya local protocol"| BULB
-  KIOSK["signup/ kiosk<br/>Node · :4000<br/>(outside the booth)"]
-  KNOBS["2 ESP32 ring controllers<br/>1 pot each, USB to the room 4 laptop"]
-  STRIP["Govee H6143 laser strip<br/>Bluetooth via laser_bridge.py"]
+  KIOSK["signup/ ticket kiosk<br/>Node · :4000"]
+  KNOBS["2 ESP32 ring controllers"]
+  STRIP["Govee laser strip"]
 ```
 
-- Rooms unlock in order: each game sends `pNdone` through the hub, and the next room leaves standby.
-- Games report `status` every second. The GM panel turns those reports into room cards (OFFLINE / LOCKED / READY / PLAYING / CLEARED) with run clocks and remote staff keys.
-- The hub stores the last command for each device and replays it on reconnect, so a prop that reboots comes back in the right state.
-- The hub runs on whichever laptop is the GM laptop and restarts itself if it crashes. The current run is saved to `hub/run.json`, and a game page that reconnects mid-run gets the run's unlocks again. Games queue their results while the hub is down, so a crash or a rebooted room laptop costs a few seconds, not the team's progress.
+- **Rooms unlock in order.** Each game sends `pNdone` through the hub, and the next room leaves standby.
+- **The GM panel is one screen.** Games report their status every second. The panel turns those reports into room cards with run clocks, the team's time left, remote staff keys, a chat box into every room, sound pads and the hallway light controls.
+- **Props are dumb on purpose.** The laptop page is the single source of truth. ESP32s only execute commands and fall back to a safe default when Wi-Fi drops. The hub stores the last command for each device and replays it on reconnect, so a prop that reboots comes back in the right state.
+- **A crash costs seconds, not progress.** The hub restarts itself, saves the current run to disk and re-sends a run's unlocks to any page that reconnects. Games queue their results while the hub is down.
+- **No IPs to type.** Every page looks for the hub on its own laptop, then at the last address it found, then across the whole booth subnet at once. Any laptop can take any job.
 
-## The rooms
+## What running it live taught me
 
-| # | Room | What players do | Tech |
-|---|------|-----------------|------|
-| 1 | Brain Upload | Drag the cursor off the laptop onto the projected wall, click the physical mask and decode 4-bit binary groups. | Extended display, canvas hotspot calibration, ESP32 PWM |
-| 2 | System Power | Type words to charge a draining meter while one player holds a giant plush Enter key to keep the hallway lit. Staff "AIs" advance whenever it goes dark. | Adaptive word difficulty, key-hold detection, Tuya smart bulb driven locally through a Python bridge |
-| 3 | Hidden Signal | Find a hidden beacon and count its blinks. Three layers, each faster, until the last is too quick for the eye and only a phone's slow-motion video shows the count. | ESP32, blue LEDs, blink timing sent from the page with each code, per-reset random codes |
-| 4 | Orbit Lock | Turn two shield rings around Aurora's heart until both gaps line up with the laser, then fire. Four layers: her drift, watchdog drones that eat the beam, and an emitter she moves after every miss. 2 ESP32 knob controllers over USB (Web Serial), Govee strip over Bluetooth (Python bridge), canvas renderer with pre-blurred glow sprites (no shadowBlur or CSS filters), synthesized laser audio |
-| 5 | Everywhere At Once | Game 4's win is fake: the save stalls at 97% and Aurora crashes back in, talking in an Undertale-style box. She takes over every room's laptop. Room 3 becomes the map; rooms 1, 2 and 4 get her tasks (binary, hard words, a two-knob crosshair), which jump between rooms. The kill switch: three rooms press at the same moment while the team counts down across the tarps. | `boss.js` loaded into every room page from the hub; hub-owned state; clock sync for the kill switch; low-res pixel canvas |
+The first version worked in testing. Five days in front of real crowds found what testing didn't. Every fix below shipped overnight between event days.
 
-The full design notes, including flows, hint ladders, materials and safety rules, are in [nexus-core-protocol-context.md](nexus-core-protocol-context.md).
+- **Players don't read instructions.** On day 1, most teams missed the hint to move the mouse onto the projected wall, mistook a reference table for a button and counted the wrong blinking light. I cut the second-screen trick, turned Room 1 into a single app that drives the wall, slowed Room 3's beacon down to a pace you can count by eye and cut Room 4's training to two steps.
+- **A crowd breaks Wi-Fi.** With the hall full, the room laptops went quiet for seconds at a time, and the hub's 2-second timeout marked them offline. I raised it to 15 seconds and added a script that turns off Windows Wi-Fi power saving.
+- **One bad frame took down the hub.** A malformed WebSocket frame threw an unhandled socket error, and the restart dropped every room. The hub now catches socket errors per connection and writes a log file.
+- **Browsers throttle what they can't see.** Chrome stopped rendering the projector window whenever another window covered it, which froze Room 1 at 97%. The launchers now start the browser with background throttling turned off.
+- **Some bugs never get a root cause.** The ticket kiosk went black at random. I never found out why, so I added a system-wide restart hotkey that works in the black state and saves a screenshot each time it is pressed.
+
+## Front of house
+
+The ticket kiosk in `signup/` runs outside the booth. It is keyboard-only and handles sales, time slots, party sizes, booking for later and voids. It writes an append-only sales log and rebuilds its state from that log after a crash. Team photos taken at signup appear again in the finale. The GM can pop a hallway camera feed (go2rtc) up on the kiosk screen.
 
 ## Repository layout
 
 ```
-hub/                      Node WebSocket hub, GM panel, dossier, beacon stand-in, the finale (public/boss.js)
-puzzle1-brain-upload/     projector page, mask_esp32/ sketch, SETUP.md (wiring + booth setup)
-puzzle2-system-power/     typing / power game, SETUP.md (hallway bulb + bridge)
-puzzle3-hidden-signal/    IR hunt game, beacon_esp32/ sketch
-puzzle4-orbit-lock/       ring-and-laser game, controller_esp32/ sketch (knobs, fire wires, OLED), laser_bridge.py (Govee strip), SETUP.md
-signup/                   ticket + queue kiosk (no dependencies)
+hub/                      WebSocket hub, GM panel, dossier, finale (public/boss.js), voice lines and SFX
+puzzle1-brain-upload/     laptop + wall pages, local link server, mask_esp32/ sketch
+puzzle2-system-power/     typing game, bulb_bridge.py (hallway bulb)
+puzzle3-hidden-signal/    beacon hunt game, beacon_esp32/ sketch
+puzzle4-orbit-lock/       ring-and-laser game, controller_esp32/ sketch, laser_bridge.py
+signup/                   ticket kiosk and hallway camera
+aurora-voice/             script that cuts Aurora's recorded lines into clips
+docs/                     design notes and photos
 ```
+
+Each room folder has a `SETUP.md` with the wiring and booth setup. The full design notes, including flows, hint ladders, materials and safety rules, are in [docs/design-notes.md](docs/design-notes.md).
 
 ## Running it
 
-Requirements: Node.js 18+, Python 3 (static file server for the game pages), Chrome or Edge. On any laptop that may run the hub: `python -m pip install tinytuya websocket-client` (for the Puzzle 2 bulb bridge). For the props: Arduino IDE with the ESP32 core 3.x. On a fresh Windows computer, run [FreshStart.bat](FreshStart.bat) once with internet: it installs all of that (except the Arduino IDE), and the hub's npm packages.
+Requirements: Node.js 18+, Python 3, Chrome or Edge, and the Arduino IDE with ESP32 core 3.x for the props. On the hub laptop, also run `python -m pip install tinytuya websocket-client` for the bulb bridge. On a fresh Windows computer, [FreshStart.bat](FreshStart.bat) installs everything except the Arduino IDE.
 
-The booth uses one computer per job: four room laptops, the GM laptop (hub + GM panel) and the signup PC. The finale (game 5) runs on the four room laptops.
+1. On the GM laptop (exactly one), run `hub\start.bat`. It installs the hub's packages the first time, starts the hub and opens the GM panel.
+2. On each room laptop, run that room's `start.bat`. On the signup PC, run `signup\start.bat`.
 
-Any laptop can take any job. Copy the whole folder to every laptop, then:
+Every game also runs without the hub or the hardware. Staff keys (Ctrl+Alt+H lists them) unlock and force each step, so any room can be tried on its own.
 
-1. GM laptop (exactly one): run `hub\start.bat`. It runs `npm install` the first time, then starts the hub and opens the GM panel.
-2. Each room laptop: run that room's `start.bat`. The signup PC: `signup\start.bat`.
-
-No IPs are typed in. Every page searches for the hub: its own laptop first, then the last hub it found, then every address on the booth network (`NET` in [booth.bat](booth.bat), `192.168.0` by default) at once. The hub learns the signup PC's address when the kiosk connects, and the GM panel shows the URLs to open on the beacon phones. Every launcher also keeps its laptop from sleeping. `?hub=<IP>` on a page's URL skips the search. Every game also works without the hub or the hardware: staff keys (Ctrl+Alt+H shows them) unlock and force each step, so any room can be tried on its own.
-
-Booth credentials are in the repo, so a clone runs as is:
-- **ESP32 Wi-Fi:** `secrets.h` in each sketch folder (NexusV only).
-- **Puzzle 2 bulb key:** `puzzle2-system-power/devices.json`, from `python -m tinytuya wizard` (see its SETUP.md).
-- **Hallway camera login:** `signup/camera.json`.
+The booth ran on its own offline router, and its Wi-Fi and device credentials are committed so that a fresh clone runs as is.
 
 ## Tests
 
 ```sh
-cd hub && npm test                      # starts its own hub: relay, state replay, carried resources, GM protocol, restart + re-unlock
-node signup/test.js                     # PIN, party limits, slot clashes, ticket cap, voids, restart from log
+cd hub && npm test        # starts its own hub: relay, state replay, carried resources, GM protocol, restart + re-unlock
+node signup/test.js       # party limits, slot clashes, ticket cap, voids, restart from the sales log
 ```
 
 ## Credits
 
-Built for ICpEP.se (Institute of Computer Engineers of the Philippines Student Edition) for LWeek 2026.
-<!-- TODO: your name, your role, and teammates -->
+Concept, game design, software and hardware by **Francis Duco**, President of ICpEP.SE – USLS (Institute of Computer Engineers of the Philippines, Student Edition, University of St. La Salle).
+
+Built for and run by [ICpEP.SE – USLS](https://www.facebook.com/icpepusls) at LWeek 2026.

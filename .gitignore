@@ -20,3 +20,6 @@ LWeek-Queuing-System/
 
 # Clean voice cuts (aurora-voice/cut.py rebuilds them from the ElevenLabs take)
 aurora-voice/raw/
+
+# Local AI assistant notes
+CLAUDE.md
