@@ -1,4 +1,4 @@
-# NEXUS: The Core Protocol
+# NEXUS: AURORA V.
 
 A five-stage, multi-room escape room built for the ICpEP.SE – USLS booth at LWeek 2026 (University of St. La Salle, Bacolod). Teams "upload their minds" into Aurora, a rogue AI, and fight their way through four linked rooms and a finale to shut her down.
 
@@ -135,7 +135,7 @@ node signup/test.js       # party limits, slot clashes, ticket cap, voids, resta
 
 ## Credits
 
-Concept, game design, software and hardware by **Francis Duco**, President of ICpEP.SE – USLS (Institute of Computer Engineers of the Philippines, Student Edition, University of St. La Salle).
+Concept, game design, software and hardware by **Francis Duco**, President of ICpEP.SE – USLS(Institute of Computer Engineers of the Philippines, Student Edition, University of St. La Salle) A.Y 2026-2027.
 
 Built for and run by [ICpEP.SE – USLS](https://www.facebook.com/icpepusls) at LWeek 2026.
 
