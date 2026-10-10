@@ -4,7 +4,7 @@ A five-stage, multi-room escape room built for the ICpEP.SE – USLS booth at LW
 
 Each room runs on its own laptop. The laptops, four ESP32 props, a smart bulb, a laser strip and a game-master panel all talk through one Node.js WebSocket hub on an offline local network.
 
-**All 400 tickets sold out, for ₱20,400 in sales.**
+**All 400 tickets sold out, for ₱20,000 in sales.**
 
 ![Players in masks walking through the danger-tape corridor](docs/images/players.jpg)
 
@@ -17,32 +17,20 @@ Each room runs on its own laptop. The laptops, four ESP32 props, a smart bulb, a
 
 ### See it running
 
-
+Rooms 1 and 2 during a live run:
 
 https://github.com/user-attachments/assets/410f10fa-6ce9-4be7-9a28-e28e628ceb7b
 
+Testing the Room 4 controller:
+
 https://github.com/user-attachments/assets/b21b01e1-de8b-4ac1-962c-60df6e7bb7f1
-
-
-
-
-<table>
-  <tr>
-    <td width="50%"><a href="docs/video/rooms-1-2.mp4"><img src="docs/images/rooms-1-2-poster.jpg" alt="Rooms 1 and 2 during a live run"></a></td>
-    <td width="50%"><a href="docs/video/room-4-controller.mp4"><img src="docs/images/room-4-poster.jpg" alt="The Room 4 controller driving the game on a laptop"></a></td>
-  </tr>
-  <tr>
-    <td><a href="docs/video/rooms-1-2.mp4">Video: Rooms 1 and 2 during a live run (2:34)</a></td>
-    <td><a href="docs/video/room-4-controller.mp4">Video: testing the Room 4 controller (0:57)</a></td>
-  </tr>
-</table>
 
 ## At a glance
 
 | | |
 |---|---|
 | Event | LWeek 2026, five days |
-| Tickets | 400 sold (sold out), ₱20,400 |
+| Tickets | 400 sold (sold out), ₱20,000 |
 | Format | 4 rooms + a finale that takes over all 4 rooms at once, 23-minute limit per team |
 | Booth | 7 computers, 4 ESP32 props, a Tuya smart bulb, a Govee laser strip, a PTZ camera |
 | Software | About 11,000 lines of plain JavaScript, HTML, Python and Arduino C++. No frameworks and no build step. |
@@ -53,10 +41,10 @@ Ticket sales per day:
 |-----|--------:|----------:|
 | 1 | 34 | 1,700 |
 | 2 | 70 | 3,450 |
-| 3 | 108 | 5,650 |
-| 4 | 105 | 5,450 |
+| 3 | 108 | 5,450 |
+| 4 | 105 | 5,250 |
 | 5 | 83 | 4,150 |
-| **Total** | **400** | **20,400** |
+| **Total** | **400** | **20,000** |
 
 The booth was open to the whole university, so the puzzles test observation and teamwork, not engineering knowledge. The engineering is in the system that runs them.
 
@@ -78,12 +66,14 @@ Every prop is an ESP32 DevKit on a breadboard. The laptop page decides what happ
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/mask-circuit.jpg" alt="The Room 1 mask circuit: an ESP32 on a breadboard with two blue LEDs and a red LED"></td>
-    <td width="50%"><img src="docs/images/game4-circuit.jpg" alt="Testing the Room 4 controller circuit with jumper wires on a breadboard"></td>
+    <td width="33%"><img src="docs/images/mask-circuit.jpg" alt="The Room 1 mask circuit: an ESP32 on a breadboard with two blue LEDs and a red LED"></td>
+    <td width="33%"><img src="docs/images/game4-circuit.jpg" alt="Testing the Room 4 controller circuit with jumper wires on a breadboard"></td>
+    <td width="33%"><img src="docs/images/ir-beacon-prototype.jpg" alt="The first Room 3 beacon: an ESP32 on a breadboard with three clear infrared LEDs and a red LED"></td>
   </tr>
   <tr>
     <td>Room 1 mask: the two blue LEDs become the mask's eyes</td>
     <td>Room 4 controller on the test bench</td>
+    <td>The first Room 3 beacon used infrared LEDs that only a phone camera could see. They were too hard to spot on camera, so the final board uses blue LEDs.</td>
   </tr>
 </table>
 
