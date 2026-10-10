@@ -1,5 +1,3 @@
-
-https://github.com/user-attachments/assets/af5cc5e7-a334-414c-bcbb-efa6f7af58e0
 # NEXUS: AURORA V.
 
 A five-stage, multi-room escape room built for the ICpEP.SE – USLS booth at LWeek 2026 (University of St. La Salle, Bacolod). Teams "upload their minds" into Aurora, a rogue AI, and fight their way through four linked rooms and a finale to shut her down.
