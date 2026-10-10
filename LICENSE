@@ -1,16 +1,22 @@
 Copyright (c) 2026 Francis Duco. All rights reserved.
+The registration and reservation backend of the signup booth (signup/):
+Copyright (c) 2026 Jeremiah Monebit. All rights reserved.
 
-This repository is published for viewing only, as a record of NEXUS: The Core
-Protocol, built for the ICpEP.SE - USLS booth at LWeek 2026.
+This repository is published for viewing only, as a record of NEXUS: AURORA V.,
+built for the ICpEP.SE - USLS booth at LWeek 2026.
 
 No license is granted to use, copy, modify, merge, publish, distribute,
 sublicense or sell any part of this software, its assets (including images,
 audio and voice recordings) or its documentation, in whole or in part, without
-prior written permission from the copyright holder.
+prior written permission from the copyright holders.
 
 Viewing the source and forking it on GitHub are allowed only to the extent
 required by the GitHub Terms of Service.
 
+Third-party material is not covered by this notice and stays the property of
+its owners. This includes the music from the Watch Dogs soundtrack
+(Ubisoft), which is used without affiliation.
+
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM,
+IMPLIED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
 DAMAGES OR OTHER LIABILITY ARISING FROM THE SOFTWARE OR ITS USE.

@@ -98,7 +98,7 @@ The first version worked in testing. Five days in front of real crowds found wha
 
 ## Front of house
 
-The ticket kiosk in `signup/` runs outside the booth. It is keyboard-only and handles sales, time slots, party sizes, booking for later and voids. It writes an append-only sales log and rebuilds its state from that log after a crash. Team photos taken at signup appear again in the finale. The GM can pop a hallway camera feed (go2rtc) up on the kiosk screen.
+The ticket kiosk in `signup/` runs outside the booth. Its registration and reservation backend was built by Jeremiah Monebit. It is keyboard-only and handles sales, time slots, party sizes, booking for later and voids. It writes an append-only sales log and rebuilds its state from that log after a crash. Team photos taken at signup appear again in the finale. The GM can pop a hallway camera feed (go2rtc) up on the kiosk screen.
 
 ## Repository layout
 
@@ -135,10 +135,13 @@ node signup/test.js       # party limits, slot clashes, ticket cap, voids, resta
 
 ## Credits
 
-Concept, game design, software and hardware by **Francis Duco**, President of ICpEP.SE – USLS(Institute of Computer Engineers of the Philippines, Student Edition, University of St. La Salle) A.Y 2026-2027.
+- **Francis Duco**, President of ICpEP.SE – USLS (A.Y. 2026–2027): concept, game design, software and hardware.
+- **Jeremiah Monebit**: the core backend of the signup booth (registration and reservations).
 
-Built for and run by [ICpEP.SE – USLS](https://www.facebook.com/icpepusls) at LWeek 2026.
+Built for and run by [ICpEP.SE – USLS](https://www.facebook.com/icpepusls) (Institute of Computer Engineers of the Philippines, Student Edition, University of St. La Salle) at LWeek 2026.
+
+The booth's music is from the soundtrack of *Watch Dogs* (Ubisoft). It is used without affiliation, and all rights to it belong to its owners. Aurora's voice lines were generated with ElevenLabs.
 
 ## License
 
-All rights reserved. The code is public for viewing only. See [LICENSE](LICENSE).
+All rights reserved. The code is public for viewing only. Third-party material, including the *Watch Dogs* music, is not covered. See [LICENSE](LICENSE).
