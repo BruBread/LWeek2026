@@ -15,6 +15,19 @@ Each room runs on its own laptop. The laptops, four ESP32 props, a smart bulb, a
   </tr>
 </table>
 
+### See it running
+
+<table>
+  <tr>
+    <td width="50%"><a href="docs/video/rooms-1-2.mp4"><img src="docs/images/rooms-1-2-poster.jpg" alt="Rooms 1 and 2 during a live run"></a></td>
+    <td width="50%"><a href="docs/video/room-4-controller.mp4"><img src="docs/images/room-4-poster.jpg" alt="The Room 4 controller driving the game on a laptop"></a></td>
+  </tr>
+  <tr>
+    <td><a href="docs/video/rooms-1-2.mp4">Video: Rooms 1 and 2 during a live run (2:34)</a></td>
+    <td><a href="docs/video/room-4-controller.mp4">Video: testing the Room 4 controller (0:57)</a></td>
+  </tr>
+</table>
+
 ## At a glance
 
 | | |
@@ -49,6 +62,29 @@ The booth was open to the whole university, so the puzzles test observation and 
 | 5 | Everywhere at Once | Room 4's win is fake. Aurora crashes back in, takes over every laptop and talks in an Undertale-style text box. Room 3 becomes the map, rooms 1, 2 and 4 get her tasks, and the kill switch needs three rooms to press at the same moment. | `boss.js` loaded into every room from the hub, hub-owned state, clock sync for the simultaneous press |
 
 Each room hands one resource (SYNC, POWER, TRACE, HUMAN) to the finale, and an "intruder dossier" page replays the team's run at the end.
+
+## Hardware
+
+Every prop is an ESP32 DevKit on a breadboard. The laptop page decides what happens, and the board only executes commands, so the firmware stays small and a board that reboots mid-run gets its last state back from the hub.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/mask-circuit.jpg" alt="The Room 1 mask circuit: an ESP32 on a breadboard with two blue LEDs and a red LED"></td>
+    <td width="50%"><img src="docs/images/game4-circuit.jpg" alt="Testing the Room 4 controller circuit with jumper wires on a breadboard"></td>
+  </tr>
+  <tr>
+    <td>Room 1 mask: the two blue LEDs become the mask's eyes</td>
+    <td>Room 4 controller on the test bench</td>
+  </tr>
+</table>
+
+| Prop | Inputs and outputs | Link to the game |
+|------|--------------------|------------------|
+| Room 1 mask ([sketch](puzzle1-brain-upload/mask_esp32/mask_esp32.ino)) | Two blue LED eyes on GPIO 25 through their own 120 Ω resistors, dimmed with 8-bit PWM. Red status LED on GPIO 27. | HTTP from the wall page (`/level?v=0..255`) |
+| Room 3 beacon ([sketch](puzzle3-hidden-signal/beacon_esp32/beacon_esp32.ino)) | Three blue LEDs on GPIO 32, 33 and 25 (PWM). Red status LED on GPIO 27. | HTTP: the game sends the whole blink sequence as a list of steps, and the board plays it back |
+| Room 4 controller ([sketch](puzzle4-orbit-lock/controller_esp32/controller_esp32.ino)) | Two potentiometers on ADC1 (GPIO 34 and 35, so they work while Wi-Fi is on), averaged over 32 samples with a 3 mV dead band. Two bare "fire" wires on GPIO 13 with a 120 ms debounce. 1.3" SH1106 OLED over I²C. | Server-Sent Events at 50 Hz over Wi-Fi, with Web Serial over USB as the backup |
+
+Each board shows its own Wi-Fi state on a red LED, so staff can diagnose a dead prop at a glance. The full wiring for each prop is in its room's `SETUP.md`.
 
 ## Architecture
 
@@ -100,6 +136,8 @@ The first version worked in testing. Five days in front of real crowds found wha
 
 The ticket kiosk in `signup/` runs outside the booth. Its registration and reservation backend was built by Jeremiah Monebit. It is keyboard-only and handles sales, time slots, party sizes, booking for later and voids. It writes an append-only sales log and rebuilds its state from that log after a crash. Team photos taken at signup appear again in the finale. The GM can pop a hallway camera feed (go2rtc) up on the kiosk screen.
 
+![The signup kiosk checking the photos of a 4-player team](docs/images/signup-kiosk.jpg)
+
 ## Repository layout
 
 ```
@@ -110,7 +148,7 @@ puzzle3-hidden-signal/    beacon hunt game, beacon_esp32/ sketch
 puzzle4-orbit-lock/       ring-and-laser game, controller_esp32/ sketch, laser_bridge.py
 signup/                   ticket kiosk and hallway camera
 aurora-voice/             script that cuts Aurora's recorded lines into clips
-docs/                     design notes and photos
+docs/                     design notes, photos and videos
 ```
 
 Each room folder has a `SETUP.md` with the wiring and booth setup. The full design notes, including flows, hint ladders, materials and safety rules, are in [docs/design-notes.md](docs/design-notes.md).
