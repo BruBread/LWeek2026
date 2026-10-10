@@ -1,5 +1,5 @@
-// NEXUS Puzzle 4: the Orbit Lock controller. ONE ESP32 on a breadboard, on the booth Wi-Fi (NexusV) at 192.168.0.52,
-// or on walawifi at 192.168.1.52 when NexusV doesn't connect within 4 s (networks: secrets.h).
+// NEXUS Puzzle 4: the Orbit Lock controller. ONE ESP32 on a breadboard, on the booth Wi-Fi (NexusV) at 192.168.0.52
+// (network: secrets.h).
 // Everything is on ONE side of the board (the VIN side), so nothing needs the 3V3 pin on the other side:
 //   - two B100k knobs: middle pins on D34 (OUTER ring) and D35 (INNER ring); their + ends get 3.3 V from D32
 //   - two loose fire wires, one from D13 and one from GND. Touch their metal ends together and hold = hold to fire
@@ -29,7 +29,7 @@ struct Net { const char* ssid; const char* pass; IPAddress ip, gateway; };
 #include "secrets.h"   // Net NETS[] = {...}: Wi-Fi names + passwords
 const int NET_COUNT = sizeof(NETS) / sizeof(NETS[0]);
 IPAddress SUBNET(255, 255, 255, 0);
-const unsigned long FIRST_TRY_MS = 4000;   // no NexusV after 4 s: try walawifi
+const unsigned long FIRST_TRY_MS = 4000;   // no NexusV after 4 s: try again
 const unsigned long TRY_MS = 10000;        // a backup network gets longer: joining can take a few seconds. Also how often
                                            // it re-joins after a drop (it gets that long to come back by itself first)
 
@@ -177,8 +177,8 @@ void loop() {
 
   online = WiFi.status() == WL_CONNECTED;
   if (online) { tryStart = millis(); stay = true; brownout = false; }   // stay on this network while it works
-  // offline too long: before it's ever been online, try the next network (NexusV 4 s, walawifi 10 s, ...). After that a drop
-  // only re-joins the same one: hopping to walawifi mid-day turned a 1 s Wi-Fi blip into 14 s+ off NexusV
+  // offline too long: before it's ever been online, try the next network (NexusV 4 s, then the others 10 s each). After that a drop
+  // only re-joins the same one: hopping to a backup network mid-day turned a 1 s Wi-Fi blip into 14 s+ off NexusV
   else if (millis() - tryStart > (stay || net ? TRY_MS : FIRST_TRY_MS)) join(stay ? net : (net + 1) % NET_COUNT);
   if (online && !wasOnline) Serial.printf("NOTE controller ready on %s at http://%s:81/\n", NETS[net].ssid, WiFi.localIP().toString().c_str());
   wasOnline = online;

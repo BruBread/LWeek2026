@@ -299,7 +299,7 @@ Ctrl+Alt+M  mute / unmute</div>
 const CFG = {
   UNLOCK_EVT: 'p2done',      // puzzle 2 sends this when SYSTEM POWERED finishes
   DONE_EVT: 'p3done',        // sent to the hub when this puzzle is won (for puzzle 4)
-  BEACON_IPS: ['192.168.0.51', '192.168.1.51'],   // the hidden blue-LED board on NexusV, or on walawifi as a backup (see NETS in secrets.h). The phone stand-ins get the lights through the hub instead
+  BEACON_IPS: ['192.168.0.51'],   // the hidden blue-LED board on NexusV (see NETS in secrets.h). The phone stand-ins get the lights through the hub instead
   PUSH_MS: 3000,             // resend the loop to the board this often
   DIM: 0.3,                  // how much darker the screen gets during the hunt (0 = normal, 1 = black). Staff panel (Ctrl+Alt+H) stays bright
   // 3 rounds ("layers"), each a new code blinked faster. This page turns them into the board's steps, so tune here:

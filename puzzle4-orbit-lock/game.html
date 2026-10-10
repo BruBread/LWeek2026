@@ -267,9 +267,9 @@ const CFG = {
   // outer ring first. Ctrl+Alt+H shows the live mV: turn each knob to both ends and copy the numbers here.
   // A ring that turns the wrong way: swap its two numbers
   POT_MV: [[0, 3150], [0, 3150]],
-  // the controller ESP32 on each Wi-Fi it may join (NETS in its secrets.h): NexusV, then walawifi. The game listens to
+  // the controller ESP32 on each Wi-Fi it may join (NETS in its secrets.h): NexusV. The game listens to
   // all of them; ?ctrl=<ip> in the URL replaces the list
-  CTRL_IPS: ['192.168.0.52', '192.168.1.52'],
+  CTRL_IPS: ['192.168.0.52'],
   LASER: 'http://localhost:8013',   // the Govee strip's bridge on this laptop (laser_bridge.py, start.bat starts it)
   TURN: [30, 140, 600],      // keyboard stand-in for the knob: deg/s on a tap, deg/s held down, ms to get from one to the other
   CHARGE_MS: 900,            // hold space this long to fire. Let go early and the charge drains
@@ -409,7 +409,7 @@ const staffKey = code => dispatchEvent(new KeyboardEvent('keydown', { code, ctrl
 setInterval(() => hubSend({ t: 'status', v: { mode, unlocked, stat: Math.round(human), ctrl: potLive(), ctrlVia: ctrlVia() } }), 1000);
 
 // ===== The controller: ONE ESP32 on a breadboard (controller_esp32/controller_esp32.ino) with both knobs, the two fire
-// wires and a small screen. It's on NexusV, or walawifi as a backup, at one of CFG.CTRL_IPS (?ctrl=<ip> overrides) and sends
+// wires and a small screen. It's on NexusV at one of CFG.CTRL_IPS (?ctrl=<ip> overrides) and sends
 // "ORBIT <outer mV> <inner mV> <wires 1/0>" 50 times a second as a stream (http://<ip>:81/, Server-Sent Events). The game
 // tells it FIRE on every shot (http://<ip>/fire) so its screen flashes FIRE. Nothing to pair over Wi-Fi.
 // Backup: plugged into this laptop's USB, it sends the same lines there too (Web Serial: pair once with Ctrl+Alt+P), so a

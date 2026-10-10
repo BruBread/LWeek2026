@@ -1,5 +1,5 @@
-// NEXUS Puzzle 3 - the beacon: 3 blue LEDs in a row, hidden in the room. NexusV at 192.168.0.51,
-// or walawifi at 192.168.1.51 when NexusV doesn't connect within 4 s (networks: secrets.h, same as game 4's controller).
+// NEXUS Puzzle 3 - the beacon: 3 blue LEDs in a row, hidden in the room. NexusV at 192.168.0.51
+// (network: secrets.h, same as game 4's controller).
 // A dumb player: puzzle3-hidden-signal/game.html decides everything the lights do and sends it as a list of steps.
 //   GET /play?p=900:300,000:400,...   the loop (the code), resent every 3 s. A new one starts from its first step
 //   GET /fx?p=...                     a one-shot effect (wrong code, layer cracked, her heartbeat...), then the loop restarts
@@ -17,7 +17,7 @@ struct Net { const char* ssid; const char* pass; IPAddress ip, gateway; };
 #include "secrets.h"   // Net NETS[] = {...}: Wi-Fi names + passwords
 const int NET_COUNT = sizeof(NETS) / sizeof(NETS[0]);
 IPAddress SUBNET(255, 255, 255, 0);
-const unsigned long FIRST_TRY_MS = 4000;   // no NexusV after 4 s: try walawifi
+const unsigned long FIRST_TRY_MS = 4000;   // no NexusV after 4 s: try again
 const unsigned long TRY_MS = 10000;        // a backup network gets longer: joining can take a few seconds
 
 // Blue LED 1..3: pin -> LED long leg. All 3 short legs join -> ONE shared resistor (120R, or 2 x 120R side by side = 60R) -> GND.

@@ -33,11 +33,10 @@ The phone plays exactly what the game sends the board (the code and the effects)
 
 ## Flash the ESP32 (once)
 1. Arduino IDE, board **ESP32 Dev Module**, the right COM port, same as the mask.
-2. `beacon_esp32/secrets.h` has the same networks as game 4's controller:
+2. `beacon_esp32/secrets.h` has the same network as game 4's controller:
    - **NexusV** first (router 192.168.0.1). There the board uses IP **192.168.0.51**. The mask is .50.
-   - **walawifi** as a backup, if NexusV doesn't connect within 4 s. There the board uses **192.168.1.51**. It keeps switching between the two until one works. Once it has been on one, a drop only re-joins that same one (since 2026-10-06: hopping to walawifi mid-day turned a 1 s blip into 14 s+ off NexusV).
+   - If NexusV doesn't connect within 4 s, the board keeps retrying until it does.
    - The laptop must be on the same Wi-Fi as the board.
-   - The game sends the lights to both IPs, so it works on either network.
    - The IPs are listed at the top of `game.html` (`CFG.BEACON_IPS`).
 3. Open `beacon_esp32/beacon_esp32.ino` itself (not a pasted copy).
 4. Upload. Serial Monitor (115200) prints `trying NexusV as 192.168.0.51` … `beacon ready on …`. During the hunt it prints `playing 352` (the code it blinks): the same code as Ctrl+Alt+H in the game.

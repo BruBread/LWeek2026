@@ -2,7 +2,7 @@
 
 Aurora's heart sits in the middle of the screen behind two shield rings. Each ring has one gap, and **each ring is its knob**: the gap always points where its knob's mark points. The team points both gaps at the laser, then **touches two wires together and holds** to fire. Before layer 1 a short **training** (2 steps: aim, fire) teaches the controls by doing them. Three layers: ALIGN, WATCHDOGS, OVERRIDE. The laser never drifts: after day 1 (teams struggled most while Aurora dragged it around) it holds still in every layer.
 
-Everything the players touch is on **one controller**: one ESP32 on a breadboard with **two knobs** (one per ring), **two loose fire wires**, and a **small screen** that shows a spinning circle while waiting and **FIRE** when the laser shoots. It's on the booth Wi-Fi, **NexusV**, at **192.168.0.52** (like the mask at .50 and the beacon at .51), and the game reads it over the network. If NexusV isn't there within 4 s of switching on, it joins the backup network **walawifi** instead, at **192.168.1.52** (then keeps trying both in turn until one works). Once it has been on a network, a drop only ever re-joins that same network. The laptops must be on the same network as the board. Power it from any USB port or charger. Best: plug it into the **Puzzle 4 laptop**, because then USB is a backup if the Wi-Fi drops.
+Everything the players touch is on **one controller**: one ESP32 on a breadboard with **two knobs** (one per ring), **two loose fire wires**, and a **small screen** that shows a spinning circle while waiting and **FIRE** when the laser shoots. It's on the booth Wi-Fi, **NexusV**, at **192.168.0.52** (like the mask at .50 and the beacon at .51), and the game reads it over the network. If NexusV isn't there within 4 s of switching on, it keeps retrying until it is. Once it has been on a network, a drop only ever re-joins that same network. The laptops must be on the same network as the board. Power it from any USB port or charger. Best: plug it into the **Puzzle 4 laptop**, because then USB is a backup if the Wi-Fi drops.
 
 Without the controller, the keys do the same job: **A / D** turn the outer ring, **◄ / ►** turn the inner ring, **hold Space** to fire. If the controller goes silent mid-game (Wi-Fi and USB both), the keys take over within a second, and the game screen's labels switch to the keys too.
 
@@ -24,13 +24,13 @@ Without the controller, the keys do the same job: **A / D** turn the outer ring,
 1. Arduino IDE, board **ESP32 Dev Module**, the right COM port, same as the mask.
 2. Install the screen library: **Tools → Manage Libraries**, search **U8g2**, click **Install** (the one by oliver).
    - `U8g2lib.h: No such file or directory` when you upload = it isn't installed. If the Library Manager can't download (the booth network blocks arduino.cc), download `https://github.com/olikraus/U8g2_Arduino/archive/refs/heads/master.zip`, unzip it, rename the folder to `U8g2`, put it in `Documents\Arduino\libraries\`, and restart the Arduino IDE.
-3. Open `controller_esp32/controller_esp32.ino`. `controller_esp32/secrets.h` already has **NexusV** (IP **192.168.0.52**, same password as the mask and the beacon) and the backup **walawifi** (IP **192.168.1.52**). Upload.
+3. Open `controller_esp32/controller_esp32.ino`. `controller_esp32/secrets.h` already has **NexusV** (IP **192.168.0.52**, same password as the mask and the beacon). Upload.
 4. Serial Monitor (115200) prints `trying NexusV as 192.168.0.52`, then `NOTE controller ready on NexusV at http://192.168.0.52:81/`, and `ORBIT 1650 2210 0` lines very fast: outer knob mV, inner knob mV, and `1` while the fire wires touch. The small screen shows the spinning circle, and the red LED goes off once it's on NexusV.
-   - **Red LED stays on:** neither network is there, or a password in `secrets.h` is wrong. The Serial Monitor shows which network it's trying (`trying walawifi as 192.168.1.52`).
+   - **Red LED stays on:** NexusV isn't there, or a password in `secrets.h` is wrong. The Serial Monitor shows which network it's trying (`trying NexusV as 192.168.0.52`).
    - **The screen stays black:** check the 4 screen wires against the table in Wiring. Most often SDA (D26) and SCK (D27) are swapped, or VCC (D25) and GND are (this screen has **VCC first**, unlike most).
    - **A different screen** (a 0.96" one, chip SSD1306) shows nothing or garbage: in the sketch, put `//` in front of the `U8G2_SH1106…` line, remove the `//` in front of the `U8G2_SSD1306…` line under it, and upload again.
 5. **Close the Serial Monitor** before running the game: the USB backup can't open the port while it's open (Wi-Fi works either way).
-6. Check from any laptop on the same network: `http://192.168.0.52/` (on walawifi: `http://192.168.1.52/`) says `orbit controller`, and the same address with `:81/` shows the `data: ORBIT …` lines scrolling.
+6. Check from any laptop on the same network: `http://192.168.0.52/` says `orbit controller`, and the same address with `:81/` shows the `data: ORBIT …` lines scrolling.
 
 ## Wiring (breadboard)
 **Everything uses one side of the ESP32**: the side with **VIN** next to the USB port. On a breadboard the DevKit covers the other side's holes, so nothing is wired there. That side has no 3V3 pin, so two data pins act as little 3.3 V supplies: **D32** powers the knobs, **D25** powers the screen.
@@ -64,11 +64,11 @@ The pins on that side, counting from the USB end:
 - Players will tug on things. Tape the breadboard down, and put a dab of hot glue or tape over the jumper ends in the breadboard, so a yanked fire wire doesn't pull other wires out. Make the fire wires long enough to reach the players, and keep the breadboard itself out of their reach.
 
 ## Connect it to the game
-**Over Wi-Fi there's nothing to do.** The game looks for the controller at both `192.168.0.52` (NexusV) and `192.168.1.52` (walawifi) (`CFG.CTRL_IPS` in `game.html`) as soon as it starts, and reconnects by itself if the board restarts or the Wi-Fi drops. The P4 laptop must be on the same network as the board.
+**Over Wi-Fi there's nothing to do.** The game looks for the controller at `192.168.0.52` on NexusV (`CFG.CTRL_IPS` in `game.html`) as soon as it starts, and reconnects by itself if the board restarts or the Wi-Fi drops. The P4 laptop must be on the same network as the board.
 
-1. Power the controller. Its red LED goes off when it's on NexusV (or walawifi).
+1. Power the controller. Its red LED goes off when it's on NexusV.
 2. Run this folder's `start.bat`.
-3. **Ctrl+Alt+H**: `controller: OK over Wi-Fi (192.168.0.52)` (or `.1.52` on walawifi). Both knobs' mV move when you turn them, and `wires` shows `TOUCHING` while the fire wires touch. The bottom-right legend says **KNOB / KNOB / WIRES**.
+3. **Ctrl+Alt+H**: `controller: OK over Wi-Fi (192.168.0.52)`. Both knobs' mV move when you turn them, and `wires` shows `TOUCHING` while the fire wires touch. The bottom-right legend says **KNOB / KNOB / WIRES**.
 
 **USB backup (optional, once per laptop).** If the controller is plugged into the P4 laptop with a data cable, it sends the same readings over USB too, so a Wi-Fi drop doesn't stop a game:
 1. In the start.bat window, press **Ctrl+Alt+P**. The browser lists the board as "USB-SERIAL CH340 (COM5)", "CP210x… (COM3)" or similar. Pick it (arrow keys + Enter, or click). It remembers it in that window's browser profile.
@@ -83,7 +83,7 @@ The pins on that side, counting from the USB end:
     - `PASSWORD/WEAK`: wrong password in `secrets.h`, or a very weak signal.
     - `ROUTER KICKED`: the router dropped it. Restart the router; check it isn't full.
     - `restarted: POWER DIP` underneath: the board rebooted because its power dipped. Use another USB port, a better cable, or a phone charger.
-  - The board re-joins by itself every 10 s. It no longer hops to walawifi mid-day: that turned a 1 s blip into 14 s or more off NexusV.
+  - The board re-joins by itself every 10 s. It no longer hops to a backup network mid-day: that turned a 1 s blip into 14 s or more off NexusV.
   - The same reasons print over USB as `NOTE wifi lost: …` lines (Serial Monitor, 115200, between the fast `ORBIT` lines).
 - **An IP is taken or changed:** set it in `secrets.h` and in `CFG.CTRL_IPS` (or add `?ctrl=<ip>` to the game's URL).
 - **USB backup: nothing in the list:** check the cable is a data cable, then Device Manager under *Ports (COM & LPT)*. No COM port means the USB driver is missing: install **CH340** or **CP210x**, whichever chip is on the board.

@@ -236,10 +236,10 @@ const via = (room, f) => !hubUp() ? [null, 'the hub is down'] : !online(room) ? 
 const beacon = () => hubUp() && linked('beacon-sim') ? [true, 'a phone stands in (/beacon)'] :
   via('puzzle3', s => s.boards?.beacon === undefined ? [null, 'checking…'] : s.boards.beacon === true ? [true, 'ESP32 board answering (.51)'] :
     s.boards.beacon === 'old' ? [false, "LEDs ESP32 runs an OLD sketch: it blinks its own code, not the game's. Upload beacon_esp32.ino again"] :
-    [false, 'LEDs ESP32 not answering (.0.51 / .1.51), and no phone on /beacon. Switched on? On NexusV or walawifi?']);
-// the P4 controller ESP32 (knobs + fire wires + screen): on NexusV, or walawifi as a backup (same list as game.html's
+    [false, 'LEDs ESP32 not answering (.51), and no phone on /beacon. Switched on? On NexusV?']);
+// the P4 controller ESP32 (knobs + fire wires + screen): on NexusV (same list as game.html's
 // CFG.CTRL_IPS). ?ctrl=<ip> replaces the list
-const CTRL_IPS = (q => q ? [q] : ['192.168.0.52', '192.168.1.52'])(new URLSearchParams(location.search).get('ctrl'));
+const CTRL_IPS = (q => q ? [q] : ['192.168.0.52'])(new URLSearchParams(location.search).get('ctrl'));
 let ctrlUp = null;                            // the address the board answers this page on, false = none, null = not checked yet
 setInterval(() => Promise.any(CTRL_IPS.map(ip => fetch(`http://${ip}/`, { mode: 'no-cors', signal: AbortSignal.timeout(1500) }).then(() => ip)))
   .then(ip => ctrlUp = ip, () => ctrlUp = false), 2000);
@@ -248,7 +248,7 @@ const ctrl = () => {
   if (ctrlUp === null) return [null, 'checking…'];
   if (!ctrlUp) return [false, s?.ctrl ? `not answering on Wi-Fi (${CTRL_IPS.join(', ')}): the game is running on its USB backup. Its red LED lit?` :
     `controller ESP32 not answering (${CTRL_IPS.join(', ')}). Switched on? Its red LED lit = not on Wi-Fi. This laptop on the same Wi-Fi? The P4 keys work meanwhile.`];
-  const where = `on ${ctrlUp.startsWith('192.168.1.') ? 'walawifi' : 'NexusV'} (${ctrlUp})`;
+  const where = `on NexusV (${ctrlUp})`;
   if (s && !s.ctrl) return [false, `${where}, but the P4 game gets no readings from it. Reload the game (RESET on the P4 card).`];
   return [true, where + (s?.ctrl ? `, the game reads it over ${s.ctrlVia}` : '')];
 };
@@ -266,7 +266,7 @@ const DEVS = {
   beacon: ['LEDS', beacon],
   ctrl:   ['CONTROLLER', ctrl],
   bearbox: ['BEARBOX', () => !hubUp() ? [null, 'the hub is down'] : linked('bearbox') ? [true, 'the Bearbox ticket display is connected'] :
-    [null, "the Bearbox ticket display isn't connected (optional). Switched on? On NexusV or walawifi?"]],
+    [null, "the Bearbox ticket display isn't connected (optional). Switched on? On NexusV?"]],
 };
 $('#sys').innerHTML = ['hub', 'signup', 'bearbox'].map(d => `<span class="dev unk" data-dev="${d}">${DEVS[d][0]}</span>`).join('');
 $('#sys').onclick = e => { const d = e.target.closest('.dev'); if (d) alert(d.textContent + ': ' + d.title); };

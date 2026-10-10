@@ -3,7 +3,11 @@
   "pass": "aurorawashere",
   "aims": {
     "game2": {
-      "x": -50,
+      "x": -75,
+      "y": -32
+    },
+    "game1": {
+      "x": 40,
       "y": -32
     }
   }
