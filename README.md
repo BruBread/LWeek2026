@@ -138,3 +138,7 @@ node signup/test.js       # party limits, slot clashes, ticket cap, voids, resta
 Concept, game design, software and hardware by **Francis Duco**, President of ICpEP.SE – USLS (Institute of Computer Engineers of the Philippines, Student Edition, University of St. La Salle).
 
 Built for and run by [ICpEP.SE – USLS](https://www.facebook.com/icpepusls) at LWeek 2026.
+
+## License
+
+All rights reserved. The code is public for viewing only. See [LICENSE](LICENSE).
