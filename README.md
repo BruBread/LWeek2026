@@ -176,6 +176,9 @@ node signup/test.js       # party limits, slot clashes, ticket cap, voids, resta
 - **Jeremiah Monebit**: the core backend of the signup booth (registration and reservations).
 
 Built for and run by [ICpEP.SE – USLS](https://www.facebook.com/icpepusls) (Institute of Computer Engineers of the Philippines, Student Edition, University of St. La Salle) at LWeek 2026.
+<img width="2592" height="1728" alt="aurora - 00000037" src="https://github.com/user-attachments/assets/979b58ae-5085-4772-a1fd-e4eea44daf32" />
+Thank you ICPEP.
+
 
 The booth's music is from the soundtrack of *Watch Dogs* (Ubisoft). It is used without affiliation, and all rights to it belong to its owners. Aurora's voice lines were generated with ElevenLabs.
 
