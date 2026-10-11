@@ -171,6 +171,9 @@ node signup/test.js       # party limits, slot clashes, ticket cap, voids, resta
 ```
 
 ## Credits
+The booth's music is from the soundtrack of *Watch Dogs* (Ubisoft). It is used without affiliation, and all rights to it belong to its owners. Aurora's voice lines were generated with ElevenLabs.
+
+
 
 - **Francis Duco**, President of ICpEP.SE – USLS (A.Y. 2026–2027): concept, game design, software and hardware.
 - **Jeremiah Monebit**: the core backend of the signup booth (registration and reservations).
@@ -180,7 +183,6 @@ Built for and run by [ICpEP.SE – USLS](https://www.facebook.com/icpepusls) (In
 Thank you ICPEP.
 
 
-The booth's music is from the soundtrack of *Watch Dogs* (Ubisoft). It is used without affiliation, and all rights to it belong to its owners. Aurora's voice lines were generated with ElevenLabs.
 
 ## License
 
